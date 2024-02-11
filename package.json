@@ -2,16 +2,33 @@
   "name": "job-apply-bot",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
-  "type": "module",
+  "main": "./src/main.js",
   "scripts": {
-    "start": "node --env-fiile=.env index.js"
+    "setup": "chmod +x ./bin/setup.sh && ./bin/setup.sh",
+    "start": "ts-node -r dotenv/config ./src/main.ts",
+    "queue": "ts-node ./src/index.ts",
+    "introspect": "drizzle-kit introspect:pg --config=drizzle.config.ts",
+    "generate": "drizzle-kit generate:pg --config=drizzle.config.ts",
+    "studio": "npx drizzle-kit studio",
+    "migrate": "tsx ./src/database/migrate.ts"
   },
-  "keywords": [],
-  "author": "",
+  "author": "Malik Henry",
   "license": "ISC",
   "dependencies": {
+    "bullmq": "^5.1.10",
     "dotenv": "^16.4.1",
-    "playwright": "^1.41.1"
+    "drizzle-orm": "^0.29.3",
+    "pg": "^8.11.3",
+    "playwright": "^1.41.1",
+    "playwright-extra": "^4.3.6",
+    "postgres": "^3.4.3",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "drizzle-kit": "^0.20.14",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
   }
 }
