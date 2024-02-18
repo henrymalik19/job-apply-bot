@@ -1,16 +1,18 @@
 import { Locator, Page } from "playwright";
-import { scrollToBottom } from "../../../utils/scrollToBottom";
-import { NewJob, jobs } from "../../../database/schema/jobs";
-import { db } from "../../../database/db";
+import { scrollToBottom } from "../../../../utils";
+import { NewJob, jobs } from "../../../../database/schema/jobs";
+import { db } from "../../../../database/db";
 import { EasyApplyModal } from "./components/EasyApplyModal";
+import { DatePostedFilterType, OnsiteRemoteFilterType } from "../../types";
 
 interface SearchForJobsProps {
   job: string;
   location: string;
+  datePostedFilter?: DatePostedFilterType;
+  onsiteRemoteFilter?: OnsiteRemoteFilterType;
 }
 
 interface SearchAndApplyForJobsProps extends SearchForJobsProps {
-  easyApplyOnly?: boolean;
   jobCount?: number;
 }
 
@@ -26,6 +28,9 @@ class LinkedinJobsPage {
   readonly jobTitleHeader: Locator;
   readonly jobDescriptionContainer: Locator;
   readonly easyApplyBtn: Locator;
+  readonly dateFilterBtn: Locator;
+  readonly onsiteRemoteFilterBtn: Locator;
+  readonly easyApplyFilterBtn: Locator;
 
   readonly easyApplyModal: EasyApplyModal;
 
@@ -60,6 +65,18 @@ class LinkedinJobsPage {
     this.easyApplyBtn = this.page.locator(
       ".job-details-jobs-unified-top-card__container--two-pane .jobs-apply-button"
     );
+
+    this.dateFilterBtn = this.page.getByRole("button", {
+      name: "Date posted filter. Clicking this button displays all Date posted filter options.",
+    });
+
+    this.onsiteRemoteFilterBtn = this.page.getByRole("button", {
+      name: "Remote filter. Clicking this button displays all Remote filter options.",
+    });
+
+    this.easyApplyFilterBtn = this.page.getByRole("radio", {
+      name: "Easy Apply filter",
+    });
   }
 
   async goto() {
@@ -81,7 +98,12 @@ class LinkedinJobsPage {
     console.info(`[info] navigation complete!`);
   }
 
-  async searchForJobs(job: string, location: string) {
+  async searchForJobs({
+    job,
+    location,
+    datePostedFilter,
+    onsiteRemoteFilter,
+  }: SearchForJobsProps) {
     try {
       console.info("\n[info] beginning job search...");
 
@@ -92,23 +114,103 @@ class LinkedinJobsPage {
       await this.page.waitForTimeout(2000);
       await this.page.keyboard.press("Enter");
 
+      if (datePostedFilter) await this.handleDatePostedFilter(datePostedFilter);
+      if (onsiteRemoteFilter)
+        await this.handleOnsiteRemoteFilter(onsiteRemoteFilter);
+      await this.handleEasyApplyFilter();
+
       console.info("[info] job search complete");
 
       return true;
     } catch (error) {
-      console.error("[error] unable to searhc for jobs");
+      console.error("[error] unable to search for jobs");
 
       return false;
     }
   }
 
-  async getSearchedJobs(easyApplyOnly?: boolean) {
+  async handleDatePostedFilter(datePostedFilter: DatePostedFilterType) {
+    const datePostedFilterLabelMap = {
+      past24Hours: "24 hours",
+      pastWeek: "week",
+      pastMonth: "month",
+    };
+
+    await this.page.waitForTimeout(2000);
+
+    console.info(
+      `[info] filtering to jobs posted in the past ${datePostedFilterLabelMap[datePostedFilter]}...`
+    );
+    await this.dateFilterBtn.click();
+
+    const filterDropdown = await this.page.getByRole("group", {
+      name: "Filter results by: Date posted",
+    });
+
+    let label: Locator | null = null;
+    for (const labelEl of await filterDropdown
+      .locator("label p span:first-of-type")
+      .all()) {
+      if (
+        (await labelEl.textContent())
+          ?.trim()
+          .toLowerCase()
+          .includes(datePostedFilterLabelMap[datePostedFilter])
+      ) {
+        label = await labelEl;
+      }
+    }
+
+    if (label) {
+      await label.click();
+
+      await this.page.waitForTimeout(2500);
+      await filterDropdown.getByRole("button").nth(1).click();
+    }
+  }
+
+  async handleOnsiteRemoteFilter(onsiteRemoteFilter: OnsiteRemoteFilterType) {
+    await this.page.waitForTimeout(2000);
+
+    console.info(`[info] filtering to only ${onsiteRemoteFilter} jobs...`);
+    await this.onsiteRemoteFilterBtn.click();
+
+    const filterDropdown = await this.page.getByRole("group", {
+      name: "Filter results by: Remote",
+    });
+
+    let label: Locator | null = null;
+    for (const labelEl of await filterDropdown
+      .locator("label p span:first-of-type")
+      .all()) {
+      if (
+        (await labelEl.textContent())
+          ?.trim()
+          .toLowerCase()
+          .includes(onsiteRemoteFilter)
+      ) {
+        label = await labelEl;
+      }
+    }
+
+    if (label) {
+      await label.click();
+
+      await this.page.waitForTimeout(2500);
+      await filterDropdown.getByRole("button").nth(1).click();
+    }
+  }
+
+  async handleEasyApplyFilter() {
+    await this.page.waitForTimeout(2000);
+
+    console.info(`[info] filtering to only 'Easy Apply' jobs...`);
+    await this.easyApplyFilterBtn.click();
+  }
+
+  async getSearchedJobs() {
     try {
-      console.info(
-        `[info] finding ${
-          easyApplyOnly ? "Easy Apply" : ""
-        } jobs from search...`
-      );
+      console.info(`[info] finding "Easy Apply" jobs from search...`);
 
       await this.jobSearchResultsList.waitFor();
 
@@ -121,30 +223,25 @@ class LinkedinJobsPage {
         .locator(".jobs-search-results__list-item")
         .all();
 
-      if (easyApplyOnly) {
-        const easyApplyJobContainers: Locator[] = [];
+      const easyApplyJobContainers: Locator[] = [];
 
-        for (const jobContainer of jobContainers) {
-          const applyMethod = jobContainer.locator(
-            ".job-card-container__apply-method"
-          );
-          if (await applyMethod.isVisible()) {
-            const applyMethodTxt = (await applyMethod.textContent())?.trim();
-            if (applyMethodTxt === "Easy Apply")
-              easyApplyJobContainers.push(jobContainer);
-          }
-        }
-
-        console.info(
-          `[info] ${easyApplyJobContainers.length} 'Easy Apply' jobs Found!`
+      for (const jobContainer of jobContainers) {
+        const applyMethod = jobContainer.locator(
+          ".job-card-container__apply-method"
         );
-        return easyApplyJobContainers;
+        if (await applyMethod.isVisible()) {
+          const applyMethodTxt = (await applyMethod.textContent())?.trim();
+          if (applyMethodTxt === "Easy Apply")
+            easyApplyJobContainers.push(jobContainer);
+        }
       }
 
-      console.log(`[info] ${jobContainers.length} jobs Found`);
-      return jobContainers;
-    } catch {
-      console.error("[error] unable to get searched jobs");
+      console.info(
+        `[info] ${easyApplyJobContainers.length} 'Easy Apply' jobs Found!`
+      );
+      return easyApplyJobContainers;
+    } catch (error) {
+      console.error("[error] unable to get searched jobs", error);
     }
   }
 
@@ -176,20 +273,26 @@ class LinkedinJobsPage {
     }
   }
 
-  async searchAndApplyForJobs({
+  async searchAndApplyToEasyApplyJobs({
     job,
     location,
-    easyApplyOnly = false,
+    datePostedFilter,
+    onsiteRemoteFilter,
     jobCount = 20,
   }: SearchAndApplyForJobsProps) {
     let appliedJobsCount = 0;
     let currentPage = 1;
 
-    const success = await this.searchForJobs(job, location);
+    const success = await this.searchForJobs({
+      job,
+      location,
+      datePostedFilter,
+      onsiteRemoteFilter,
+    });
     if (!success) return;
 
     loop1: while (appliedJobsCount < jobCount) {
-      const jobContainers = await this.getSearchedJobs(easyApplyOnly);
+      const jobContainers = await this.getSearchedJobs();
       if (!jobContainers) return;
 
       for (const jobContainer of jobContainers) {

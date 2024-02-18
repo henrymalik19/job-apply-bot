@@ -1,9 +1,9 @@
 import { access, constants } from "node:fs/promises";
 import { Browser, BrowserContext, Page } from "playwright";
-import { Linkedin } from "./Linkedin";
-import { NewJob } from "../database/schema/jobs";
+
 import { LinkedinHomePage } from "./pages/HomePage";
 import { LinkedinJobsPage } from "./pages/JobsPage/JobsPage";
+import { DatePostedFilterType, OnsiteRemoteFilterType } from "./types";
 
 interface HandleLinkedinEasyApplyProps {
   browser: Browser;
@@ -12,6 +12,8 @@ interface HandleLinkedinEasyApplyProps {
   storageStatePath: string;
   job: string;
   location: string;
+  datePostedFilter?: DatePostedFilterType;
+  onsiteRemoteFilter?: OnsiteRemoteFilterType;
   jobCount: number;
 }
 async function handleLinkedinEasyApply({
@@ -21,6 +23,8 @@ async function handleLinkedinEasyApply({
   storageStatePath,
   job,
   location,
+  datePostedFilter,
+  onsiteRemoteFilter,
   jobCount,
 }: HandleLinkedinEasyApplyProps) {
   if (!email || !password)
@@ -62,10 +66,11 @@ async function handleLinkedinEasyApply({
   await context.storageState({ path: storageStatePath });
 
   await linkedinJobsPage.goto();
-  await linkedinJobsPage.searchAndApplyForJobs({
+  await linkedinJobsPage.searchAndApplyToEasyApplyJobs({
     job,
     location,
-    easyApplyOnly: true,
+    datePostedFilter,
+    onsiteRemoteFilter,
     jobCount,
   });
 
