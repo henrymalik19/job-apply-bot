@@ -22,74 +22,75 @@ class EasyApplyModal {
       exact: true,
     });
     this.discardBtn = this.page.locator(
-      '[data-control-name="discard_application_confirm_btn"]'
+      '[data-control-name="discard_application_confirm_btn"]',
     );
   }
 
   async apply() {
-    let wasSuccessful = false;
+    // let wasSuccessful = false;
 
-    try {
-      while (true) {
-        await this.answerTextFieldQuestions();
-        await this.answerSelectQuestions();
-        await this.answerRadioQuestions();
-
-        await this.page.waitForTimeout(2000);
-        if (await this.submitBtn.isVisible()) {
-          await this.submitBtn.click();
-          console.info("[info] submitting application...");
-          break;
-        }
-
-        if (await this.reviewBtn.isVisible()) {
-          await this.reviewBtn.click();
-          break;
-        }
-
-        if (await this.nextBtn.isVisible()) {
-          await this.nextBtn.click();
-        }
-        if (await this.hasErrors()) {
-          console.info(
-            "[info] unable to submit application -> missing information"
-          );
-          break;
-        }
-      }
-
-      await this.page.waitForTimeout(2000);
-      if (await this.reviewBtn.isVisible()) {
-        await this.reviewBtn.click();
-      }
+    // try {
+    while (true) {
+      await this.answerTextFieldQuestions();
+      await this.answerSelectQuestions();
+      await this.answerRadioQuestions();
 
       await this.page.waitForTimeout(2000);
       if (await this.submitBtn.isVisible()) {
         await this.submitBtn.click();
         console.info("[info] submitting application...");
+        break;
       }
 
-      await this.page.waitForTimeout(5000);
-      if (await this.page.getByText("Application sent").isVisible()) {
-        wasSuccessful = true;
-        console.info("[info] application submitted successfully");
+      if (await this.reviewBtn.isVisible()) {
+        await this.reviewBtn.click();
+        break;
       }
 
-      // close out of app to move on to next
-      await this.page.waitForTimeout(2000);
-      if (await this.dismissBtn.isVisible()) {
-        await this.dismissBtn.click();
-        console.info("[info] closing 'Easy Apply' modal...");
+      if (await this.nextBtn.isVisible()) {
+        await this.nextBtn.click();
       }
-
-      await this.page.waitForTimeout(2000);
-      if (await this.discardBtn.isVisible()) {
-        await this.discardBtn.click();
-        console.info("[info] discarding application...");
+      if (await this.hasErrors()) {
+        console.info(
+          "[info] unable to submit application -> missing information",
+        );
+        throw new Error("unable to submit application -> missing information");
+        break;
       }
-    } finally {
-      return wasSuccessful;
     }
+
+    await this.page.waitForTimeout(2000);
+    if (await this.reviewBtn.isVisible()) {
+      await this.reviewBtn.click();
+    }
+
+    await this.page.waitForTimeout(2000);
+    if (await this.submitBtn.isVisible()) {
+      await this.submitBtn.click();
+      console.info("[info] submitting application...");
+    }
+
+    await this.page.waitForTimeout(5000);
+    if (await this.page.getByText("Application sent").isVisible()) {
+      // wasSuccessful = true;
+      console.info("[info] application submitted successfully");
+    }
+
+    // close out of app to move on to next
+    await this.page.waitForTimeout(2000);
+    if (await this.dismissBtn.isVisible()) {
+      await this.dismissBtn.click();
+      console.info("[info] closing 'Easy Apply' modal...");
+    }
+
+    await this.page.waitForTimeout(2000);
+    if (await this.discardBtn.isVisible()) {
+      await this.discardBtn.click();
+      console.info("[info] discarding application...");
+    }
+    // } finally {
+    //   return wasSuccessful;
+    // }
   }
 
   private async answerTextFieldQuestions() {
@@ -106,14 +107,14 @@ class EasyApplyModal {
         if (!value) emptyTxtFields.push(txtField);
       }
 
-      console.debug(
-        `[debug] ${txtFields.length} text field(s) found ${emptyTxtFields.length} text field(s) is/are empty`
-      );
+      // console.debug(
+      //   `[debug] ${txtFields.length} text field(s) found ${emptyTxtFields.length} text field(s) is/are empty`,
+      // );
 
       for (const txtField of emptyTxtFields) {
         const labelTxt = await txtField.evaluate(
           (n: HTMLInputElement) =>
-            (n.labels as NodeListOf<HTMLLabelElement>)[0].textContent
+            (n.labels as NodeListOf<HTMLLabelElement>)[0].textContent,
         );
 
         await this.self.getByLabel(labelTxt as string).fill("10");
@@ -121,7 +122,7 @@ class EasyApplyModal {
     } catch (error) {
       console.error(
         "[error] unable to answer text field questions. continuing...",
-        error
+        error,
       );
     }
   }
@@ -142,15 +143,15 @@ class EasyApplyModal {
           emptySelectInputs.push(selectInput);
         }
       }
-      console.debug(
-        `[debug] ${selectInputs.length} select input(s) found ${emptySelectInputs.length} select input(s) is/are empty`
-      );
+      // console.debug(
+      //   `[debug] ${selectInputs.length} select input(s) found ${emptySelectInputs.length} select input(s) is/are empty`,
+      // );
 
       for (const selectInput of selectInputs) {
         const labelTxt = await selectInput.evaluate((n: HTMLSelectElement) =>
           (
             n.labels as NodeListOf<HTMLLabelElement>
-          )[0].childNodes[1].textContent?.trim()
+          )[0].childNodes[1].textContent?.trim(),
         );
 
         const select = await this.self.getByLabel(labelTxt as string);
@@ -162,7 +163,7 @@ class EasyApplyModal {
     } catch (error) {
       console.error(
         "[error] unable to answer select input questions. continuing...",
-        error
+        error,
       );
     }
   }
@@ -179,7 +180,7 @@ class EasyApplyModal {
       for (const fieldset of fieldsets) {
         const labelTxt = await fieldset.locator("legend span"); //.textContent();
 
-        console.log(labelTxt);
+        // console.log(labelTxt);
         // if (value === "Select an option") {
         //   emptySelectInputs.push(selectInput);
         // }
@@ -196,7 +197,7 @@ class EasyApplyModal {
 
     if (errors.length !== 0) {
       console.info(
-        `[info] ${errors.length} fields found with missing information`
+        `[info] ${errors.length} fields found with missing information`,
       );
     }
     return errors.length !== 0;
@@ -216,7 +217,7 @@ class EasyApplyModal {
         console.debug("[debug] hasErrorMsg", hasErrorMsg);
         console.debug(
           "[debug]",
-          (await section.locator("label").textContent())?.trim()
+          (await section.locator("label").textContent())?.trim(),
         );
       }
     }

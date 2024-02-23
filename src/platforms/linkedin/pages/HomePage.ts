@@ -22,10 +22,10 @@ class LinkedinHomePage {
     console.info(`[info] navigation complete!`);
   }
 
-  async login(email: string, password: string): Promise<boolean> {
+  async login(email: string, password: string) {
     if (await this.checkIfLoggedIn()) {
       console.info("[info] already logged in");
-      return true;
+      return;
     }
 
     console.info("[info] logging into linkedin...");
@@ -38,11 +38,14 @@ class LinkedinHomePage {
 
     if (await this.checkIfLoggedIn()) {
       console.info("[info] login successful");
-      return true;
+      return;
     }
 
     console.info("[info] login failed!");
-    return false;
+    await this.page.screenshot({
+      path: `./playwright-images/${Date.now()}-login-failure.jpeg`,
+    });
+    throw new Error("login failed!");
   }
 
   private async checkIfLoggedIn() {

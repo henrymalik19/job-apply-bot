@@ -4,3 +4,4 @@ storage-states/
 
 # files
 .env
+src/database/seedData.ts

@@ -1,0 +1,1 @@
+ALTER TABLE "user_job_preferences" ALTER COLUMN "city" DROP NOT NULL;

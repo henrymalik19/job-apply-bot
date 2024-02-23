@@ -1,17 +1,29 @@
 import { sql } from "drizzle-orm";
-import { boolean } from "drizzle-orm/pg-core";
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
-const jobs = pgTable("jobs", {
+import { platformsTable } from "./platforms";
+import { taskExecutionsTable } from "./taskExecutions";
+
+const jobsTable = pgTable("jobs", {
   id: serial("id").primaryKey().notNull(),
   company: text("company").notNull(),
+  companyUrl: text("company_url").notNull(),
   title: text("title").notNull(),
-  description: text("description").notNull(),
-  descriptionHtml: text("description_html").notNull(),
   url: text("url").notNull(),
-  jobBoard: text("job_board").notNull(),
-  jobBoardId: text("job_board_id").notNull(),
-  wasSuccessful: boolean("was_successful").notNull(),
+  platformJobId: text("platform_job_id").notNull().unique(),
+
+  // foreign keys
+  platformId: integer("platform_id")
+    .notNull()
+    .references(() => platformsTable.id),
+  taskExecutionId: integer("task_execution_id")
+    .notNull()
+    .references(() => taskExecutionsTable.id),
+  // postedAt: timestamp("posted_at")
+  //   .default(sql`CURRENT_TIMESTAMP`)
+  //   .notNull(),
+
+  // default
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),
@@ -20,7 +32,7 @@ const jobs = pgTable("jobs", {
     .notNull(),
 });
 
-type Job = typeof jobs.$inferSelect;
-type NewJob = typeof jobs.$inferInsert;
+type Job = typeof jobsTable.$inferSelect;
+type NewJob = typeof jobsTable.$inferInsert;
 
-export { jobs, Job, NewJob };
+export { jobsTable, Job, NewJob };

@@ -1,15 +1,69 @@
 version: "3"
 services:
+  task-queue-worker:
+    image: task-queue-worker
+    build:
+      context: ./
+      target: task-queue-worker
+    environment:
+      - HEADLESS_BROWSER=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=test1234!
+      - DB_NAME=job-apply-bot
+      - KEY=00252caf3593081d48ef833ab677bbaa4f246d10d713f29695851e355631b63a
+      - IV=6a844327c63183ddd5128ee0faf1c40a
+    networks:
+      - job-apply-bot-net
+
+  job-search-worker:
+    image: job-search-worker
+    build:
+      context: ./
+      target: job-search-worker
+    environment:
+      - HEADLESS_BROWSER=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=test1234!
+      - DB_NAME=job-apply-bot
+      - KEY=00252caf3593081d48ef833ab677bbaa4f246d10d713f29695851e355631b63a
+      - IV=6a844327c63183ddd5128ee0faf1c40a
+    networks:
+      - job-apply-bot-net
+
+  job-apply-worker:
+    image: job-apply-worker
+    build:
+      context: ./
+      target: job-apply-worker
+    environment:
+      - HEADLESS_BROWSER=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=test1234!
+      - DB_NAME=job-apply-bot
+      - KEY=00252caf3593081d48ef833ab677bbaa4f246d10d713f29695851e355631b63a
+      - IV=6a844327c63183ddd5128ee0faf1c40a
+    networks:
+      - job-apply-bot-net
+
   redis:
     image: redis/redis-stack
     ports:
       - 6379:6379
-      - "8001:8001"
+      - 8001:8001
     networks:
       - job-apply-bot-net
-  job-apply-bot-db:
+
+  postgres:
     image: postgres
-    container_name: job-apply-bot-db
     restart: always
     environment:
       POSTGRES_DB: job-apply-bot
@@ -20,5 +74,23 @@ services:
     networks:
       - job-apply-bot-net
 
+  minio:
+    image: bitnami/minio
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+      - job-apply-bot-net
+    volumes:
+      - minio_data:/data
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DEFAULT_BUCKETS=storage-states
+      - MINIO_ACCESS_KEY=minio123
+      - MINIO_SECRET_KEY=minio123
+
+volumes:
+  minio_data:
 networks:
   job-apply-bot-net:

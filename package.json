@@ -1,35 +1,43 @@
 {
   "name": "job-apply-bot",
   "version": "1.0.0",
+  "author": "Malik Henry",
+  "license": "ISC",
   "description": "",
   "main": "./src/main.js",
   "scripts": {
     "setup": "chmod +x ./bin/setup.sh && ./bin/setup.sh",
-    "start": "ts-node -r dotenv/config ./src/main.ts",
-    "queue": "ts-node ./src/index.ts",
+    "start:job-search": "ts-node -r dotenv/config ./src/workers/job-search-worker/main.ts",
+    "start:job-apply": "ts-node -r dotenv/config ./src/workers/job-apply-worker/main.ts",
+    "start:task-queue": "ts-node -r dotenv/config ./src/workers/task-queue-worker/main.ts",
+    "build": "rm -rf && tsc",
     "introspect": "drizzle-kit introspect:pg --config=drizzle.config.ts",
     "generate": "drizzle-kit generate:pg --config=drizzle.config.ts",
     "studio": "npx drizzle-kit studio",
-    "migrate": "tsx ./src/database/migrate.ts"
+    "migrate": "ts-node -r dotenv/config ./src/database/migrate.ts",
+    "seed": "ts-node -r dotenv/config ./src/database/seed.ts"
   },
-  "author": "Malik Henry",
-  "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.515.0",
+    "@aws-sdk/s3-request-presigner": "^3.515.0",
+    "aws-sdk": "^2.1564.0",
     "bullmq": "^5.1.10",
     "cron": "^3.1.6",
-    "dotenv": "^16.4.1",
     "drizzle-orm": "^0.29.3",
+    "minio": "^7.1.3",
     "pg": "^8.11.3",
     "playwright": "^1.41.1",
     "playwright-extra": "^4.3.6",
     "postgres": "^3.4.3",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "ts-node": "^10.9.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/node": "^20.11.16",
+    "dotenv": "^16.4.1",
     "drizzle-kit": "^0.20.14",
-    "tsx": "^4.7.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }
