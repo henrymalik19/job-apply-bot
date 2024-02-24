@@ -12,16 +12,16 @@ import { userJobPreferencesTable } from "./schema/userJobPreferences";
 import { usersTable } from "./schema/users";
 import { setupUser } from "./seedData";
 
-// Create the connection to database
-const client = postgres({
-  host: DB_HOST,
-  user: DB_USER,
-  database: DB_NAME,
-  password: DB_PASSWORD,
-});
-const db: PostgresJsDatabase = drizzle(client);
-
 const main = async () => {
+  // Create the connection to database
+  const client = postgres({
+    host: DB_HOST,
+    user: DB_USER,
+    database: DB_NAME,
+    password: DB_PASSWORD,
+  });
+  const db: PostgresJsDatabase = drizzle(client);
+
   console.info("[info] seeding database...");
 
   console.info("[info] adding platforms to platformsTable...");
@@ -122,6 +122,8 @@ const main = async () => {
     userId: user.id,
   });
   console.info("[info] completed seeding database");
+
+  await client.end();
 };
 
 main();

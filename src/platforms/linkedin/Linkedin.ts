@@ -3,8 +3,9 @@ import { chromium } from "playwright-extra";
 import pluginStealth from "puppeteer-extra-plugin-stealth";
 
 // ES Modules import
-import { HEADLESS_BROWSER } from "../../constants";
+import { APP_ENV, HEADLESS_BROWSER } from "../../constants";
 import {
+  doesFileExist,
   getStorageStateContents,
   getStorageStatePresignedUrl,
   uploadFile,
@@ -56,14 +57,20 @@ class Linkedin {
     });
 
     try {
+      const storageStatePath = `${process.cwd()}/tmp/storage-states/linkedin/${userId}-storage-state.json`;
       const storageStateContents = await getStorageStateContents(
         "linkedin",
         userId,
       );
 
+      const storageStateExists =
+        (await doesFileExist(storageStatePath)) || !!storageStateContents;
       const context = await browser.newContext({
-        ...(storageStateContents && {
-          storageState: JSON.parse(storageStateContents),
+        ...(storageStateExists && {
+          storageState:
+            APP_ENV === "local"
+              ? storageStatePath
+              : JSON.parse(storageStateContents as string),
         }),
       });
       const page = await context.newPage();
@@ -74,9 +81,10 @@ class Linkedin {
       await linkedinHomePage.goto();
       await linkedinHomePage.login(email, password);
 
-      const storageStatePath = `./tmp/storage-states/linkedin/${userId}-storage-state.json`;
       await context.storageState({ path: storageStatePath });
-      await uploadFile(storageStatePath);
+      if (APP_ENV !== "local") {
+        await uploadFile(storageStatePath);
+      }
 
       await linkedinJobsPage.goto();
       const jobsDetails = await linkedinJobsPage.searchForJobs({
@@ -108,17 +116,23 @@ class Linkedin {
     });
 
     try {
+      const storageStatePath = `${process.cwd()}/tmp/storage-states/linkedin/${userId}-storage-state.json`;
       const storageStateContents = await getStorageStateContents(
         "linkedin",
         userId,
       );
 
-      console.log(!!storageStateContents, storageStateContents);
+      const storageStateExists =
+        (await doesFileExist(storageStatePath)) || !!storageStateContents;
       const context = await browser.newContext({
-        ...(storageStateContents && {
-          storageState: JSON.parse(storageStateContents),
+        ...(storageStateExists && {
+          storageState:
+            APP_ENV === "local"
+              ? storageStatePath
+              : JSON.parse(storageStateContents as string),
         }),
       });
+
       const page = await context.newPage();
       const linkedinHomePage = new LinkedinHomePage(page);
       const linkedinJobDetailsPage = new LinkedinJobDetailsPage(page);
@@ -126,9 +140,10 @@ class Linkedin {
       await linkedinHomePage.goto();
       await linkedinHomePage.login(email, password);
 
-      const storageStatePath = `./tmp/storage-states/linkedin/${userId}-storage-state.json`;
       await context.storageState({ path: storageStatePath });
-      await uploadFile(storageStatePath);
+      if (APP_ENV !== "local") {
+        await uploadFile(storageStatePath);
+      }
 
       await linkedinJobDetailsPage.applyToJob(jobUrl);
     } finally {

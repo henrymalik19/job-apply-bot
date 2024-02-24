@@ -1,13 +1,14 @@
 import {
   GetObjectCommand,
   PutObjectCommand,
+  S3,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { S3 } from "aws-sdk";
 import cronParser from "cron-parser";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { access, constants } from "node:fs/promises";
 
 import {
   AWS_S3_ACCESS_KEY_ID,
@@ -111,6 +112,9 @@ function decrypt(text: string) {
 
 async function uploadFile(filePath: string) {
   const s3 = new S3({
+    forcePathStyle: true,
+    region: AWS_S3_REGION,
+    endpoint: AWS_S3_ENDPOINT,
     credentials: {
       accessKeyId: AWS_S3_ACCESS_KEY_ID,
       secretAccessKey: AWS_S3_SECRET_ACCESS_KEY,
@@ -118,22 +122,22 @@ async function uploadFile(filePath: string) {
   });
 
   const fileName = filePath.split("/").slice(-1)[0];
-  const params = {
+  const command = new PutObjectCommand({
     Bucket: "storage-states",
     Key: fileName,
     Body: fs.createReadStream(filePath),
-  };
-
-  s3.upload(params, (err, data) => {
-    if (err) {
-      console.info("[error] Error uploading storageState:", err);
-    } else {
-      console.info(
-        "[info] StorageState uploaded successfully. File location:",
-        data.Location,
-      );
-    }
   });
+
+  await s3.send(command);
+}
+
+async function doesFileExist(filePath: string) {
+  try {
+    await access(filePath, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export {
@@ -144,4 +148,5 @@ export {
   encrypt,
   decrypt,
   uploadFile,
+  doesFileExist,
 };
