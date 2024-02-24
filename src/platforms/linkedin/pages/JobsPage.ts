@@ -314,7 +314,8 @@ class LinkedinJobsPage {
   }
 
   async getSearchedJobs() {
-    await this.jobSearchResultsList.waitFor();
+    if (!(await this.jobSearchResultsList.isVisible()))
+      return { jobCards: [], nextPageBtn: null };
 
     await this.page.waitForTimeout(2000);
     await this.jobSearchResultsList.evaluate(scrollToBottom);
@@ -324,105 +325,26 @@ class LinkedinJobsPage {
       .locator(".jobs-search-results__list-item")
       .all();
 
-    const currentPage = await this.page
-      .locator(".artdeco-pagination__indicator--number.selected")
-      .getAttribute("data-test-pagination-page-btn");
+    const currentPageBtn = this.page.locator(
+      ".artdeco-pagination__indicator--number.selected",
+    );
+
+    if (!(await currentPageBtn.isVisible()))
+      return { jobCards, nextPageBtn: null };
+
+    const currentPage = await currentPageBtn.getAttribute(
+      "data-test-pagination-page-btn",
+    );
 
     const nextPageNumber = parseInt(currentPage as string) + 1;
-    console.log(nextPageNumber);
-    const nextPageBtn = await this.page.getByLabel(`Page ${nextPageNumber}`);
-    console.log(await nextPageBtn.innerHTML());
+
+    const nextPageBtn = this.page.getByLabel(`Page ${nextPageNumber}`);
+
+    if (!(await nextPageBtn.isVisible()))
+      return { jobCards, nextPageBtn: null };
+
     return { jobCards, nextPageBtn };
   }
-
-  async getRemainingPages() {
-    const pageBtns = (
-      await this.page
-        .locator(
-          ".artdeco-pagination__pages--number .artdeco-pagination__indicator--number button",
-        )
-        .all()
-    ).slice(1);
-    console.log(pageBtns);
-
-    for (const pageBtn of pageBtns) {
-      console.log(
-        (await pageBtn.innerHTML()).trim(),
-        !!(await pageBtn.innerHTML()),
-      );
-    }
-    return pageBtns;
-  }
-
-  // async applyToJob(jobContainer: Locator) {
-  //   try {
-  //     console.info("[info] applying to easy apply job...");
-
-  //     await jobContainer.click();
-
-  //     await this.page.waitForTimeout(2000);
-
-  //     if (await this.easyApplyBtn.isVisible()) {
-  //       console.info("[info] 'Easy Apply' button found");
-  //       await this.easyApplyBtn.click();
-  //       console.info("[info] opening 'Easy Apply' modal...");
-
-  //       const wasSuccessful = await this.easyApplyModal.apply();
-
-  //       return wasSuccessful;
-  //     } else {
-  //       console.info("[info] currently can only apply to 'Easy Apply' jobs");
-
-  //       return false;
-  //     }
-  //   } catch (error) {
-  //     console.error("[error] unable to apply for job", error);
-
-  //     return false;
-  //   }
-  // }
-
-  // async searchAndApplyToEasyApplyJobs({
-  //   job,
-  //   location,
-  //   datePostedFilter,
-  //   onsiteRemoteFilter,
-  //   jobCount = 20,
-  // }: SearchAndApplyForJobsProps) {
-  //   let appliedJobsCount = 0;
-  //   let currentPage = 1;
-
-  //   const success = await this.searchForJobs({
-  //     job,
-  //     location,
-  //     datePostedFilter,
-  //     onsiteRemoteFilter,
-  //   });
-  //   if (!success) return;
-
-  //   loop1: while (appliedJobsCount < jobCount) {
-  //     const jobContainers = await this.getSearchedJobs();
-  //     if (!jobContainers) return;
-
-  //     for (const jobContainer of jobContainers) {
-  //       if (appliedJobsCount >= jobCount) {
-  //         break loop1;
-  //       }
-  //       const wasSuccessful = await this.applyToJob(jobContainer);
-
-  //       if (wasSuccessful) {
-  //         appliedJobsCount++;
-  //       }
-
-  //       await this.saveJobDetailsToDB(wasSuccessful);
-  //     }
-
-  //     currentPage++;
-  //     await this.gotoSearchPage(currentPage);
-  //   }
-
-  //   console.info(`[info] applied to ${appliedJobsCount} jobs`);
-  // }
 }
 
 export { LinkedinJobsPage };
