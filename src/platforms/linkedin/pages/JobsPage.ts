@@ -244,58 +244,69 @@ class LinkedinJobsPage {
       await this.handleOnsiteRemoteFilter(onsiteRemoteFilter);
     await this.handleEasyApplyFilter();
 
-    const jobCards = await this.getSearchedJobs();
-
     const jobsDetails: Omit<NewJob, "platformId" | "taskExecutionId">[] = [];
-    for (const jobCard of jobCards) {
-      await this.page.waitForTimeout(2000);
-      await jobCard.click();
 
-      await this.page.waitForTimeout(2000);
-      const appliedBanner = (
-        await this.page
-          .locator(
-            ".jobs-details__main-content .artdeco-inline-feedback span.artdeco-inline-feedback__message",
-          )
-          .all()
-      ).find(async (s) =>
-        (await s.textContent())?.trim().toLowerCase().includes("applied"),
-      );
+    loop1: while (true) {
+      const { jobCards, nextPageBtn } = await this.getSearchedJobs();
 
-      if (appliedBanner && (await appliedBanner.isVisible())) {
-        console.info("[info] already applied to this job. Skipping...");
-        continue;
+      for (const jobCard of jobCards) {
+        await this.page.waitForTimeout(2000);
+        await jobCard.click();
+
+        await this.page.waitForTimeout(2000);
+        const appliedBanner = (
+          await this.page
+            .locator(
+              ".jobs-details__main-content .artdeco-inline-feedback span.artdeco-inline-feedback__message",
+            )
+            .all()
+        ).find(async (s) =>
+          (await s.textContent())?.trim().toLowerCase().includes("applied"),
+        );
+
+        if (appliedBanner && (await appliedBanner.isVisible())) {
+          console.info("[info] already applied to this job. Skipping...");
+          continue;
+        }
+
+        if (
+          (await this.companyLink.isVisible()) &&
+          (await this.jobTitleHeader.isVisible())
+        ) {
+          const company = (await this.companyLink.textContent())?.trim();
+          const companyUrl = (
+            await this.companyLink.getAttribute("href")
+          )?.trim();
+          const jobTitle = (
+            await this.jobTitleHeader
+              .locator(".job-details-jobs-unified-top-card__job-title-link")
+              .textContent()
+          )?.trim();
+          const urlPath = (
+            await this.jobTitleHeader.locator("a").getAttribute("href")
+          )?.trim();
+
+          const params = new URLSearchParams(
+            await this.page.url().split("?")[1],
+          );
+          const jobId = params.get("currentJobId");
+
+          if (company && companyUrl && jobTitle && urlPath) {
+            jobsDetails.push({
+              platformJobId: jobId as string,
+              title: jobTitle,
+              url: `https://www.linkedin.com${urlPath}`,
+              company,
+              companyUrl,
+            });
+          }
+        }
       }
 
-      if (
-        (await this.companyLink.isVisible()) &&
-        (await this.jobTitleHeader.isVisible())
-      ) {
-        const company = (await this.companyLink.textContent())?.trim();
-        const companyUrl = (
-          await this.companyLink.getAttribute("href")
-        )?.trim();
-        const jobTitle = (
-          await this.jobTitleHeader
-            .locator(".job-details-jobs-unified-top-card__job-title-link")
-            .textContent()
-        )?.trim();
-        const urlPath = (
-          await this.jobTitleHeader.locator("a").getAttribute("href")
-        )?.trim();
-
-        const params = new URLSearchParams(await this.page.url().split("?")[1]);
-        const jobId = params.get("currentJobId");
-        // postedAt: new Date(job.postedAt),
-        if (company && companyUrl && jobTitle && urlPath) {
-          jobsDetails.push({
-            platformJobId: jobId as string,
-            title: jobTitle,
-            url: `https://www.linkedin.com${urlPath}`,
-            company,
-            companyUrl,
-          });
-        }
+      if (nextPageBtn) {
+        await nextPageBtn.click();
+      } else {
+        break loop1;
       }
     }
 
@@ -307,14 +318,40 @@ class LinkedinJobsPage {
 
     await this.page.waitForTimeout(2000);
     await this.jobSearchResultsList.evaluate(scrollToBottom);
-
     await this.page.waitForTimeout(2000);
 
     const jobCards = await this.jobSearchResultsList
       .locator(".jobs-search-results__list-item")
       .all();
 
-    return jobCards;
+    const currentPage = await this.page
+      .locator(".artdeco-pagination__indicator--number.selected")
+      .getAttribute("data-test-pagination-page-btn");
+
+    const nextPageNumber = parseInt(currentPage as string) + 1;
+    console.log(nextPageNumber);
+    const nextPageBtn = await this.page.getByLabel(`Page ${nextPageNumber}`);
+    console.log(await nextPageBtn.innerHTML());
+    return { jobCards, nextPageBtn };
+  }
+
+  async getRemainingPages() {
+    const pageBtns = (
+      await this.page
+        .locator(
+          ".artdeco-pagination__pages--number .artdeco-pagination__indicator--number button",
+        )
+        .all()
+    ).slice(1);
+    console.log(pageBtns);
+
+    for (const pageBtn of pageBtns) {
+      console.log(
+        (await pageBtn.innerHTML()).trim(),
+        !!(await pageBtn.innerHTML()),
+      );
+    }
+    return pageBtns;
   }
 
   // async applyToJob(jobContainer: Locator) {

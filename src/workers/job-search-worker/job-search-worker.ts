@@ -190,7 +190,7 @@ class JobSearchWorker {
       await this.saveUserJobToDB(
         savedJob.id,
         userId,
-
+        job.platformJobId,
         platformName,
       );
     }
@@ -223,7 +223,7 @@ class JobSearchWorker {
     }
 
     console.info(
-      `[info] Saving ${platformName} job ${job.platformJobId} into db...`,
+      `[info] Saving ${platformName} job ${job.platformJobId} into jobs table...`,
     );
 
     const savedJob = (
@@ -240,6 +240,7 @@ class JobSearchWorker {
   async saveUserJobToDB(
     savedJobId: number,
     userId: number,
+    platformJobId,
     platformName: string,
   ) {
     // NEED TO MAKE SURE THE JOB DOES NOT EXIST
@@ -252,7 +253,7 @@ class JobSearchWorker {
 
     if (!userJobAlreadyExists) {
       console.info(
-        `[info] Saving ${platformName} job into user-applied-jobs table...`,
+        `[info] Saving ${platformName} job ${platformJobId} into user-jobs table...`,
       );
       await db.insert(userJobsTable).values({
         userId,

@@ -1,5 +1,7 @@
 import { Locator, Page } from "playwright";
 
+import { APP_ENV } from "../../../constants";
+
 class LinkedinHomePage {
   static readonly url = "https://linkedin.com";
 
@@ -34,17 +36,14 @@ class LinkedinHomePage {
 
     await this.signInBtn.click();
 
-    await this.page.waitForTimeout(15000); // FOR TESTING
+    await this.page.waitForTimeout(APP_ENV === "local" ? 15000 : 3000);
 
     if (await this.checkIfLoggedIn()) {
       console.info("[info] login successful");
       return;
     }
 
-    console.info("[info] login failed!");
-    await this.page.screenshot({
-      path: `./playwright-images/${Date.now()}-login-failure.jpeg`,
-    });
+    await this.page.screenshot({ path: `./${Date.now()}.png` });
     throw new Error("login failed!");
   }
 

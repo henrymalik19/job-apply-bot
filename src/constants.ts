@@ -1,9 +1,11 @@
 const HEADLESS_BROWSER = process.env.HEADLESS_BROWSER === "true" ? true : false;
 
-const AWS_S3_REGION = "us-east-1";
-const AWS_S3_ENDPOINT = "http://minio:9000";
-const AWS_S3_ACCESS_KEY_ID = "8yVZ6AraoKBY2IrEbSF9";
-const AWS_S3_SECRET_ACCESS_KEY = "KCruWV8mgjXiBxHkONM96eFmp71e6VdlrBj73Bc5";
+const APP_ENV = process.env.APP_ENV || "local";
+
+const AWS_S3_REGION = process.env.AWS_S3_REGION || "";
+const AWS_S3_ENDPOINT = process.env.AWS_S3_ENDPOINT || "";
+const AWS_S3_ACCESS_KEY_ID = process.env.AWS_S3_ACCESS_KEY_ID || "";
+const AWS_S3_SECRET_ACCESS_KEY = process.env.AWS_S3_SECRET_ACCESS_KEY || "";
 
 const REDIS_HOST = process.env.REDIS_HOST as string;
 const REDIS_PORT = parseInt(process.env.REDIS_PORT as string);
@@ -34,6 +36,7 @@ const USER_JOB_STATUSES = {
 
 export {
   HEADLESS_BROWSER,
+  APP_ENV,
   AWS_S3_REGION,
   AWS_S3_ENDPOINT,
   AWS_S3_ACCESS_KEY_ID,
