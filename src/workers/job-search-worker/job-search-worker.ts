@@ -1,5 +1,7 @@
 import { Job as BullMqJob, ConnectionOptions, Worker } from "bullmq";
 import { and, eq } from "drizzle-orm";
+import { OnsiteRemoteFilterType } from "platforms/linkedin/types";
+import { messageQueue } from "queues/message-queue";
 
 import { TASK_EXECUTION_STATUSES, USER_JOB_STATUSES } from "../../constants";
 import { db } from "../../database/db";
@@ -28,6 +30,11 @@ interface PerformLinkedinJobSearchTaskParams {
   city: string | null;
   state: string | null;
   country: string;
+  onsiteRemoteFilters: {
+    remote: boolean;
+    hybrid: boolean;
+    onsite: boolean;
+  };
   userId: number;
   platformId: number;
 }
@@ -110,6 +117,11 @@ class JobSearchWorker {
           city: userJobPreference.city,
           state: userJobPreference.state,
           country: userJobPreference.country,
+          onsiteRemoteFilters: {
+            remote: userJobPreference.remote,
+            hybrid: userJobPreference.hybrid,
+            onsite: userJobPreference.onsite,
+          },
         });
 
         break;
@@ -130,6 +142,7 @@ class JobSearchWorker {
     city,
     state,
     country,
+    onsiteRemoteFilters,
     userId,
     platformId,
   }: PerformLinkedinJobSearchTaskParams) {
@@ -153,8 +166,18 @@ class JobSearchWorker {
       country,
       email: decrypt(credentials.email),
       password: decrypt(credentials.password),
-      datePostedFilter: "past24Hours", // Need to use db value
-      onsiteRemoteFilter: "remote", // Need to use db value
+      datePostedFilter: "pastWeek", // Need to use db value
+      onsiteRemoteFilters: [
+        ...((onsiteRemoteFilters.remote
+          ? ["remote"]
+          : []) as OnsiteRemoteFilterType[]),
+        ...((onsiteRemoteFilters.hybrid
+          ? ["hybrid"]
+          : []) as OnsiteRemoteFilterType[]),
+        ...((onsiteRemoteFilters.onsite
+          ? ["onsite"]
+          : []) as OnsiteRemoteFilterType[]),
+      ],
     });
 
     return jobsDetails.map((job) => ({
@@ -187,7 +210,7 @@ class JobSearchWorker {
         taskExecutionId,
       );
 
-      await this.saveUserJobToDB(
+      const savedUserJob = await this.saveUserJobToDB(
         savedJob.id,
         userId,
         job.platformJobId,
@@ -255,11 +278,18 @@ class JobSearchWorker {
       console.info(
         `[info] Saving ${platformName} job ${platformJobId} into user-jobs table...`,
       );
-      await db.insert(userJobsTable).values({
-        userId,
-        jobId: savedJobId,
-        status: USER_JOB_STATUSES.READY,
-      });
+      const userJob = (
+        await db
+          .insert(userJobsTable)
+          .values({
+            userId,
+            jobId: savedJobId,
+            status: USER_JOB_STATUSES.READY,
+          })
+          .returning()
+      )[0];
+
+      return userJob;
     }
   }
 }

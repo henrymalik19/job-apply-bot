@@ -145,7 +145,10 @@ class TaskQueueWorker {
       try {
         await db
           .update(userJobsTable)
-          .set({ taskExecutionId: taskToExecute.id })
+          .set({
+            taskExecutionId: taskToExecute.id,
+            status: USER_JOB_STATUSES.PENDING,
+          })
           .where(eq(userJobsTable.id, jobToApply.id));
 
         console.info(`[info] adding job to the jobApplyQueue...`);

@@ -26,7 +26,7 @@ interface HandleSearchForJobsProps {
   state: string | null;
   country: string;
   datePostedFilter?: DatePostedFilterType;
-  onsiteRemoteFilter?: OnsiteRemoteFilterType;
+  onsiteRemoteFilters?: OnsiteRemoteFilterType[];
   easyApplyFilter?: boolean;
 }
 
@@ -47,7 +47,7 @@ class Linkedin {
     state,
     country,
     datePostedFilter,
-    onsiteRemoteFilter,
+    onsiteRemoteFilters,
   }: HandleSearchForJobsProps) {
     if (!email || !password)
       throw new Error("Missing Linkedin Credentials (email and/or password)");
@@ -93,7 +93,7 @@ class Linkedin {
         state,
         country,
         datePostedFilter,
-        onsiteRemoteFilter,
+        onsiteRemoteFilters,
       });
 
       return jobsDetails;

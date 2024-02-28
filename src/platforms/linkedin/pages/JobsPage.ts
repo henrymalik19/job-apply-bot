@@ -11,7 +11,7 @@ interface SearchForJobsProps {
   state: string | null;
   country: string;
   datePostedFilter?: DatePostedFilterType;
-  onsiteRemoteFilter?: OnsiteRemoteFilterType;
+  onsiteRemoteFilters?: OnsiteRemoteFilterType[];
 }
 
 class LinkedinJobsPage {
@@ -30,6 +30,7 @@ class LinkedinJobsPage {
   readonly dateFilterBtn: Locator;
   readonly onsiteRemoteFilterBtn: Locator;
   readonly easyApplyFilterBtn: Locator;
+  readonly jobPosterLink: Locator;
 
   readonly easyApplyModal: EasyApplyModal;
 
@@ -79,6 +80,8 @@ class LinkedinJobsPage {
     this.easyApplyFilterBtn = this.page.getByRole("radio", {
       name: "Easy Apply filter",
     });
+
+    this.jobPosterLink = this.page.locator(".hirer-card__hirer-information a");
   }
 
   async goto() {
@@ -138,9 +141,13 @@ class LinkedinJobsPage {
       await this.page.waitForTimeout(2500);
       await filterDropdown.getByRole("button").nth(1).click();
     }
+
+    await this.page.waitForTimeout(2000);
   }
 
-  async handleOnsiteRemoteFilter(onsiteRemoteFilter: OnsiteRemoteFilterType) {
+  async handleOnsiteRemoteFilters(
+    onsiteRemoteFilters: OnsiteRemoteFilterType[],
+  ) {
     const onsiteRemoteFilterLabelMap = {
       remote: "remote",
       hybrid: "hybrid",
@@ -148,36 +155,40 @@ class LinkedinJobsPage {
     };
 
     await this.page.waitForTimeout(3000);
-
-    console.info(
-      `[info] filtering to only ${onsiteRemoteFilterLabelMap[onsiteRemoteFilter]} jobs...`,
-    );
     await this.onsiteRemoteFilterBtn.click();
 
     const filterDropdown = await this.page.getByRole("group", {
       name: "Filter results by: Remote",
     });
 
-    let label: Locator | null = null;
-    for (const labelEl of await filterDropdown
-      .locator("label p span:first-of-type")
-      .all()) {
-      if (
-        (await labelEl.textContent())
-          ?.trim()
-          .toLowerCase()
-          .includes(onsiteRemoteFilterLabelMap[onsiteRemoteFilter])
-      ) {
-        label = await labelEl;
+    for (const onsiteRemoteFilter of onsiteRemoteFilters) {
+      console.info(
+        `[info] filtering to ${onsiteRemoteFilterLabelMap[onsiteRemoteFilter]} jobs...`,
+      );
+
+      let label: Locator | null = null;
+      for (const labelEl of await filterDropdown
+        .locator("label p span:first-of-type")
+        .all()) {
+        if (
+          (await labelEl.textContent())
+            ?.trim()
+            .toLowerCase()
+            .includes(onsiteRemoteFilterLabelMap[onsiteRemoteFilter])
+        ) {
+          label = await labelEl;
+        }
+      }
+
+      if (label) {
+        await label.click();
+
+        await this.page.waitForTimeout(2500);
+        await filterDropdown.getByRole("button").nth(1).click();
       }
     }
 
-    if (label) {
-      await label.click();
-
-      await this.page.waitForTimeout(2500);
-      await filterDropdown.getByRole("button").nth(1).click();
-    }
+    await this.page.waitForTimeout(2000);
   }
 
   async handleEasyApplyFilter() {
@@ -218,6 +229,8 @@ class LinkedinJobsPage {
         }
       }
     }
+
+    await this.page.waitForTimeout(2000);
   }
 
   async searchForJobs({
@@ -226,7 +239,7 @@ class LinkedinJobsPage {
     state,
     country,
     datePostedFilter,
-    onsiteRemoteFilter,
+    onsiteRemoteFilters = [],
   }: SearchForJobsProps) {
     console.info("[info] beginning job search...");
 
@@ -240,8 +253,8 @@ class LinkedinJobsPage {
     await this.page.keyboard.press("Enter");
 
     if (datePostedFilter) await this.handleDatePostedFilter(datePostedFilter);
-    if (onsiteRemoteFilter)
-      await this.handleOnsiteRemoteFilter(onsiteRemoteFilter);
+    if (onsiteRemoteFilters?.length > 0)
+      await this.handleOnsiteRemoteFilters(onsiteRemoteFilters);
     await this.handleEasyApplyFilter();
 
     const jobsDetails: Omit<NewJob, "platformId" | "taskExecutionId">[] = [];
@@ -249,11 +262,16 @@ class LinkedinJobsPage {
     loop1: while (true) {
       const { jobCards, nextPageBtn } = await this.getSearchedJobs();
 
+      console.log({ jobCards, nextPageBtn });
       for (const jobCard of jobCards) {
         await this.page.waitForTimeout(2000);
         await jobCard.click();
 
         await this.page.waitForTimeout(2000);
+        // const btnContainer = await this.page.locator(
+        //   ".jobs-apply-button--top-card",
+        // );
+        // if (await btnContainer.getByText("Easy Apply").isVisible()) {
         const appliedBanner = (
           await this.page
             .locator(
@@ -291,6 +309,13 @@ class LinkedinJobsPage {
           );
           const jobId = params.get("currentJobId");
 
+          // let posterName: null | string = null;
+          // let posterProfileUrl: null | string = null;
+          // if (await this.jobPosterLink.isVisible()) {
+          //   posterName =
+          //     (await this.jobPosterLink.textContent())?.trim() ?? null;
+          //   posterProfileUrl = await this.jobPosterLink.getAttribute("href");
+          // }
           if (company && companyUrl && jobTitle && urlPath) {
             jobsDetails.push({
               platformJobId: jobId as string,
@@ -298,6 +323,8 @@ class LinkedinJobsPage {
               url: `https://www.linkedin.com${urlPath}`,
               company,
               companyUrl,
+              // posterName,
+              // posterProfileUrl,
             });
           }
         }

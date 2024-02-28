@@ -9,6 +9,7 @@ class EasyApplyModal {
   readonly submitBtn: Locator;
   readonly dismissBtn: Locator;
   readonly discardBtn: Locator;
+  readonly continueApplyBtn: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -24,13 +25,25 @@ class EasyApplyModal {
     this.discardBtn = this.page.locator(
       '[data-control-name="discard_application_confirm_btn"]',
     );
+    this.continueApplyBtn = this.page.getByText("Continue applying");
   }
 
   async apply() {
-    // let wasSuccessful = false;
+    const btnContainer = await this.page.locator(
+      ".jobs-apply-button--top-card",
+    );
+    if (!(await btnContainer.getByText("Easy Apply").isVisible()))
+      throw new Error("Not an Easy Apply Job!");
 
-    // try {
+    await this.page.waitForTimeout(2000);
+    if (await this.continueApplyBtn.isVisible()) {
+      await this.continueApplyBtn.click();
+    }
+
+    let loopCount = 0;
     while (true) {
+      if (loopCount === 50) throw new Error("Unable to apply. Loop error");
+
       await this.answerTextFieldQuestions();
       await this.answerSelectQuestions();
       await this.answerRadioQuestions();
@@ -55,8 +68,9 @@ class EasyApplyModal {
           "[info] unable to submit application -> missing information",
         );
         throw new Error("unable to submit application -> missing information");
-        break;
       }
+
+      loopCount++;
     }
 
     await this.page.waitForTimeout(2000);
@@ -72,7 +86,6 @@ class EasyApplyModal {
 
     await this.page.waitForTimeout(5000);
     if (await this.page.getByText("Application sent").isVisible()) {
-      // wasSuccessful = true;
       console.info("[info] application submitted successfully");
     }
 
@@ -88,9 +101,6 @@ class EasyApplyModal {
       await this.discardBtn.click();
       console.info("[info] discarding application...");
     }
-    // } finally {
-    //   return wasSuccessful;
-    // }
   }
 
   private async answerTextFieldQuestions() {
@@ -122,8 +132,8 @@ class EasyApplyModal {
     } catch (error) {
       console.error(
         "[error] unable to answer text field questions. continuing...",
-        error,
       );
+      throw new Error("unable to apply -> missing information");
     }
   }
 
@@ -163,8 +173,8 @@ class EasyApplyModal {
     } catch (error) {
       console.error(
         "[error] unable to answer select input questions. continuing...",
-        error,
       );
+      throw new Error("unable to apply -> missing information");
     }
   }
 
@@ -187,6 +197,7 @@ class EasyApplyModal {
       }
     } catch (error) {
       console.error("[error] unable to answer radio questions... continuing");
+      throw new Error("unable to apply -> missing information");
     }
   }
 
@@ -201,32 +212,6 @@ class EasyApplyModal {
       );
     }
     return errors.length !== 0;
-  }
-
-  private async saveErrorsToDB() {
-    const sections = await this.self
-      .locator(".jobs-easy-apply-form-section__grouping")
-      .all();
-
-    for (const section of sections) {
-      const hasErrorMsg = await section
-        .locator(".artdeco-inline-feedback--error")
-        .isVisible();
-
-      if (hasErrorMsg) {
-        console.debug("[debug] hasErrorMsg", hasErrorMsg);
-        console.debug(
-          "[debug]",
-          (await section.locator("label").textContent())?.trim(),
-        );
-      }
-    }
-
-    // await Promise.all(
-    //   errors.map(async (err) => {
-
-    //   })
-    // );
   }
 }
 
