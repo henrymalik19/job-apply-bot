@@ -2,6 +2,8 @@ const HEADLESS_BROWSER = process.env.HEADLESS_BROWSER === "true" ? true : false;
 
 const APP_ENV = process.env.APP_ENV || "local";
 
+const APP_PORT = process.env.APP_PORT || 4050;
+
 const AWS_S3_REGION = process.env.AWS_S3_REGION || "";
 const AWS_S3_ENDPOINT = process.env.AWS_S3_ENDPOINT || "";
 const AWS_S3_ACCESS_KEY_ID = process.env.AWS_S3_ACCESS_KEY_ID || "";
@@ -47,6 +49,7 @@ const PLATFORMS = {
 export {
   HEADLESS_BROWSER,
   APP_ENV,
+  APP_PORT,
   AWS_S3_REGION,
   AWS_S3_ENDPOINT,
   AWS_S3_ACCESS_KEY_ID,
