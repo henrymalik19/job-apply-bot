@@ -16,7 +16,12 @@ class TaskScheduleService {
 
   //   async create() {}
 
-  //   async update(updatePayload: NewTaskSchedule) {}
+  async update(id: number, updatePayload: Partial<NewTaskSchedule>) {
+    await db
+      .update(taskSchedulesTable)
+      .set({ ...updatePayload, updatedAt: new Date() })
+      .where(eq(taskSchedulesTable.id, id));
+  }
 
   //   async delete(id: number) {}
 

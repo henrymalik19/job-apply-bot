@@ -4,7 +4,10 @@ import { TASK_EXECUTION_STATUSES, USER_JOB_STATUSES } from "../../constants";
 import { NewJob } from "../../database/schema/jobs";
 import { TaskExecution } from "../../database/schema/taskExecutions";
 import { Linkedin } from "../../platforms/linkedin/Linkedin";
-import { OnsiteRemoteFilterType } from "../../platforms/linkedin/types";
+import {
+  DatePostedFilterType,
+  OnsiteRemoteFilterType,
+} from "../../platforms/linkedin/types";
 import { jobSearchQueueName } from "../../queues/job-search-queue";
 import { CredentialService } from "../../services/credential";
 import { JobService } from "../../services/job";
@@ -31,6 +34,7 @@ interface PerformLinkedinJobSearchTaskParams {
     hybrid: boolean;
     onsite: boolean;
   };
+  datePostedFilter: DatePostedFilterType;
   userId: number;
   platformId: number;
 }
@@ -134,6 +138,8 @@ class JobSearchWorker {
             hybrid: userJobPreference.hybrid,
             onsite: userJobPreference.onsite,
           },
+          datePostedFilter:
+            userJobPreference.searchTimeframe as DatePostedFilterType,
         });
 
         break;
@@ -158,6 +164,7 @@ class JobSearchWorker {
     state,
     country,
     onsiteRemoteFilters,
+    datePostedFilter,
     userId,
     platformId,
   }: PerformLinkedinJobSearchTaskParams) {
@@ -174,7 +181,7 @@ class JobSearchWorker {
       country,
       email: decrypt(credentials.email),
       password: decrypt(credentials.password),
-      datePostedFilter: "pastWeek", // Need to use db value
+      datePostedFilter,
       onsiteRemoteFilters: [
         ...((onsiteRemoteFilters.remote
           ? ["remote"]

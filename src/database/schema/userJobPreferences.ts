@@ -18,6 +18,7 @@ const userJobPreferencesTable = pgTable(
     onsite: boolean("onsite").default(true).notNull(),
     remote: boolean("remote").default(true).notNull(),
     hybrid: boolean("hybrid").default(true).notNull(),
+    searchTimeframe: text("search_timeframe").default("past24Hours").notNull(),
 
     // foreign keys
     userId: integer("user_id")

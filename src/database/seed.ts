@@ -109,7 +109,7 @@ const main = async () => {
 
     console.info("[info] adding taskSchedules to taskSchedulesTable...");
     for (const jobPreference of userJobPreferences) {
-      const searchTask = tasks.find((t) => t.name === "Job Search");
+      const searchTask = tasks.find((t) => t.name === TASK_TYPES.JOB_SEARCH);
 
       await db.insert(taskSchedulesTable).values({
         frequency: "0 */20 * * * *",
@@ -121,7 +121,7 @@ const main = async () => {
     console.info("[info] completed adding taskSchedules to taskSchedulesTable");
   }
 
-  const applyTask = tasks.find((t) => t.name === "Job Apply");
+  const applyTask = tasks.find((t) => t.name === TASK_TYPES.JOB_APPLY);
   await db.insert(taskSchedulesTable).values({
     frequency: "0 */20 * * * *",
     taskId: applyTask?.id as number,

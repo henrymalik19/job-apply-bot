@@ -1,8 +1,8 @@
-import { jobsTable } from "database/schema/jobs";
 import { and, eq } from "drizzle-orm";
 
 import { USER_JOB_STATUSES } from "../constants";
 import { db } from "../database/db";
+import { jobsTable } from "../database/schema/jobs";
 import { NewUserJob, userJobsTable } from "../database/schema/userJobs";
 
 class UserJobService {
@@ -29,7 +29,7 @@ class UserJobService {
     const userJob = (
       await db
         .update(userJobsTable)
-        .set(updatePayload)
+        .set({ ...updatePayload, updatedAt: new Date() })
         .where(eq(userJobsTable.id, id))
         .returning()
     )[0];

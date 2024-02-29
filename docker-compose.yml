@@ -28,8 +28,8 @@ services:
       - APP_ENV=docker
       - AWS_S3_REGION=us-east-1
       - AWS_S3_ENDPOINT=http://minio:9000
-      - AWS_S3_ACCESS_KEY_ID=VhqVW2rWd9N0gm2wEpO6
-      - AWS_S3_SECRET_ACCESS_KEY=jfylrfseB0OvBLOj7gMH1QIz5D1R91vLnBWkzpFs
+      - AWS_S3_ACCESS_KEY_ID=NLubLohohYb57oV7nMMK
+      - AWS_S3_SECRET_ACCESS_KEY=gXITS8yWj4rQR9t94Ov1eYqQ3zQo0lLfMkX8XPRJ
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DB_HOST=postgres
@@ -51,8 +51,8 @@ services:
       - APP_ENV=docker
       - AWS_S3_REGION=us-east-1
       - AWS_S3_ENDPOINT=http://minio:9000
-      - AWS_S3_ACCESS_KEY_ID=VhqVW2rWd9N0gm2wEpO6
-      - AWS_S3_SECRET_ACCESS_KEY=jfylrfseB0OvBLOj7gMH1QIz5D1R91vLnBWkzpFs
+      - AWS_S3_ACCESS_KEY_ID=NLubLohohYb57oV7nMMK
+      - AWS_S3_SECRET_ACCESS_KEY=gXITS8yWj4rQR9t94Ov1eYqQ3zQo0lLfMkX8XPRJ
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - DB_HOST=postgres

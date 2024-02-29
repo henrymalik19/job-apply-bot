@@ -9,6 +9,7 @@ import { TaskScheduleService } from "../../services/task-schedule";
 import { UserService } from "../../services/user";
 import { UserJobService } from "../../services/user-job";
 import { JobApplyQueueJob, JobSearchQueueJob } from "../../types";
+import { getNextDateFromCron } from "../../utils";
 
 class TaskQueueWorker {
   taskService: TaskService;
@@ -64,14 +65,10 @@ class TaskQueueWorker {
             break;
         }
 
-        //   console.info(`[info] updating 'nextRunAt' for task...`);
-        //   await db
-        //     .update(taskSchedulesTable)
-        //     .set({
-        //       nextRunAt: getNextDateFromCron(taskToSchedule.frequency),
-        //       updatedAt: new Date(),
-        //     })
-        //     .where(eq(taskSchedulesTable.id, taskToSchedule.id));
+        console.info(`[info] updating 'nextRunAt' for task schedule...`);
+        await this.taskScheduleService.update(taskToSchedule.id, {
+          nextRunAt: getNextDateFromCron(taskToSchedule.frequency),
+        });
       }
     } catch (error) {
       console.log(error);

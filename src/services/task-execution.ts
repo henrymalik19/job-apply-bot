@@ -34,7 +34,7 @@ class TaskExecutionService {
     const taskExecution = (
       await db
         .update(taskExecutionsTable)
-        .set({ ...updatePayload })
+        .set({ ...updatePayload, updatedAt: new Date() })
         .where(eq(taskExecutionsTable.id, id))
         .returning()
     )[0];

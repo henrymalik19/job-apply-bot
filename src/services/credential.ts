@@ -1,8 +1,8 @@
-import { credentialsTable } from "database/schema/credentials";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../database/db";
-import { NewPlatform, platformsTable } from "../database/schema/platforms";
+import { credentialsTable } from "../database/schema/credentials";
+import { platformsTable } from "../database/schema/platforms";
 
 class CredentialService {
   // CRUD

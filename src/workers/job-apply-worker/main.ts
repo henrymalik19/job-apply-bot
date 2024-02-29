@@ -1,6 +1,12 @@
 import IORedis from "ioredis";
 
 import { REDIS_HOST, REDIS_PORT } from "../../constants";
+import { CredentialService } from "../../services/credential";
+import { JobService } from "../../services/job";
+import { PlatformService } from "../../services/platform";
+import { TaskExecutionService } from "../../services/task-execution";
+import { UserJobService } from "../../services/user-job";
+import { UserJobPreferenceService } from "../../services/user-job-preference";
 import { JobApplyWorker } from "./job-apply-worker";
 
 const connection = new IORedis({
@@ -10,7 +16,14 @@ const connection = new IORedis({
 });
 
 function main() {
-  new JobApplyWorker().init(connection);
+  new JobApplyWorker(
+    new CredentialService(),
+    new JobService(),
+    new TaskExecutionService(),
+    new UserJobService(),
+    new UserJobPreferenceService(),
+    new PlatformService(),
+  ).init(connection);
 }
 
 main();

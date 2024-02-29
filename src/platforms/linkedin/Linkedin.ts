@@ -64,13 +64,16 @@ class Linkedin {
       );
 
       const storageStateExists =
-        (await doesFileExist(storageStatePath)) || !!storageStateContents;
+        APP_ENV !== "local"
+          ? await doesFileExist(storageStatePath)
+          : !!storageStateContents;
+
       const context = await browser.newContext({
         ...(storageStateExists && {
           storageState:
-            APP_ENV === "local"
-              ? storageStatePath
-              : JSON.parse(storageStateContents as string),
+            APP_ENV !== "local"
+              ? JSON.parse(storageStateContents as string)
+              : storageStatePath,
         }),
       });
       const page = await context.newPage();

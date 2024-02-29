@@ -31,6 +31,7 @@ class LinkedinHomePage {
     }
 
     console.info("[info] logging into linkedin...");
+    await this.page.screenshot({ path: "/tmp/playwright-images.png" });
     await this.emailOrPhoneInput.fill(email);
     await this.passwordInput.fill(password);
 
