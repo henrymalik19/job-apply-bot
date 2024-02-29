@@ -1,21 +1,17 @@
 import { Job as BullMqJob, ConnectionOptions, Worker } from "bullmq";
-import { and, eq } from "drizzle-orm";
-import { OnsiteRemoteFilterType } from "platforms/linkedin/types";
-import { messageQueue } from "queues/message-queue";
 
 import { TASK_EXECUTION_STATUSES, USER_JOB_STATUSES } from "../../constants";
-import { db } from "../../database/db";
-import { credentialsTable } from "../../database/schema/credentials";
-import { NewJob, jobsTable } from "../../database/schema/jobs";
-import { platformsTable } from "../../database/schema/platforms";
-import {
-  NewTaskExecution,
-  taskExecutionsTable,
-} from "../../database/schema/taskExecutions";
-import { userJobPreferencesTable } from "../../database/schema/userJobPreferences";
-import { userJobsTable } from "../../database/schema/userJobs";
+import { NewJob } from "../../database/schema/jobs";
+import { TaskExecution } from "../../database/schema/taskExecutions";
 import { Linkedin } from "../../platforms/linkedin/Linkedin";
+import { OnsiteRemoteFilterType } from "../../platforms/linkedin/types";
 import { jobSearchQueueName } from "../../queues/job-search-queue";
+import { CredentialService } from "../../services/credential";
+import { JobService } from "../../services/job";
+import { PlatformService } from "../../services/platform";
+import { TaskExecutionService } from "../../services/task-execution";
+import { UserJobService } from "../../services/user-job";
+import { UserJobPreferenceService } from "../../services/user-job-preference";
 import { JobSearchQueueJob } from "../../types";
 import { decrypt } from "../../utils";
 
@@ -40,6 +36,29 @@ interface PerformLinkedinJobSearchTaskParams {
 }
 
 class JobSearchWorker {
+  credentialService: CredentialService;
+  jobService: JobService;
+  taskExecutionService: TaskExecutionService;
+  userJobService: UserJobService;
+  userJobPreferenceService: UserJobPreferenceService;
+  platformService: PlatformService;
+
+  constructor(
+    _credentialService: CredentialService,
+    _jobService: JobService,
+    _taskExecutionService: TaskExecutionService,
+    _userJobService: UserJobService,
+    _userJobPreferenceService: UserJobPreferenceService,
+    _platformService: PlatformService,
+  ) {
+    this.credentialService = _credentialService;
+    this.jobService = _jobService;
+    this.taskExecutionService = _taskExecutionService;
+    this.userJobService = _userJobService;
+    this.userJobPreferenceService = _userJobPreferenceService;
+    this.platformService = _platformService;
+  }
+
   init(connection: ConnectionOptions) {
     console.info("[info] starting job-search-worker...");
     console.info("[info] waiting for jobs...");
@@ -53,33 +72,34 @@ class JobSearchWorker {
     console.info("[info] new job received!");
     const { data } = job;
 
+    let taskExecution: TaskExecution;
+
     try {
       console.info(`[info] processing job ${job.name}...`);
 
-      await this.updateTaskExecution(data.taskExecutionId, {
+      taskExecution = await this.taskExecutionService.create({
         status: TASK_EXECUTION_STATUSES.IN_PROGRESS,
         startedAt: new Date(),
       });
 
-      await this.performJobSearchTask({
+      await await this.performJobSearchTask({
         userId: data.userId,
         preferenceId: data.preferenceId,
-        taskExecutionId: data.taskExecutionId,
+        taskExecutionId: taskExecution.id,
       });
 
-      await this.updateTaskExecution(data.taskExecutionId, {
+      await this.taskExecutionService.update(taskExecution.id, {
         status: TASK_EXECUTION_STATUSES.SUCCESS,
-
         endedAt: new Date(),
       });
 
       console.info("[info] processing job complete");
     } catch (error: any) {
       console.info(
-        `[info] error processing job. Task Execution Id:${data.taskExecutionId}`,
+        `[info] error processing job. Task Execution Id:${taskExecution!.id}`,
       );
 
-      await this.updateTaskExecution(data.taskExecutionId, {
+      await this.taskExecutionService.update(taskExecution!.id, {
         status: TASK_EXECUTION_STATUSES.FAILED,
         endedAt: new Date(),
         details: error.message as string,
@@ -92,19 +112,11 @@ class JobSearchWorker {
     preferenceId,
     taskExecutionId,
   }: PerformJobSearchTaskParams) {
-    const userJobPreference = (
-      await db
-        .select()
-        .from(userJobPreferencesTable)
-        .where(eq(userJobPreferencesTable.id, preferenceId))
-    )[0];
-
-    const platform = (
-      await db
-        .select()
-        .from(platformsTable)
-        .where(eq(platformsTable.id, userJobPreference.platformId as number))
-    )[0];
+    const userJobPreference =
+      await this.userJobPreferenceService.findById(preferenceId);
+    const platform = await this.platformService.findById(
+      userJobPreference.platformId,
+    );
 
     let jobsDetails: Omit<NewJob, "taskExecutionId">[] = [];
 
@@ -129,12 +141,15 @@ class JobSearchWorker {
         break;
     }
 
-    await this.saveJobDetails(
-      jobsDetails,
-      platform.name,
-      taskExecutionId,
-      userId,
-    );
+    for (const job of jobsDetails) {
+      const savedJob = await this.saveJobToDB({ ...job, taskExecutionId });
+
+      const savedUserJob = await this.saveUserJobToDB(
+        savedJob.id,
+        userId,
+        job.platformJobId,
+      );
+    }
   }
 
   async performLinkedinJobSearchTask({
@@ -146,17 +161,10 @@ class JobSearchWorker {
     userId,
     platformId,
   }: PerformLinkedinJobSearchTaskParams) {
-    const credentials = (
-      await db
-        .select()
-        .from(credentialsTable)
-        .where(
-          and(
-            eq(credentialsTable.userId, userId),
-            eq(credentialsTable.platformId, platformId),
-          ),
-        )
-    )[0];
+    const credentials = await this.credentialService.findByUserIdAndPlatformId(
+      userId,
+      platformId,
+    );
 
     const jobsDetails = await Linkedin.handleSearchForJobs({
       userId,
@@ -190,107 +198,47 @@ class JobSearchWorker {
     }));
   }
 
-  async updateTaskExecution(id: number, values: NewTaskExecution) {
-    await db
-      .update(taskExecutionsTable)
-      .set({ ...values })
-      .where(eq(taskExecutionsTable.id, id));
-  }
-
-  async saveJobDetails(
-    jobsDetails: Omit<NewJob, "taskExecutionId">[],
-    platformName: string,
-    taskExecutionId: number,
-    userId: number,
-  ) {
-    for (const job of jobsDetails) {
-      const savedJob = await this.saveJobToDB(
-        job,
-        platformName,
-        taskExecutionId,
-      );
-
-      const savedUserJob = await this.saveUserJobToDB(
-        savedJob.id,
-        userId,
-        job.platformJobId,
-        platformName,
-      );
-    }
-  }
-
-  async saveJobToDB(
-    job: Omit<NewJob, "taskExecutionId">,
-    platformName: string,
-    taskExecutionId: number,
-  ) {
-    const jobAlreadyExists = (
-      await db
-        .select()
-        .from(jobsTable)
-        .where(eq(jobsTable.platformJobId, job.platformJobId))
-    )[0];
+  async saveJobToDB(job: NewJob) {
+    const jobAlreadyExists = await this.jobService.findByPlatformJobId(
+      job.platformJobId,
+    );
 
     if (jobAlreadyExists) {
       console.info(
-        `[info] ${platformName} job ${job.platformJobId} already exists. continuing...`,
+        `[info] job ${job.platformJobId} already exists. in jobs table, continuing...`,
       );
-      const savedJob = (
-        await db
-          .select()
-          .from(jobsTable)
-          .where(eq(jobsTable.platformJobId, job.platformJobId))
-      )[0];
 
-      return savedJob;
+      return jobAlreadyExists;
     }
 
-    console.info(
-      `[info] Saving ${platformName} job ${job.platformJobId} into jobs table...`,
-    );
+    console.info(`[info] Saving job ${job.platformJobId} into jobs table...`);
 
-    const savedJob = (
-      await db
-        .insert(jobsTable)
-        .values({ ...job, taskExecutionId })
-        .returning()
-    )[0];
+    const savedJob = await this.jobService.create(job);
 
-    console.info(`[info] Save complete.`);
     return savedJob;
   }
 
-  async saveUserJobToDB(
-    savedJobId: number,
-    userId: number,
-    platformJobId,
-    platformName: string,
-  ) {
-    // NEED TO MAKE SURE THE JOB DOES NOT EXIST
-    const userJobAlreadyExists = (
-      await db
-        .select()
-        .from(userJobsTable)
-        .where(and(eq(userJobsTable.jobId, savedJobId)))
-    )[0];
+  async saveUserJobToDB(savedJobId: number, userId: number, platformJobId) {
+    const userJobAlreadyExists =
+      await this.userJobService.findByJobId(savedJobId);
 
-    if (!userJobAlreadyExists) {
+    if (userJobAlreadyExists) {
       console.info(
-        `[info] Saving ${platformName} job ${platformJobId} into user-jobs table...`,
+        `[info] job ${platformJobId} already exists in user_jobs table, continuing...`,
       );
-      const userJob = (
-        await db
-          .insert(userJobsTable)
-          .values({
-            userId,
-            jobId: savedJobId,
-            status: USER_JOB_STATUSES.READY,
-          })
-          .returning()
-      )[0];
 
-      return userJob;
+      return userJobAlreadyExists;
     }
+
+    console.info(`[info] Saving job ${platformJobId} into user_jobs table...`);
+
+    const userJob = await this.userJobService.create({
+      userId,
+      jobId: savedJobId,
+      status: USER_JOB_STATUSES.READY,
+    });
+
+    return userJob;
   }
 }
 

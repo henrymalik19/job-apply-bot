@@ -20,6 +20,11 @@ const ENCRYPTION = {
   IV: Buffer.from(process.env.IV as string, "hex"),
 };
 
+const TASK_TYPES = {
+  JOB_SEARCH: "JOB_SEARCH",
+  JOB_APPLY: "JOB_APPLY",
+};
+
 const TASK_EXECUTION_STATUSES = {
   PENDING: "PENDING",
   IN_PROGRESS: "IN_PROGRESS",
@@ -33,6 +38,10 @@ const USER_JOB_STATUSES = {
   APPLYING: "APPLYING",
   APPLIED: "APPLIED",
   FAILED: "FAILED",
+};
+
+const PLATFORMS = {
+  linkedin: "linkedin",
 };
 
 export {
@@ -49,6 +58,8 @@ export {
   DB_USER,
   DB_PASSWORD,
   ENCRYPTION,
+  TASK_TYPES,
   TASK_EXECUTION_STATUSES,
   USER_JOB_STATUSES,
+  PLATFORMS,
 };

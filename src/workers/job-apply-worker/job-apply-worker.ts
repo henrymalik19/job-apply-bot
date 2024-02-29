@@ -1,24 +1,48 @@
 import { ConnectionOptions, Job, Worker } from "bullmq";
-import { and, eq } from "drizzle-orm";
 // import { chromium } from "playwright";
 import { chromium } from "playwright-extra";
 
-import { TASK_EXECUTION_STATUSES, USER_JOB_STATUSES } from "../../constants";
-import { db } from "../../database/db";
-import { credentialsTable } from "../../database/schema/credentials";
-import { jobsTable } from "../../database/schema/jobs";
-import { platformsTable } from "../../database/schema/platforms";
 import {
-  NewTaskExecution,
-  taskExecutionsTable,
-} from "../../database/schema/taskExecutions";
-import { NewUserJob, userJobsTable } from "../../database/schema/userJobs";
+  PLATFORMS,
+  TASK_EXECUTION_STATUSES,
+  USER_JOB_STATUSES,
+} from "../../constants";
+import { TaskExecution } from "../../database/schema/taskExecutions";
 import { Linkedin } from "../../platforms/linkedin/Linkedin";
 import { jobApplyQueueName } from "../../queues/job-apply-queue";
+import { CredentialService } from "../../services/credential";
+import { JobService } from "../../services/job";
+import { PlatformService } from "../../services/platform";
+import { TaskExecutionService } from "../../services/task-execution";
+import { UserJobService } from "../../services/user-job";
+import { UserJobPreferenceService } from "../../services/user-job-preference";
 import { JobApplyQueueJob } from "../../types";
 import { decrypt } from "../../utils";
 
 class JobApplyWorker {
+  credentialService: CredentialService;
+  jobService: JobService;
+  taskExecutionService: TaskExecutionService;
+  userJobService: UserJobService;
+  userJobPreferenceService: UserJobPreferenceService;
+  platformService: PlatformService;
+
+  constructor(
+    _credentialService: CredentialService,
+    _jobService: JobService,
+    _taskExecutionService: TaskExecutionService,
+    _userJobService: UserJobService,
+    _userJobPreferenceService: UserJobPreferenceService,
+    _platformService: PlatformService,
+  ) {
+    this.credentialService = _credentialService;
+    this.jobService = _jobService;
+    this.taskExecutionService = _taskExecutionService;
+    this.userJobService = _userJobService;
+    this.userJobPreferenceService = _userJobPreferenceService;
+    this.platformService = _platformService;
+  }
+
   init(connection: ConnectionOptions) {
     console.info("[info] starting job-apply-worker...");
     console.info("[info] waiting for jobs...");
@@ -32,17 +56,19 @@ class JobApplyWorker {
     console.info("[info] new job received!");
     const { data } = job;
 
+    let taskExecution: TaskExecution;
+
     try {
       console.info(`[info] processing job ${job.name}...`);
 
-      await this.updateTaskExecution(data.taskExecutionId, {
+      taskExecution = await this.taskExecutionService.create({
         status: TASK_EXECUTION_STATUSES.IN_PROGRESS,
         startedAt: new Date(),
       });
 
       await this.performJobApplyTask(data.userJobId);
 
-      await this.updateTaskExecution(data.taskExecutionId, {
+      await this.taskExecutionService.update(taskExecution.id, {
         status: TASK_EXECUTION_STATUSES.SUCCESS,
         endedAt: new Date(),
       });
@@ -50,15 +76,13 @@ class JobApplyWorker {
       console.info("[info] processing job complete");
     } catch (error: any) {
       console.info(
-        `[info] error processing job. Task Execution Id:${data.taskExecutionId}`,
+        `[info] error processing job. Task Execution Id:${taskExecution!.id}`,
       );
 
-      await db
-        .update(userJobsTable)
-        .set({ status: USER_JOB_STATUSES.FAILED })
-        .where(eq(userJobsTable.id, data.userJobId));
-
-      await this.updateTaskExecution(data.taskExecutionId, {
+      await this.userJobService.update(data.userJobId, {
+        status: USER_JOB_STATUSES.FAILED,
+      });
+      await this.taskExecutionService.update(taskExecution!.id, {
         status: TASK_EXECUTION_STATUSES.FAILED,
         endedAt: new Date(),
         details: error.message as string,
@@ -67,40 +91,20 @@ class JobApplyWorker {
   }
 
   async performJobApplyTask(userJobId: number) {
-    const userJob = (
-      await db
-        .select()
-        .from(userJobsTable)
-        .where(eq(userJobsTable.id, userJobId))
-    )[0];
+    const userJob = await this.userJobService.findById(userJobId);
+    await this.userJobService.update(userJob.id, {
+      status: USER_JOB_STATUSES.APPLYING,
+    });
 
-    await db
-      .update(userJobsTable)
-      .set({
-        status: USER_JOB_STATUSES.APPLYING,
-      })
-      .where(eq(userJobsTable.id, userJob.id));
-
-    const job = (
-      await db.select().from(jobsTable).where(eq(jobsTable.id, userJob.jobId))
-    )[0];
-
-    const platform = (
-      await db
-        .select()
-        .from(platformsTable)
-        .where(eq(platformsTable.id, job.platformId))
-    )[0];
-
-    const credentials = (
-      await db
-        .select()
-        .from(credentialsTable)
-        .where(and(eq(credentialsTable.userId, userJob.userId as number)))
-    )[0];
+    const job = await this.jobService.findById(userJob.jobId);
+    const platform = await this.platformService.findById(job.platformId);
+    const credentials = await this.credentialService.findByUserIdAndPlatformId(
+      userJob.userId,
+      platform.id,
+    );
 
     switch (platform.name) {
-      case "linkedin":
+      case PLATFORMS.linkedin:
         await Linkedin.handleApplyForJobs({
           userId: userJob.userId as number,
           jobUrl: job.url,
@@ -113,19 +117,9 @@ class JobApplyWorker {
         break;
     }
 
-    await db
-      .update(userJobsTable)
-      .set({
-        status: USER_JOB_STATUSES.APPLIED,
-      })
-      .where(eq(userJobsTable.id, userJob.id));
-  }
-
-  async updateTaskExecution(id: number, values: NewTaskExecution) {
-    await db
-      .update(taskExecutionsTable)
-      .set({ ...values })
-      .where(eq(taskExecutionsTable.id, id));
+    this.userJobService.update(userJobId, {
+      status: USER_JOB_STATUSES.APPLIED,
+    });
   }
 }
 

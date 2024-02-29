@@ -2,7 +2,13 @@ import { eq } from "drizzle-orm";
 import { PostgresJsDatabase, drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { DB_HOST, DB_NAME, DB_PASSWORD, DB_USER } from "../constants";
+import {
+  DB_HOST,
+  DB_NAME,
+  DB_PASSWORD,
+  DB_USER,
+  TASK_TYPES,
+} from "../constants";
 import { encrypt } from "../utils";
 import { credentialsTable } from "./schema/credentials";
 import { platformsTable } from "./schema/platforms";
@@ -35,10 +41,10 @@ const main = async () => {
     .insert(tasksTable)
     .values([
       {
-        name: "Job Search",
+        name: TASK_TYPES.JOB_SEARCH,
         description: "job search",
       },
-      { name: "Job Apply", description: "job apply" },
+      { name: TASK_TYPES.JOB_APPLY, description: "job apply" },
     ])
     .returning();
   console.info("[info] completed adding tasks to tasksTable");
@@ -106,7 +112,7 @@ const main = async () => {
       const searchTask = tasks.find((t) => t.name === "Job Search");
 
       await db.insert(taskSchedulesTable).values({
-        frequency: "0 */5 * * * *",
+        frequency: "0 */20 * * * *",
         taskId: searchTask?.id as number,
         userId: user.id,
         preferenceId: jobPreference.id,
@@ -117,7 +123,7 @@ const main = async () => {
 
   const applyTask = tasks.find((t) => t.name === "Job Apply");
   await db.insert(taskSchedulesTable).values({
-    frequency: "0 */5 * * * *",
+    frequency: "0 */20 * * * *",
     taskId: applyTask?.id as number,
     userId: user.id,
   });

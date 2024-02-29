@@ -1,18 +1,31 @@
-import { NewUserJobPreference } from "database/schema/userJobPreferences";
+import { eq } from "drizzle-orm";
+
+import { db } from "../database/db";
+import {
+  NewUserJobPreference,
+  userJobPreferencesTable,
+} from "../database/schema/userJobPreferences";
 
 class UserJobPreferenceService {
   // CRUD
-  private async findAll() {}
+  // async findAll() {}
 
-  private async findById(id: number) {}
+  async findById(id: number) {
+    const userJobPreference = (
+      await db
+        .select()
+        .from(userJobPreferencesTable)
+        .where(eq(userJobPreferencesTable.id, id))
+    )[0];
 
-  private async create() {}
+    return userJobPreference;
+  }
 
-  private async update(updatePayload: NewUserJobPreference) {}
+  // async create() {}
 
-  private async delete(id: number) {}
+  // async update(updatePayload: NewUserJobPreference) {}
 
-  private findAllReadyToSchedule();
+  // async delete(id: number) {}
 }
 
 export { UserJobPreferenceService };
