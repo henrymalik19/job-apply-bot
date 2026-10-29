@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
+import { loadMatchingHealth } from "@/server/modules/matching/matching.service";
 import { formatMinutes, loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
@@ -15,13 +16,16 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 async function Health({ searchParams }: { searchParams: SearchParams }) {
   const { db } = await ownerContext();
   const now = new Date();
-  const [{ boards, worker, workerProblem, intervalMinutes }, params] = await Promise.all([
+  const [{ boards, worker, workerProblem, intervalMinutes }, matching, params] = await Promise.all([
     loadDiscoveryHealth(db, now),
+    loadMatchingHealth(db, now),
     searchParams,
   ]);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
     ...(workerProblem ? [`Discovery ${workerProblem}.`] : []),
+    ...(matching.lastRun?.ok === false ? [`Matching last run failed: ${matching.lastRun.error ?? "unknown error"}.`] : []),
+    ...(matching.capReached ? [`Monthly LLM spend cap (${matching.spend.cap}) reached; scoring is paused until next month.`] : []),
     ...active.filter((b) => b.problem).map((b) => `${b.name} (${b.ats}:${b.board_token}) ${b.problem}.`),
   ];
   // Problem boards first, then by name.
@@ -61,6 +65,33 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
           ) : (
             <span className="text-muted-foreground">Has not run yet.</span>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Matching</CardTitle>
+          <CardDescription>
+            Runs after each discovery run. Claude spend this month: ${matching.spend.spent.toFixed(2)} of $
+            {matching.spend.cap.toFixed(2)} cap.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          {matching.lastRun ? (
+            <Badge variant={matching.lastRun.ok ? "secondary" : "destructive"}>
+              {matching.lastRun.ok ? "OK" : "Failed"} · {ago(matching.lastRun.started_at, now)}
+            </Badge>
+          ) : (
+            <Badge variant="outline">Not run yet</Badge>
+          )}
+          <span>
+            {matching.summary.scored.toLocaleString()} scored · {matching.summary.aboveThreshold.toLocaleString()} at{" "}
+            {matching.summary.threshold}+ · {matching.summary.filtered.toLocaleString()} ruled out ·{" "}
+            {matching.summary.failed.toLocaleString()} failed
+          </span>
+          {matching.lastRun?.counts?.deferred ? (
+            <span className="text-muted-foreground">{matching.lastRun.counts.deferred} deferred to the next run</span>
+          ) : null}
         </CardContent>
       </Card>
 

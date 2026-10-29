@@ -6,6 +6,12 @@ import jsdoc from "eslint-plugin-jsdoc";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Dropping a field with rest-destructuring (`const { a, ...rest } = row`) is fine.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true, argsIgnorePattern: "^_" }],
+    },
+  },
   // Every exported function, class, type and interface carries a TSDoc comment.
   {
     files: ["app/**/*.{ts,tsx}", "server/**/*.ts", "shared/**/*.ts", "workers/**/*.ts", "proxy.ts"],

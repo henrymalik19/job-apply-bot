@@ -13,7 +13,16 @@ import {
 } from "./run-health";
 import { latestWorkerRun, listSourceStatus } from "./runs.repository";
 
-export { failInterruptedRuns, finishRun, listSourceStatus, startRun, type RunResult } from "./runs.repository";
+export {
+  failInterruptedRuns,
+  finishRun,
+  latestWorkerRun,
+  listSourceStatus,
+  recentSamples,
+  startRun,
+  type FilteredSample,
+  type RunResult,
+} from "./runs.repository";
 export * from "./run-health";
 
 /** A company with its board's latest discovery status. */

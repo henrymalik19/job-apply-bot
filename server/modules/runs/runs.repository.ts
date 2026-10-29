@@ -3,7 +3,16 @@ import type { SourceStatus, WorkerRun } from "@/server/modules/runs/run-health";
 import { check, unwrap } from "@/server/core/errors";
 
 /** Final state written to a `runs` row. */
-export type RunResult = { ok: boolean; counts: Record<string, number>; error?: string };
+export type RunResult = {
+  ok: boolean;
+  counts: Record<string, number>;
+  error?: string;
+  /** A few examples worth showing (e.g. titles discovery skipped, with the reason). */
+  samples?: FilteredSample[];
+};
+
+/** One job discovery skipped, and why. */
+export type FilteredSample = { title: string; company: string; reason: string };
 
 /**
  * Opens a `runs` row and returns its id.
@@ -23,6 +32,7 @@ export async function finishRun(db: Db, id: string, result: RunResult): Promise<
         finished_at: new Date().toISOString(),
         ok: result.ok,
         counts: result.counts as Json,
+        samples: (result.samples ?? null) as Json,
         error: result.error?.slice(0, 500) ?? null,
       })
       .eq("id", id),
@@ -78,4 +88,19 @@ export async function latestWorkerRun(db: Db, worker: string): Promise<WorkerRun
     .maybeSingle();
   if (res.error) unwrap(res, "latest worker run");
   return (res.data as WorkerRun | null) ?? null;
+}
+
+/** Samples recorded by a worker's recent source runs, newest first. */
+export async function recentSamples(db: Db, worker: string, limit: number): Promise<FilteredSample[]> {
+  const rows = unwrap(
+    await db
+      .from("runs")
+      .select("samples")
+      .eq("worker", worker)
+      .not("samples", "is", null)
+      .order("started_at", { ascending: false })
+      .limit(100),
+    "recent samples",
+  );
+  return rows.flatMap((r) => (Array.isArray(r.samples) ? (r.samples as FilteredSample[]) : [])).slice(0, limit);
 }

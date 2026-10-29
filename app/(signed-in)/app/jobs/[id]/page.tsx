@@ -7,9 +7,44 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ownerContext } from "@/server/auth/require-owner";
 import { findJob } from "@/server/modules/jobs/jobs.service";
+import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { ago, formatSalary } from "@/shared/format";
 
 type Params = Promise<{ id: string }>;
+
+function MatchCard({ match }: { match: Awaited<ReturnType<typeof getJobMatch>> }) {
+  if (!match) {
+    return <p className="text-sm text-muted-foreground">Not scored yet. Matching runs after each discovery run.</p>;
+  }
+  if (match.status === "filtered") {
+    return <p className="text-sm text-muted-foreground">Ruled out before scoring: {match.filterReason}</p>;
+  }
+  if (match.status === "failed") {
+    return <p className="text-sm text-destructive">Scoring failed: {match.error}</p>;
+  }
+  const good = (match.score ?? 0) >= match.threshold;
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Match <Badge variant={good ? "default" : "secondary"} className="tabular-nums">{match.score}</Badge>
+          <span className="text-sm font-normal text-muted-foreground">threshold {match.threshold}</span>
+        </CardTitle>
+        {match.summary && <CardDescription>{match.summary}</CardDescription>}
+      </CardHeader>
+      <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
+        <div>
+          <div className="mb-1 font-medium">Fits</div>
+          <ul className="list-disc pl-5 text-muted-foreground">{match.fits.map((f, i) => <li key={i}>{f}</li>)}</ul>
+        </div>
+        <div>
+          <div className="mb-1 font-medium">Gaps</div>
+          <ul className="list-disc pl-5 text-muted-foreground">{match.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function JobDetail({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
@@ -17,6 +52,7 @@ async function JobDetail({ params, searchParams }: { params: Params; searchParam
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const job = await findJob(db, id);
   if (!job) notFound();
+  const match = await getJobMatch(db, job.id);
 
   const now = new Date();
   // Back to the same filtered page of the list.
@@ -43,6 +79,7 @@ async function JobDetail({ params, searchParams }: { params: Params; searchParam
           Open posting <ExternalLink aria-hidden />
         </a>
       </div>
+      <MatchCard match={match} />
       <Card className="md:min-h-0 md:flex-1">
         <CardHeader>
           <CardTitle className="text-xl">

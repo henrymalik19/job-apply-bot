@@ -6,6 +6,7 @@ import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/
 import {
   getJobFilter,
   getTitleFilter,
+  jobFilterReason,
   passesJobFilter,
   passesTitleFilter,
   type JobFilter,
@@ -26,6 +27,7 @@ import {
   listSourceStatus,
   shouldSkipBoard,
   startRun,
+  type FilteredSample,
 } from "@/server/modules/runs/runs.service";
 import { boardUrl, locationsFromSaved, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
 import { defaultSleep, fetchJson } from "@/server/integrations/ats/http";
@@ -33,6 +35,8 @@ import { dedupKey } from "@/shared/text";
 
 const WORKER = "discover";
 const INSERT_CHUNK = 100;
+/** Skipped titles kept per board run, for the Search page. */
+const SAMPLES_PER_BOARD = 5;
 /** A run with no finish after this long was killed (e.g. by a redeploy). */
 const INTERRUPTED_AFTER_MS = 60 * 60 * 1000;
 
@@ -77,11 +81,21 @@ function withoutLocations<T extends { locations: string[] }>(job: T): Omit<T, "l
 /** Both discovery filters, loaded once per run. */
 type Filters = { title: TitleFilter; job: JobFilter };
 
-async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filters: Filters, now: Date): Promise<BoardCounts> {
+async function syncOneBoard(
+  deps: DiscoverDeps,
+  company: BoardCompany,
+  filters: Filters,
+  now: Date,
+): Promise<{ counts: BoardCounts; samples: FilteredSample[] }> {
   const { db } = deps;
   const body = await fetchJson(boardUrl(company.ats, company.board_token), { fetchFn: deps.fetchFn, sleep: deps.sleep });
   const jobs = parseBoard(company.ats, body);
-  const kept = jobs.filter((j) => passesTitleFilter(j.title, filters.title) && passesJobFilter(j, filters.job, now));
+  const samples: FilteredSample[] = [];
+  const kept = jobs.filter((j) => {
+    const reason = passesTitleFilter(j.title, filters.title) ? jobFilterReason(j, filters.job, now) : "title";
+    if (reason && samples.length < SAMPLES_PER_BOARD) samples.push({ title: j.title, company: company.name, reason });
+    return reason === null;
+  });
   const known = await listExternalIds(db, company.id, company.ats);
   const fresh = kept.filter((j) => !known.has(j.external_id));
 
@@ -104,7 +118,7 @@ async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filters: 
 
   // Every listed id counts as seen, including ones the filter skipped this time.
   const synced = await syncBoard(db, company.id, company.ats, jobs.map((j) => j.external_id));
-  return {
+  const counts = {
     fetched: jobs.length,
     filtered: jobs.length - kept.length,
     new: fresh.length,
@@ -113,6 +127,7 @@ async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filters: 
     seen: synced.seen,
     closed: synced.closed,
   };
+  return { counts, samples };
 }
 
 /**
@@ -161,8 +176,8 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
 
           const boardRunId = await startRun(db, WORKER, source);
           try {
-            const counts = await syncOneBoard(deps, company, filters, now());
-            await finishRun(db, boardRunId, { ok: true, counts });
+            const { counts, samples } = await syncOneBoard(deps, company, filters, now());
+            await finishRun(db, boardRunId, { ok: true, counts, samples });
             totals.ok++;
             for (const k of Object.keys(counts) as (keyof BoardCounts)[]) totals[k] += counts[k];
             log(`ok ${source} ${JSON.stringify(counts)}`);

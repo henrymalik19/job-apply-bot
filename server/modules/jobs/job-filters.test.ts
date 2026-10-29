@@ -3,7 +3,7 @@ import { filtersToParams, parseJobFilters } from "./job-filters";
 
 describe("parseJobFilters", () => {
   it("uses defaults for an empty URL", () => {
-    expect(parseJobFilters({})).toEqual({ q: "", remote: "any", state: "open", found: "any", posted: "30", sort: "found" });
+    expect(parseJobFilters({})).toEqual({ q: "", remote: "any", state: "open", found: "any", posted: "30", sort: "found", match: "any" });
   });
 
   it("keeps valid values and falls back on invalid ones", () => {

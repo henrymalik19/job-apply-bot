@@ -12,8 +12,12 @@ export {
   listExternalIds,
   listJobIdsWithApplications,
   listJobsForFiltering,
+  jobFilterClauses,
+  LIST_COLUMNS,
+  listOpenJobsForMatching,
   syncBoard,
   type FilterableSavedJob,
+  type MatchableJobRow,
   type NewJob,
 } from "./jobs.repository";
 export { filtersToParams, parseJobFilters, type JobFilters } from "./job-filters";

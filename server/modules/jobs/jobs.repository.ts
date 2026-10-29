@@ -28,8 +28,28 @@ export type NewJob = {
 const insertResult = z.object({ inserted: z.number(), duplicates: z.number() });
 const syncResult = z.object({ seen: z.number(), closed: z.number() });
 
+/**
+ * The Jobs-page filters as plain clauses, so the same filters apply whether
+ * the query starts from `jobs` or from `matches` (joined to jobs).
+ */
+export function jobFilterClauses(filters: JobFilters, now: Date) {
+  const days = (n: string) => new Date(now.getTime() - Number(n) * 86_400_000).toISOString();
+  return {
+    /** PostgREST `or()` text search, or null. */
+    text: filters.q ? `title.ilike.%${filters.q}%,company_name.ilike.%${filters.q}%` : null,
+    eq: filters.remote !== "any" ? [["remote_type", filters.remote] as const] : [],
+    isNull: filters.state === "open" ? ["closed_at"] : [],
+    notNull: filters.state === "closed" ? ["closed_at"] : [],
+    // Jobs without a posting date are rare (every supported board sends one) and are left out by "posted".
+    gte: [
+      ...(filters.posted !== "any" ? [["posted_at", days(filters.posted)] as const] : []),
+      ...(filters.found !== "any" ? [["first_seen_at", days(filters.found)] as const] : []),
+    ],
+  };
+}
+
 /** Columns shown in job lists. */
-const LIST_COLUMNS =
+export const LIST_COLUMNS =
   "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, posted_at, first_seen_at, closed_at, url, source";
 
 /** One row of the Jobs list. */
@@ -54,20 +74,13 @@ export async function searchJobs(
   pageSize: number,
   now: Date,
 ): Promise<{ rows: JobListItem[]; total: number }> {
+  const c = jobFilterClauses(filters, now);
   let query = db.from("jobs").select(LIST_COLUMNS, { count: "exact" });
-  if (filters.q) query = query.or(`title.ilike.%${filters.q}%,company_name.ilike.%${filters.q}%`);
-  if (filters.remote !== "any") query = query.eq("remote_type", filters.remote);
-  if (filters.state === "open") query = query.is("closed_at", null);
-  if (filters.state === "closed") query = query.not("closed_at", "is", null);
-  if (filters.posted !== "any") {
-    // Jobs without a posting date are rare (every supported board sends one) and are left out here.
-    const since = new Date(now.getTime() - Number(filters.posted) * 86_400_000);
-    query = query.gte("posted_at", since.toISOString());
-  }
-  if (filters.found !== "any") {
-    const since = new Date(now.getTime() - Number(filters.found) * 86_400_000);
-    query = query.gte("first_seen_at", since.toISOString());
-  }
+  if (c.text) query = query.or(c.text);
+  for (const [col, value] of c.eq) query = query.eq(col, value);
+  for (const col of c.isNull) query = query.is(col, null);
+  for (const col of c.notNull) query = query.not(col, "is", null);
+  for (const [col, value] of c.gte) query = query.gte(col, value);
   query =
     filters.sort === "posted"
       ? query.order("posted_at", { ascending: false, nullsFirst: false })
@@ -108,6 +121,38 @@ export async function recentJobs(db: Db, limit: number): Promise<JobListItem[]> 
     await db.from("jobs").select(LIST_COLUMNS).is("closed_at", null).order("first_seen_at", { ascending: false }).limit(limit),
     "recent jobs",
   ) as JobListItem[];
+}
+
+/** The fields matching needs from a job. */
+export type MatchableJobRow = Pick<
+  Row<"jobs">,
+  | "id" | "title" | "company_name" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency"
+  | "description_md" | "posted_at" | "first_seen_at"
+>;
+
+/**
+ * Open jobs from active companies (paused boards' jobs are left out), newest
+ * first, paged past PostgREST's 1,000-row limit.
+ */
+export async function listOpenJobsForMatching(db: Db): Promise<MatchableJobRow[]> {
+  const all: MatchableJobRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const rows = unwrap(
+      await db
+        .from("jobs")
+        .select(
+          "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, description_md, posted_at, first_seen_at, companies!inner(active)",
+        )
+        .is("closed_at", null)
+        .eq("companies.active", true)
+        .order("first_seen_at", { ascending: false })
+        .order("id")
+        .range(from, from + PAGE - 1),
+      "list jobs for matching",
+    );
+    all.push(...rows.map(({ companies, ...job }) => job));
+    if (rows.length < PAGE) return all;
+  }
 }
 
 /** The fields needed to re-check a saved job against the discovery filters. */

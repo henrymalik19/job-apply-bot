@@ -18,9 +18,12 @@
     "worker:discover": "node --env-file-if-exists=.env.local --import tsx workers/discover.ts",
     "import:companies": "node --env-file-if-exists=.env.local --import tsx scripts/import-companies.ts",
     "db:types": "supabase gen types typescript --local --schema public > server/db/database.types.ts",
-    "apply:filters": "node --env-file-if-exists=.env.local --import tsx scripts/apply-search-filters.ts"
+    "apply:filters": "node --env-file-if-exists=.env.local --import tsx scripts/apply-search-filters.ts",
+    "worker:pipeline": "node --env-file-if-exists=.env.local --import tsx workers/pipeline.ts",
+    "import:profile": "node --env-file-if-exists=.env.local --import tsx scripts/import-profile.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "@base-ui/react": "^1.9.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",

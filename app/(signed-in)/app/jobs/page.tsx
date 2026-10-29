@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
-import { filtersToParams, listJobs, parseJobFilters, type JobFilters } from "@/server/modules/jobs/jobs.service";
+import { filtersToParams, parseJobFilters, type JobFilters } from "@/server/modules/jobs/jobs.service";
+import { browseJobs } from "@/server/modules/matching/matching.service";
 import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
 import { Pager, scrollingTable } from "../../_components/data-table";
@@ -19,6 +20,10 @@ function Filters({ filters }: { filters: JobFilters }) {
     // A plain GET form: filters live in the URL, so they survive reloads and links.
     <form method="get" className="flex flex-wrap items-end gap-3">
       <Input name="q" defaultValue={filters.q} placeholder="Title or company" className="w-64" aria-label="Search title or company" />
+      <NativeSelect name="match" defaultValue={filters.match} aria-label="Match">
+        <NativeSelectOption value="any">All jobs</NativeSelectOption>
+        <NativeSelectOption value="matched">Matched (at or above threshold)</NativeSelectOption>
+      </NativeSelect>
       <NativeSelect name="remote" defaultValue={filters.remote} aria-label="Remote">
         <NativeSelectOption value="any">Any location type</NativeSelectOption>
         <NativeSelectOption value="remote">Remote</NativeSelectOption>
@@ -46,6 +51,7 @@ function Filters({ filters }: { filters: JobFilters }) {
       <NativeSelect name="sort" defaultValue={filters.sort} aria-label="Sort">
         <NativeSelectOption value="found">Newest found</NativeSelectOption>
         <NativeSelectOption value="posted">Newest posted</NativeSelectOption>
+        <NativeSelectOption value="score">Best score</NativeSelectOption>
       </NativeSelect>
       <Button type="submit">Apply</Button>
       <Link href="/app/jobs" className={buttonVariants({ variant: "ghost" })}>Reset</Link>
@@ -55,12 +61,19 @@ function Filters({ filters }: { filters: JobFilters }) {
 
 const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
+function ScoreBadge({ score, status, threshold }: { score: number | null; status: string | null; threshold: number }) {
+  if (status === "filtered") return <span className="text-xs text-muted-foreground">filtered</span>;
+  if (status === "failed") return <span className="text-xs text-destructive">failed</span>;
+  if (score == null) return <span className="text-muted-foreground">—</span>;
+  return <Badge variant={score >= threshold ? "default" : "secondary"} className="tabular-nums">{score}</Badge>;
+}
+
 async function Jobs({ searchParams }: { searchParams: SearchParams }) {
   const { db } = await ownerContext();
   const params = await searchParams;
   const filters = parseJobFilters(params);
   const now = new Date();
-  const page = await listJobs(db, filters, parsePage(params.page), now);
+  const { page, threshold } = await browseJobs(db, filters, parsePage(params.page), now);
   const keep = filtersToParams(filters);
   const detailQuery = new URLSearchParams({ ...keep, ...(page.page > 1 ? { page: String(page.page) } : {}) }).toString();
 
@@ -81,6 +94,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
             <Table containerClassName={scrollingTable.container}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
+                  <TableHead className="text-right">Score</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Location</TableHead>
@@ -92,6 +106,9 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
               <TableBody>
                 {page.items.map((j) => (
                   <TableRow key={j.id} className={j.closed_at ? "text-muted-foreground" : ""}>
+                    <TableCell className="text-right">
+                      <ScoreBadge score={j.score} status={j.matchStatus} threshold={threshold} />
+                    </TableCell>
                     <TableCell className="max-w-md whitespace-normal">
                       <Link href={`/app/jobs/${j.id}${detailQuery ? `?${detailQuery}` : ""}`} className="font-medium hover:underline">
                         {j.title}
@@ -120,7 +137,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** Jobs: every discovered job, filterable by text, location type, posting age, when found and state, 50 per page. */
+/** Jobs: every discovered job with its match score, filterable and sortable (including by score), 50 per page. */
 export default function JobsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

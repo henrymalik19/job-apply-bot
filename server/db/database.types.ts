@@ -91,6 +91,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"confirmed_facts": {
+                  Row: {
+                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"reviewed": boolean,"sort_order": number,"source": string | null,"structured": Json | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"reviewed"?: boolean,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null
+                  }
+                  Update: {
+                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"reviewed"?: boolean,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"criteria_versions": {
                   Row: {
                     "created_at": string,"criteria": NonNullable<Json>,"id": string
@@ -209,16 +223,50 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"matches": {
+                },"lessons": {
                   Row: {
-                    "created_at": string,"criteria_version_id": string,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null
+                    "active": boolean,"created_at": string,"id": string,"platform": string | null,"rule": string,"scope": string,"source": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"criteria_version_id": string,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule": string,"scope"?: string,"source"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"criteria_version_id"?: string,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule"?: string,"scope"?: string,"source"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"llm_usage": {
+                  Row: {
+                    "cache_read_tokens": number,"cache_write_tokens": number,"cost_usd": number,"created_at": string,"id": string,"input_tokens": number,"job_id": string | null,"model": string,"output_tokens": number,"purpose": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model": string,"output_tokens"?: number,"purpose": string
+                  }
+                  Update: {
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model"?: string,"output_tokens"?: number,"purpose"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "llm_usage_job_id_fkey"
+      columns: ["job_id"]
+isOneToOne: false
+      referencedRelation: "jobs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"matches": {
+                  Row: {
+                    "created_at": string,"criteria_version_id": string,"error": string | null,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"criteria_version_id": string,"error"?: string | null,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"criteria_version_id"?: string,"error"?: string | null,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string
                   }
                   Relationships: [
                     {
@@ -265,14 +313,14 @@ isOneToOne: false
                   ]
                 },"runs": {
                   Row: {
-                    "counts": Json | null,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"source": string | null,"started_at": string,"worker": string
+                    "counts": Json | null,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"samples": Json | null,"source": string | null,"started_at": string,"worker": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"source"?: string | null,"started_at"?: string,"worker": string
+                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"worker": string
                   }
                   Update: {
-                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"source"?: string | null,"started_at"?: string,"worker"?: string
+                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"worker"?: string
                   }
                   Relationships: [
                     

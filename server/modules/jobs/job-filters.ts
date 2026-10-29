@@ -8,8 +8,10 @@ export const STATE_OPTIONS = ["open", "closed", "all"] as const;
 export const FOUND_OPTIONS = ["any", "1", "7", "30"] as const;
 /** How recently a job was posted, in days ("any" = no limit). Discovery never saves jobs older than 90 days. */
 export const POSTED_OPTIONS = ["7", "30", "90", "any"] as const;
-/** Sort orders: newest found first, or newest posted first. */
-export const SORT_OPTIONS = ["found", "posted"] as const;
+/** Sort orders: newest found, newest posted, or best match score. */
+export const SORT_OPTIONS = ["found", "posted", "score"] as const;
+/** Match filter: all jobs, or only those scored at or above the threshold. */
+export const MATCH_OPTIONS = ["any", "matched"] as const;
 
 const oneOf = <T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) =>
   z.preprocess((v) => (Array.isArray(v) ? v[0] : v), z.enum(values).catch(fallback as never)).default(fallback as never);
@@ -24,6 +26,7 @@ const filtersSchema = z.object({
   found: oneOf(FOUND_OPTIONS, "any"),
   posted: oneOf(POSTED_OPTIONS, "30"),
   sort: oneOf(SORT_OPTIONS, "found"),
+  match: oneOf(MATCH_OPTIONS, "any"),
 });
 
 /** Jobs-page filters, parsed from the URL with safe defaults. */

@@ -42,32 +42,41 @@ export const JOB_FILTER_KEY = "discover_job_filter";
 /** Minimal job shape the filter needs. */
 export type FilterableJob = { remote_type: string; locations: string[]; posted_at: string | null };
 
+/** Why a job fails the work-type, location and age rules. */
+export type JobFilterReason = "age" | "work type" | "location";
+
 /**
- * Whether a job passes the work-type, location and age rules. Locations are
- * resolved to places, so "US" keeps "Houston, TX", "Texas" keeps "Austin" and
- * "NYC" keeps "New York, NY"; unrecognized phrases match as whole words.
+ * Why a job fails the work-type, location and age rules, or null when it
+ * passes. Locations are resolved to places, so "US" keeps "Houston, TX",
+ * "Texas" keeps "Austin" and "NYC" keeps "New York, NY"; unrecognized phrases
+ * match as whole words.
  */
-export function passesJobFilter(job: FilterableJob, filter: JobFilter, now: Date): boolean {
+export function jobFilterReason(job: FilterableJob, filter: JobFilter, now: Date): JobFilterReason | null {
   if (job.posted_at) {
     const ageDays = (now.getTime() - new Date(job.posted_at).getTime()) / 86_400_000;
-    if (ageDays > filter.max_age_days) return false;
+    if (ageDays > filter.max_age_days) return "age";
   }
 
   const type = job.remote_type;
   if (filter.work_types.length > 0) {
     const known = (WORK_TYPES as readonly string[]).includes(type);
-    if (known ? !filter.work_types.includes(type as WorkType) : !filter.keep_unknown_work_type) return false;
+    if (known ? !filter.work_types.includes(type as WorkType) : !filter.keep_unknown_work_type) return "work type";
   }
 
-  if (filter.locations.length === 0) return true;
+  if (filter.locations.length === 0) return null;
   const wanted = filter.locations.map(resolveWanted).filter((w): w is WantedPlace => w !== null);
   const places = job.locations.map((raw) => ({ raw, place: resolvePlace(raw) }));
-  if (places.some(({ raw, place }) => wanted.some((w) => placeMatches(place, raw, w)))) return true;
+  if (places.some(({ raw, place }) => wanted.some((w) => placeMatches(place, raw, w)))) return null;
   // A remote job whose locations are only remote-ish words ("Remote", "Anywhere",
   // "Global Remote") names no place and is kept if allowed. Any other word, even
   // a place we don't recognize ("Vietnam"), counts as naming a place.
   const namesNoPlace = job.locations.every((raw) => normalize(raw).replace(REMOTE_WORDS, "").trim() === "");
-  return type === "remote" && filter.keep_remote_without_location && namesNoPlace;
+  return type === "remote" && filter.keep_remote_without_location && namesNoPlace ? null : "location";
+}
+
+/** Whether a job passes the work-type, location and age rules (see {@link jobFilterReason}). */
+export function passesJobFilter(job: FilterableJob, filter: JobFilter, now: Date): boolean {
+  return jobFilterReason(job, filter, now) === null;
 }
 
 /** Splits a comma- or newline-separated phrase list, trimming and removing blanks and duplicates. */
