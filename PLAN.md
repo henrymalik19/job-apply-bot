@@ -15,7 +15,7 @@ Do not start the next milestone until the current one is deployed and verified.*
 | M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
 | M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
 | M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page at / (off → 404). |
-| M4 Matching | Built and tested (69 DB tests incl. acceptance). Deployed; live scoring waits on ANTHROPIC_API_KEY in Railway/Vercel. |
+| M4 Matching | **Done.** Live 2026-10-29: 274 jobs → 14 ruled out, 260 scored (76 at 75+), 0 failed, $0.11. |
 | M5–M8 | Not started |
 
 ### Revisions
@@ -503,7 +503,7 @@ Reads only `public_status`. `noindex, nofollow`.
 - Acceptance: public page shows only `public_status` fields (verify by inspecting network responses);
   toggle off → 404.
 
-**M4 — Matching** *(built; live scoring pending API key)*
+**M4 — Matching** *(done, deployed 2026-10-29)*
 - AI title suggestions on the Search page ("Suggest from my profile": Claude proposes keep/skip phrases with reasons
   from the resume and confirmed facts; the owner approves), plus a sample of recently filtered-out titles.
 - Exclude the current employer (Second Nature) and update work history (now at Second Nature, not HUB).
