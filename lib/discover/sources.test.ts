@@ -57,6 +57,12 @@ describe("parseBoard", () => {
     });
   });
 
+  it("rounds fractional salaries to whole numbers", () => {
+    const body = leverBody([{ id: "f", title: "Engineer" }]);
+    body[0].salaryRange = { min: 92905.44, max: 120000.5, currency: "USD", interval: "per-year-salary" };
+    expect(parseBoard("lever", body)[0]).toMatchObject({ salary_min: 92905, salary_max: 120001 });
+  });
+
   it("rejects a payload of the wrong shape", () => {
     expect(() => parseBoard("greenhouse", { error: "not found" })).toThrow();
     expect(() => parseBoard("lever", { ok: false })).toThrow();

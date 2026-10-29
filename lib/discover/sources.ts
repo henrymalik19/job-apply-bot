@@ -58,6 +58,9 @@ export function remoteType(...hints: (string | null | undefined)[]): RemoteType 
   return "unknown";
 }
 
+// jobs.salary_* are integers; some boards send cents (92905.44).
+const whole = (n: number | null | undefined) => (n == null ? null : Math.round(n));
+
 function isoOrNull(value: string | number | null | undefined): string | null {
   if (value == null) return null;
   const d = new Date(value);
@@ -168,8 +171,8 @@ function parseLever(body: unknown): DiscoveredJob[] {
       title: j.text.trim(),
       location,
       remote_type: remoteType(j.workplaceType, location),
-      salary_min: yearly?.min ?? null,
-      salary_max: yearly?.max ?? null,
+      salary_min: whole(yearly?.min),
+      salary_max: whole(yearly?.max),
       salary_currency: yearly?.currency ?? null,
       description_md: parts.length ? tidyText(parts.join("\n\n")) : null,
       posted_at: isoOrNull(j.createdAt),
@@ -194,8 +197,8 @@ function parseAshby(body: unknown): DiscoveredJob[] {
         title: j.title.trim(),
         location,
         remote_type: remoteType(j.workplaceType, j.isRemote ? "remote" : null, location),
-        salary_min: salary?.minValue ?? null,
-        salary_max: salary?.maxValue ?? null,
+        salary_min: whole(salary?.minValue),
+        salary_max: whole(salary?.maxValue),
         salary_currency: salary?.currencyCode ?? null,
         description_md: j.descriptionPlain ? tidyText(j.descriptionPlain) || null : null,
         posted_at: isoOrNull(j.publishedAt),

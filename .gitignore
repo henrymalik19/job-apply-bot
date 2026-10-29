@@ -45,3 +45,6 @@ next-env.d.ts
 # supabase local
 supabase/.branches
 supabase/.temp
+
+# personal data snapshots (old app export, resumes, answers): never commit
+/data/
