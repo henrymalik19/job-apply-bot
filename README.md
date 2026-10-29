@@ -3,7 +3,7 @@
 Private, self-hosted job search pipeline: discover → score → prepare → approve → track.
 Every application needs your approval in the admin UI, and every status change is logged.
 
-Current milestone: **M2.5 — Structure** (domain modules, TSDoc, UI foundation). M1 and M2 are deployed.
+Current milestone: **M4 — Matching** is next. M1–M3 are deployed: discovery, the /app workspace, /admin, and the public page.
 
 ## Local setup
 
@@ -13,7 +13,7 @@ Requires Node 24+, pnpm 10, and Docker Desktop (for local Supabase).
 pnpm install
 pnpm db:start                 # local Supabase in Docker
 pnpm setup:local              # creates a test owner, writes .env.local (keys + owner login)
-pnpm dev                      # http://localhost:3000/admin
+pnpm dev                      # http://localhost:3000/app (sign in at /login)
 ```
 
 The local owner's email and password are in `.env.local` (`LOCAL_OWNER_EMAIL`/`LOCAL_OWNER_PASSWORD`).

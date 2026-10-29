@@ -14,10 +14,15 @@ Do not start the next milestone until the current one is deployed and verified.*
 | M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
 | M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
 | M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
-| M3–M7 | Not started |
+| M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page at / (off → 404). |
+| M4–M7 | Not started |
 
 ### Revisions
 
+- **2026-10-29** — M3 notes: routes are `/login`, `/app/*` (the user's workspace) and `/admin/*` (running the system);
+  per-user public pages later use `/u/<slug>`, never ids. Discovery gained a work-type, location and posting-age filter
+  (age capped at 90 days, default 30); locations resolve to country/state/city so "US" keeps "Houston, TX". Saved jobs
+  can be re-filtered ("Apply to saved jobs"). The public page's 404 is enforced in `proxy.ts` because the page streams.
 - **2026-10-29** — M2.5 added before M3: code is grouped by domain (`server/modules/<domain>`) with services as
   each module's public API and repositories as the only Supabase callers; pages call services only. Supabase types
   are generated. Next.js stays (no separate NestJS API): route handlers can expose services later for the extension.
@@ -487,12 +492,15 @@ Reads only `public_status`. `noindex, nofollow`.
   updates `last_seen_at`; removing a job from a mocked board sets `closed_at`; a failing source records
   `ok=false` without failing other sources.
 
-**M3 — Dashboard + public page**
+**M3 — Dashboard + public page** *(done, deployed 2026-10-29)*
 - Jobs table, overview, public status page with toggle.
 - Acceptance: public page shows only `public_status` fields (verify by inspecting network responses);
   toggle off → 404.
 
 **M4 — Matching**
+- AI title suggestions on the Search page ("Suggest from my profile": Claude proposes keep/skip phrases with reasons
+  from the resume and confirmed facts; the owner approves), plus a sample of recently filtered-out titles.
+- Exclude the current employer (Second Nature) and update work history (now at Second Nature, not HUB).
 - Criteria settings, hard filters, LLM scoring, spend tracking, `lessons` and `confirmed_facts` tables with
   settings screens; scoring prompt includes scoring lessons.
 - Acceptance: unit tests for each hard filter; invalid LLM JSON handled; changing criteria creates a new
