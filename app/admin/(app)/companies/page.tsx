@@ -3,24 +3,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
-import { getTitleFilter } from "@/server/modules/companies/companies.service";
 import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus } from "../_components/board-status";
 import { Pager, scrollingTable } from "../_components/data-table";
 import { toggleCompanyAction } from "./actions";
-import { AddCompanyForm, FilterForm } from "./forms";
+import { AddCompanyForm } from "./forms";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function Companies({ searchParams }: { searchParams: SearchParams }) {
   const { db } = await ownerContext();
   const now = new Date();
-  const [{ boards }, filter, params] = await Promise.all([
-    loadDiscoveryHealth(db, now),
-    getTitleFilter(db),
-    searchParams,
-  ]);
+  const [{ boards }, params] = await Promise.all([loadDiscoveryHealth(db, now), searchParams]);
   const active = boards.filter((b) => b.active).length;
   const page = paginate(boards, parsePage(params.page));
 
@@ -36,19 +31,6 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
         </CardHeader>
         <CardContent>
           <AddCompanyForm />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Title filter</CardTitle>
-          <CardDescription>
-            Applied before jobs are saved. Whole words, case-insensitive, comma-separated. Skipped jobs are counted on
-            the Health page.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FilterForm include={filter.include} exclude={filter.exclude} />
         </CardContent>
       </Card>
 
@@ -105,7 +87,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** Companies: add and test boards, pause or resume them, and edit the title filter. */
+/** Companies: add and test boards, and pause or resume them. */
 export default function CompaniesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

@@ -2,13 +2,8 @@
 // closed_at, and write a runs row per board plus one for the whole run.
 // Runs with the service-role client (RLS bypass) from the Railway worker.
 import type { Db } from "@/server/db/types";
-import {
-  getTitleFilter,
-  listActiveBoards,
-  passesTitleFilter,
-  type BoardCompany,
-  type TitleFilter,
-} from "@/server/modules/companies/companies.service";
+import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
+import { getTitleFilter, passesTitleFilter, type TitleFilter } from "@/server/modules/criteria/criteria.service";
 import { insertDiscoveredJobs, listExternalIds, syncBoard } from "@/server/modules/jobs/jobs.service";
 import { boardSource, finishRun, listSourceStatus, shouldSkipBoard, startRun } from "@/server/modules/runs/runs.service";
 import { boardUrl, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";

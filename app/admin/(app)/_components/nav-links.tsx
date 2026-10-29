@@ -1,12 +1,13 @@
 "use client";
 
-import { HeartPulse, LayoutDashboard, Building2 } from "lucide-react";
+import { Building2, HeartPulse, LayoutDashboard, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/cn";
 
 const NAV = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
+  { href: "/admin/search", label: "Search", icon: SlidersHorizontal },
   { href: "/admin/companies", label: "Companies", icon: Building2 },
   { href: "/admin/health", label: "Health", icon: HeartPulse },
 ] as const;

@@ -5,7 +5,6 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { ValidationError } from "@/server/core/errors";
 import {
   addCompany,
-  saveTitleFilter,
   setCompanyActive,
   testBoard,
   type CompanyInput,
@@ -58,12 +57,4 @@ export async function toggleCompanyAction(formData: FormData) {
   const { db } = await ownerContext();
   await setCompanyActive(db, String(formData.get("id")), formData.get("active") === "true");
   refresh();
-}
-
-/** Title-filter form action. */
-export async function saveFilterAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const { db } = await ownerContext();
-  await saveTitleFilter(db, String(formData.get("include") ?? ""), String(formData.get("exclude") ?? ""));
-  refresh();
-  return { ok: "Saved. Applies to jobs found from the next run on." };
 }

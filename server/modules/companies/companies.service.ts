@@ -1,12 +1,9 @@
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
-import { parseKeywords, TITLE_FILTER_KEY, titleFilterSchema, type TitleFilter } from "./title-filter";
 import { BOARD_ATS, BOARD_TOKEN, boardUrl, parseBoard } from "@/server/integrations/ats/boards";
 import { fetchJson } from "@/server/integrations/ats/http";
 import * as companies from "./companies.repository";
-import { RepositoryError } from "@/server/core/errors";
-import * as settings from "@/server/modules/settings/settings.service";
-import { ValidationError } from "@/server/core/errors";
+import { RepositoryError, ValidationError } from "@/server/core/errors";
 
 const boardInput = z.object({
   ats: z.enum(BOARD_ATS, { message: "Pick an ATS." }),
@@ -38,7 +35,6 @@ export {
   type BoardCompany,
   type Company,
 } from "./companies.repository";
-export { passesTitleFilter, type TitleFilter } from "./title-filter";
 
 /**
  * Fetches a board once (no retries) to confirm the token works.
@@ -77,21 +73,6 @@ export async function addCompany(db: Db, input: CompanyInput): Promise<string> {
 /** Pauses or resumes a company's board. */
 export async function setCompanyActive(db: Db, id: string, active: boolean): Promise<void> {
   await companies.setCompanyActive(db, z.string().uuid().parse(id), active);
-}
-
-/** The current title filter (empty lists when unset). */
-export async function getTitleFilter(db: Db): Promise<TitleFilter> {
-  return titleFilterSchema.parse((await settings.getSetting(db, TITLE_FILTER_KEY)) ?? {});
-}
-
-/**
- * Saves the title filter from comma- or newline-separated phrase lists.
- * Applies to jobs found from the next discovery run on.
- */
-export async function saveTitleFilter(db: Db, include: string, exclude: string): Promise<TitleFilter> {
-  const filter = { include: parseKeywords(include), exclude: parseKeywords(exclude) };
-  await settings.putSetting(db, TITLE_FILTER_KEY, filter);
-  return filter;
 }
 
 /** A company exported from the old app (`data/old/companies.json`). */

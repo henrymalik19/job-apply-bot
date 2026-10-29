@@ -26,7 +26,7 @@ Public sign-ups are disabled; the owner account is created by an admin.
 ```
 app/                     UI only: pages, server actions, route handlers (Next.js)
 server/
-  modules/<domain>/      one folder per business domain (companies, jobs, discovery, runs, …)
+  modules/<domain>/      one folder per business domain (companies, criteria, jobs, discovery, runs, …)
     *.service.ts         the module's public API: use cases and business rules
     *.repository.ts      the only code that queries Supabase, one per table
     *.ts                 pure domain rules (no I/O), unit-tested

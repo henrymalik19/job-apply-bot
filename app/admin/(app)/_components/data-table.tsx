@@ -11,7 +11,7 @@ import type { Page } from "@/shared/paginate";
  * viewport. The header row sticks while the rows scroll.
  */
 export const scrollingTable = {
-  card: "md:min-h-[24rem] md:flex-1",
+  card: "md:min-h-[16rem] md:flex-1",
   content: "flex min-h-0 flex-1 flex-col",
   container: "max-h-[70vh] min-h-0 flex-1 overflow-auto rounded-md border md:max-h-none",
   header: "sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_var(--border)] [&_th]:bg-card",
