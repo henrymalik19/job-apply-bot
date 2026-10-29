@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { requireOwner } from "@/lib/auth";
+import { requireOwner } from "@/server/auth/require-owner";
 import { signOut } from "../login/actions";
 
 export const metadata: Metadata = {

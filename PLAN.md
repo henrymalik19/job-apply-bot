@@ -12,11 +12,15 @@ Do not start the next milestone until the current one is deployed and verified.*
 | Milestone | State |
 |---|---|
 | M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
-| M2 Discovery | Built and verified locally (5 real boards, 1,519 jobs; 55 DB tests). Deploy pending. |
+| M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
+| M2.5 Structure | In progress: domain modules + repositories, generated DB types, TSDoc, shadcn/ui foundation. |
 | M3–M7 | Not started |
 
 ### Revisions
 
+- **2026-10-29** — M2.5 added before M3: code is grouped by domain (`server/modules/<domain>`) with services as
+  each module's public API and repositories as the only Supabase callers; pages call services only. Supabase types
+  are generated. Next.js stays (no separate NestJS API): route handlers can expose services later for the extension.
 - **2026-10-29** — Railway never applied `railway.json` to the new service (no cron was set), and Config as Code
   is read only until 2026-12-01 anyway. The worker service is now configured directly on Railway (cron `*/30 * * * *`,
   start `pnpm worker:discover`, Dockerfile `Dockerfile.worker`, restart Never) and `railway.json` is deleted.
@@ -476,7 +480,7 @@ Reads only `public_status`. `noindex, nofollow`.
 - Acceptance: unauthenticated request to any admin route or table is denied; authenticated owner sees
   an empty admin overview.
 
-**M2 — Discovery** *(built locally; deploy pending)*
+**M2 — Discovery** *(done, deployed 2026-10-29)*
 - Greenhouse, Lever, Ashby sources; companies settings page with "test board"; scheduled workflow (every 30 min);
   Health page.
 - Acceptance: with 5 seeded companies, a run inserts jobs, a second run inserts zero duplicates and

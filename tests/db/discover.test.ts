@@ -6,8 +6,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { runDiscover } from "../../lib/discover/run";
-import { ashbyBody, fakeFetch, greenhouseBody, leverBody, type FixtureJob } from "../../lib/discover/test-fixtures";
+import { ashbyBody, fakeFetch, greenhouseBody, leverBody, type FixtureJob } from "@/server/integrations/ats/test-fixtures";
+import { runDiscover } from "@/server/modules/discovery/discovery.service";
 import type {} from "./setup";
 
 const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");

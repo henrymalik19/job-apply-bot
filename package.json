@@ -16,7 +16,8 @@
     "owner:set": "node --env-file-if-exists=.env.local --import tsx scripts/set-owner.ts",
     "setup:local": "tsx scripts/setup-local.ts",
     "worker:discover": "node --env-file-if-exists=.env.local --import tsx workers/discover.ts",
-    "import:companies": "node --env-file-if-exists=.env.local --import tsx scripts/import-companies.ts"
+    "import:companies": "node --env-file-if-exists=.env.local --import tsx scripts/import-companies.ts",
+    "db:types": "supabase gen types typescript --local --schema public > server/db/database.types.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { serverEnv } from "@/lib/env";
+import { isOwnerId } from "@/server/auth/owner";
+import { serverEnv } from "@/shared/env";
 
 // Refreshes the Supabase session cookie and does an optimistic redirect for
 // admin routes. Real authorization happens in requireOwner() and in RLS.
@@ -22,7 +23,7 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
   const isLogin = path === "/admin/login";
-  const isOwner = data.user?.id === env.OWNER_USER_ID;
+  const isOwner = isOwnerId(data.user?.id, env.OWNER_USER_ID);
 
   if (!isLogin && !isOwner) {
     if (path.startsWith("/api/admin")) {

@@ -3,7 +3,7 @@
 Private, self-hosted job search pipeline: discover → score → prepare → approve → track.
 Every application needs your approval in the admin UI, and every status change is logged.
 
-Current milestone: **M2 — Discovery** (Greenhouse/Lever/Ashby boards every 30 minutes, Companies and Health pages).
+Current milestone: **M2.5 — Structure** (domain modules, TSDoc, UI foundation). M1 and M2 are deployed.
 
 ## Local setup
 
@@ -20,6 +20,27 @@ The local owner's email and password are in `.env.local` (`LOCAL_OWNER_EMAIL`/`L
 For a hosted project, create the owner in the dashboard, set `OWNER_USER_ID`, and run `pnpm owner:set`.
 
 Public sign-ups are disabled; the owner account is created by an admin.
+
+## Code layout
+
+```
+app/                     UI only: pages, server actions, route handlers (Next.js)
+server/
+  modules/<domain>/      one folder per business domain (companies, jobs, discovery, runs, …)
+    *.service.ts         the module's public API: use cases and business rules
+    *.repository.ts      the only code that queries Supabase, one per table
+    *.ts                 pure domain rules (no I/O), unit-tested
+  integrations/          clients for external APIs (Greenhouse/Lever/Ashby today)
+  auth/                  owner checks and sessions
+  db/                    Supabase clients and generated types (pnpm db:types)
+  core/                  shared errors
+shared/                  pure helpers with no I/O (text, format, env)
+workers/                 deployable entry points, one per Railway service
+```
+
+Rules: pages and actions call `ownerContext()` and then services, never Supabase. A module uses another
+module only through its `*.service.ts`. Services take the database client as a parameter, so the same code
+runs as the signed-in owner (RLS) in the web app and as the service role in workers.
 
 ## Workers
 

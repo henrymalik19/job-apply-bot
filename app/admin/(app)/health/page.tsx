@@ -1,8 +1,7 @@
 import { Suspense } from "react";
-import { requireOwner } from "@/lib/auth";
-import { loadBoardHealth } from "@/lib/board-health";
-import { ago } from "@/lib/format";
-import { createUserClient } from "@/lib/supabase/server";
+import { ownerContext } from "@/server/auth/require-owner";
+import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { ago } from "@/shared/format";
 
 const COUNT_LABELS: [string, string][] = [
   ["fetched", "listed"], ["filtered", "filtered out"], ["inserted", "new"], ["duplicates", "duplicates"], ["closed", "closed"],
@@ -14,10 +13,9 @@ function Counts({ counts }: { counts: Record<string, number> | null | undefined 
 }
 
 async function Health() {
-  await requireOwner();
-  const db = await createUserClient();
+  const { db } = await ownerContext();
   const now = new Date();
-  const { boards, worker, workerProblem } = await loadBoardHealth(db, now);
+  const { boards, worker, workerProblem } = await loadDiscoveryHealth(db, now);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
     ...(workerProblem ? [`Discovery ${workerProblem}.`] : []),
@@ -93,6 +91,7 @@ async function Health() {
   );
 }
 
+/** Health: discovery schedule status, per-board results and a banner for anything failing. */
 export default function HealthPage() {
   return (
     <main className="flex flex-col gap-8">

@@ -1,20 +1,18 @@
 // Writes OWNER_USER_ID into the owner table so RLS recognizes that user.
 // Run once per environment after creating the owner account in Supabase Auth:
 //   pnpm owner:set   (reads .env.local)
-import { createClient } from "@supabase/supabase-js";
-import { parseServerEnv } from "../lib/env";
+import { createServiceClient } from "@/server/db/service-client";
+import { setOwner } from "@/server/auth/owner.repository";
+import { parseServerEnv } from "@/shared/env";
 
 async function main() {
   const env = parseServerEnv(process.env);
-  const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
+  const db = createServiceClient(env);
 
   const { data: user, error: userErr } = await db.auth.admin.getUserById(env.OWNER_USER_ID);
   if (userErr || !user.user) throw new Error("OWNER_USER_ID does not match an existing auth user");
 
-  const { error } = await db.from("owner").upsert({ singleton: true, user_id: env.OWNER_USER_ID });
-  if (error) throw new Error(`could not set owner: ${error.message}`);
+  await setOwner(db, env.OWNER_USER_ID);
   console.log(JSON.stringify({ ok: true, owner: env.OWNER_USER_ID }));
 }
 

@@ -2,17 +2,17 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createUserClient } from "@/lib/supabase/server";
-import { serverEnv } from "@/lib/env";
-import { isOwnerId } from "@/lib/owner";
+import { signInOwner, signOutCurrentUser } from "@/server/auth/session";
 
 const credentials = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
+/** Login form state; `error` is shown under the form. */
 export type LoginState = { error?: string };
 
+/** Login form action: signs in the owner and goes to the admin overview. */
 export async function signIn(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const parsed = credentials.safeParse({
     email: formData.get("email"),
@@ -20,19 +20,13 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   });
   if (!parsed.success) return { error: "Enter your email and password." };
 
-  const supabase = await createUserClient();
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error || !data.user) return { error: "Sign-in failed." };
-
-  if (!isOwnerId(data.user.id, serverEnv().OWNER_USER_ID)) {
-    await supabase.auth.signOut();
-    return { error: "This account is not allowed." };
-  }
+  const result = await signInOwner(parsed.data.email, parsed.data.password);
+  if (!result.ok) return { error: result.error };
   redirect("/admin");
 }
 
+/** Signs out and returns to the login page. */
 export async function signOut() {
-  const supabase = await createUserClient();
-  await supabase.auth.signOut();
+  await signOutCurrentUser();
   redirect("/admin/login");
 }

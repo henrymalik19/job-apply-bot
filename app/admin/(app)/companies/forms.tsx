@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { companyFormAction, saveFilter, type FormState } from "./actions";
+import { companyFormAction, saveFilterAction, type FormState } from "./actions";
 
 const input = "rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900";
 const button =
@@ -63,7 +63,7 @@ export function AddCompanyForm() {
 }
 
 export function FilterForm({ include, exclude }: { include: string[]; exclude: string[] }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(saveFilter, {});
+  const [state, action, pending] = useActionState<FormState, FormData>(saveFilterAction, {});
   return (
     <form action={action} className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">

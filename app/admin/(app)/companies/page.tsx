@@ -1,22 +1,15 @@
 import { Suspense } from "react";
-import { requireOwner } from "@/lib/auth";
-import { loadBoardHealth } from "@/lib/board-health";
-import { titleFilterSchema } from "@/lib/discover/filter";
-import { ago } from "@/lib/format";
-import { createUserClient } from "@/lib/supabase/server";
-import { setCompanyActive } from "./actions";
+import { ownerContext } from "@/server/auth/require-owner";
+import { getTitleFilter } from "@/server/modules/companies/companies.service";
+import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { ago } from "@/shared/format";
+import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FilterForm } from "./forms";
 
 async function Companies() {
-  await requireOwner();
-  const db = await createUserClient();
+  const { db } = await ownerContext();
   const now = new Date();
-  const [{ boards }, filterRow] = await Promise.all([
-    loadBoardHealth(db, now),
-    db.from("settings").select("value").eq("key", "discover_filter").maybeSingle(),
-  ]);
-  if (filterRow.error) throw new Error(`filter query failed: ${filterRow.error.message}`);
-  const filter = titleFilterSchema.parse(filterRow.data?.value ?? {});
+  const [{ boards }, filter] = await Promise.all([loadDiscoveryHealth(db, now), getTitleFilter(db)]);
 
   return (
     <>
@@ -63,7 +56,7 @@ async function Companies() {
                     </td>
                     <td className="py-2 pr-4 tabular-nums">{b.status?.last_counts?.fetched ?? "—"}</td>
                     <td className="py-2 text-right">
-                      <form action={setCompanyActive}>
+                      <form action={toggleCompanyAction}>
                         <input type="hidden" name="id" value={b.id} />
                         <input type="hidden" name="active" value={String(!b.active)} />
                         <button type="submit" className="underline">{b.active ? "Pause" : "Resume"}</button>
@@ -88,6 +81,7 @@ async function Companies() {
   );
 }
 
+/** Companies: add and test boards, pause or resume them, and edit the title filter. */
 export default function CompaniesPage() {
   return (
     <main className="flex flex-col gap-8">

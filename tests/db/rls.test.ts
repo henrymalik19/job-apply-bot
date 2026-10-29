@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { IllegalTransitionError, transition } from "../../lib/transition";
+import { IllegalTransitionError, transition } from "@/server/modules/applications/applications.repository";
 import type {} from "./setup";
 
 const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");

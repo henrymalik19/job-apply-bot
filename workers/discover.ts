@@ -1,16 +1,13 @@
 // Discover worker: pulls every active Greenhouse/Lever/Ashby board into `jobs`.
-//   pnpm worker:discover   (reads .env.local locally; GitHub Actions secrets in CI)
+//   pnpm worker:discover   (reads .env.local locally; Railway variables in production)
 // Exits non-zero only when the run itself fails; per-board failures are
 // recorded in `runs` and shown on the Health page.
-import { createClient } from "@supabase/supabase-js";
-import { parseWorkerEnv } from "../lib/env";
-import { runDiscover } from "../lib/discover/run";
+import { createServiceClient } from "@/server/db/service-client";
+import { runDiscover } from "@/server/modules/discovery/discovery.service";
+import { parseWorkerEnv } from "@/shared/env";
 
 async function main() {
-  const env = parseWorkerEnv(process.env);
-  const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const db = createServiceClient(parseWorkerEnv(process.env));
   const summary = await runDiscover({ db, log: (line) => console.log(line) });
   console.log(JSON.stringify({ ok: true, counts: summary.counts }));
 }

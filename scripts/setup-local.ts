@@ -4,7 +4,8 @@
 import { execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/server/db/service-client";
+import { setOwner } from "@/server/auth/owner.repository";
 
 const ENV_FILE = ".env.local";
 
@@ -29,7 +30,7 @@ function readEnv(): Record<string, string> {
 async function main() {
   const { url, anonKey, serviceRoleKey } = localStatus();
   const existing = readEnv();
-  const db = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
+  const db = createServiceClient({ SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey });
 
   const email = existing.LOCAL_OWNER_EMAIL || "owner@example.test";
   const password = existing.LOCAL_OWNER_PASSWORD || randomBytes(18).toString("base64url");
@@ -47,8 +48,7 @@ async function main() {
     user = data.user;
   }
 
-  const { error: ownerErr } = await db.from("owner").upsert({ singleton: true, user_id: user.id });
-  if (ownerErr) throw ownerErr;
+  await setOwner(db, user.id);
 
   const env = {
     ...existing,
