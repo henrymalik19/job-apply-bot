@@ -7,28 +7,48 @@ export type Database = {
           Tables: {
             "answer_bank": {
                   Row: {
-                    "answer": string,"canonical_question": string,"category": string | null,"id": string,"updated_at": string,"variants": (string)[]
+                    "category": string,"id": string,"key": string,"label": string,"source": string,"updated_at": string,"value": Json | null,"value_type": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "answer": string,"canonical_question": string,"category"?: string | null,"id"?: string,"updated_at"?: string,"variants"?: (string)[]
+                    "category"?: string,"id"?: string,"key": string,"label": string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type": string
                   }
                   Update: {
-                    "answer"?: string,"canonical_question"?: string,"category"?: string | null,"id"?: string,"updated_at"?: string,"variants"?: (string)[]
+                    "category"?: string,"id"?: string,"key"?: string,"label"?: string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type"?: string
                   }
                   Relationships: [
                     
                   ]
-                },"application_questions": {
+                },"answer_bank_variants": {
                   Row: {
-                    "answer": string | null,"answer_bank_id": string | null,"application_id": string,"bucket": string,"field_type": string | null,"id": string,"options": Json | null,"question": string,"required": boolean,"user_approved": boolean
+                    "answer_bank_id": string,"confidence": number | null,"confirmed": boolean,"created_at": string,"normalized_text": string,"polarity": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "answer"?: string | null,"answer_bank_id"?: string | null,"application_id": string,"bucket": string,"field_type"?: string | null,"id"?: string,"options"?: Json | null,"question": string,"required"?: boolean,"user_approved"?: boolean
+                    "answer_bank_id": string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text": string,"polarity"?: string
                   }
                   Update: {
-                    "answer"?: string | null,"answer_bank_id"?: string | null,"application_id"?: string,"bucket"?: string,"field_type"?: string | null,"id"?: string,"options"?: Json | null,"question"?: string,"required"?: boolean,"user_approved"?: boolean
+                    "answer_bank_id"?: string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text"?: string,"polarity"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "answer_bank_variants_answer_bank_id_fkey"
+      columns: ["answer_bank_id"]
+isOneToOne: false
+      referencedRelation: "answer_bank"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"application_questions": {
+                  Row: {
+                    "answer": string | null,"answer_bank_id": string | null,"answer_source": string | null,"answer_value": Json | null,"application_id": string,"bucket": string,"created_at": string,"description": string | null,"field_name": string | null,"field_type": string | null,"id": string,"needs_check": boolean,"options": Json | null,"question": string,"reason": string | null,"required": boolean,"sort_order": number,"user_approved": boolean
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "answer"?: string | null,"answer_bank_id"?: string | null,"answer_source"?: string | null,"answer_value"?: Json | null,"application_id": string,"bucket": string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question": string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"user_approved"?: boolean
+                  }
+                  Update: {
+                    "answer"?: string | null,"answer_bank_id"?: string | null,"answer_source"?: string | null,"answer_value"?: Json | null,"application_id"?: string,"bucket"?: string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question"?: string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"user_approved"?: boolean
                   }
                   Relationships: [
                     {
@@ -53,14 +73,14 @@ isOneToOne: false
                   ]
                 },"applications": {
                   Row: {
-                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"resume_content": Json | null,"resume_pdf_path": string | null,"status": Database["public"]['Enums']["app_status"],"submitted_at": string | null
+                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"prepare_error": string | null,"prepared_at": string | null,"resume_content": Json | null,"resume_pdf_path": string | null,"status": Database["public"]['Enums']["app_status"],"submitted_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
                   }
                   Update: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
                   }
                   Relationships: [
                     {
@@ -391,10 +411,13 @@ isOneToOne: false
 "confirmed_at": string | null,
 "cover_letter": string | null,
 "created_at": string,
+"flags": NonNullable<Json>,
 "id": string,
 "job_id": string,
 "last_status_at": string,
 "match_id": string | null,
+"prepare_error": string | null,
+"prepared_at": string | null,
 "resume_content": Json | null,
 "resume_pdf_path": string | null,
 "status": Database["public"]['Enums']["app_status"],
