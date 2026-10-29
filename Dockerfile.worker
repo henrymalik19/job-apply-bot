@@ -1,5 +1,5 @@
-# Worker image for Railway cron services (see railway.json). Runs one worker
-# and exits; Railway starts it again on the next scheduled tick.
+# Worker image for Railway cron services (settings live on the Railway service;
+# see README). Runs one worker and exits; Railway starts it on the next tick.
 FROM node:24-slim
 
 WORKDIR /app
