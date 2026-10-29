@@ -62,40 +62,51 @@ export async function matchCounts(db: Db, criteriaVersionId: string, threshold: 
   return { scored, aboveThreshold, filtered, failed };
 }
 
-/** A job list row with its match score. */
-export type ScoredJobRow = JobListItem & { score: number };
+/** A job list row with its match outcome under one criteria version. */
+export type MatchedJobRow = JobListItem & { score: number | null; matchStatus: string; filterReason: string | null };
 
 /**
- * One page of scored jobs for a criteria version, best score first, with the
- * Jobs-page filters applied to the joined job. Starts from `matches` so it can
- * filter and sort by score in the database.
+ * One page of jobs that have a match in the given statuses for a criteria
+ * version, with the Jobs-page filters applied to the joined job and sorted by
+ * score, posting date or found date. Starts from `matches` so it can filter and
+ * sort on match fields in the database.
  *
- * @param minScore - Only scores at or above this (the threshold), or null for all scored jobs.
+ * @param statuses - Match statuses to include ("scored", "failed", "filtered").
+ * @param minScore - Only scores at or above this (the threshold), or null.
  */
-export async function searchScoredJobs(
+export async function searchMatchedJobs(
   db: Db,
   criteriaVersionId: string,
-  minScore: number | null,
+  options: { statuses: string[]; minScore: number | null },
   filters: JobFilters,
   page: number,
   pageSize: number,
   now: Date,
-): Promise<{ rows: ScoredJobRow[]; total: number }> {
+): Promise<{ rows: MatchedJobRow[]; total: number }> {
   const c = jobFilterClauses(filters, now);
   let query = db
     .from("matches")
-    .select(`score, jobs!inner(${LIST_COLUMNS})`, { count: "exact" })
+    .select(`score, status, hard_filter_reason, jobs!inner(${LIST_COLUMNS})`, { count: "exact" })
     .eq("criteria_version_id", criteriaVersionId)
-    .eq("status", "scored");
-  if (minScore != null) query = query.gte("score", minScore);
+    .in("status", options.statuses);
+  if (options.minScore != null) query = query.gte("score", options.minScore);
   if (c.text) query = query.or(c.text, { referencedTable: "jobs" });
   for (const [col, value] of c.eq) query = query.eq(`jobs.${col}`, value);
   for (const col of c.isNull) query = query.is(`jobs.${col}`, null);
   for (const col of c.notNull) query = query.not(`jobs.${col}`, "is", null);
   for (const [col, value] of c.gte) query = query.gte(`jobs.${col}`, value);
+  query =
+    filters.sort === "score"
+      ? query.order("score", { ascending: false, nullsFirst: false })
+      : query.order(filters.sort === "posted" ? "jobs(posted_at)" : "jobs(first_seen_at)", { ascending: false, nullsFirst: false });
   const from = (page - 1) * pageSize;
-  const res = await query.order("score", { ascending: false }).order("id").range(from, from + pageSize - 1);
-  if (res.error) unwrap(res, "search scored jobs");
-  const rows = (res.data ?? []).map((r) => ({ ...(r.jobs as unknown as JobListItem), score: r.score as number }));
+  const res = await query.order("id").range(from, from + pageSize - 1);
+  if (res.error) unwrap(res, "search matched jobs");
+  const rows = (res.data ?? []).map((r) => ({
+    ...(r.jobs as unknown as JobListItem),
+    score: r.score,
+    matchStatus: r.status,
+    filterReason: r.hard_filter_reason,
+  }));
   return { rows, total: res.count ?? 0 };
 }

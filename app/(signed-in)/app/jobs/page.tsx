@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,21 +8,26 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import { filtersToParams, parseJobFilters, type JobFilters } from "@/server/modules/jobs/jobs.service";
-import { browseJobs } from "@/server/modules/matching/matching.service";
+import { browseJobs, type BrowsedJob } from "@/server/modules/matching/matching.service";
 import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
 import { Pager, scrollingTable } from "../../_components/data-table";
+import { AutoSubmitForm } from "./auto-submit-form";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function Filters({ filters }: { filters: JobFilters }) {
   return (
-    // A plain GET form: filters live in the URL, so they survive reloads and links.
-    <form method="get" className="flex flex-wrap items-end gap-3">
+    // A GET form: filters live in the URL, so they survive reloads and links.
+    // Dropdowns apply on change; the search box applies on Enter or Apply.
+    <AutoSubmitForm className="flex flex-wrap items-end gap-3">
+      {filters.sort !== "found" && <input type="hidden" name="sort" value={filters.sort} />}
       <Input name="q" defaultValue={filters.q} placeholder="Title or company" className="w-64" aria-label="Search title or company" />
       <NativeSelect name="match" defaultValue={filters.match} aria-label="Match">
-        <NativeSelectOption value="any">All jobs</NativeSelectOption>
+        <NativeSelectOption value="relevant">Relevant (not ruled out)</NativeSelectOption>
         <NativeSelectOption value="matched">Matched (at or above threshold)</NativeSelectOption>
+        <NativeSelectOption value="ruled_out">Ruled out by your criteria</NativeSelectOption>
+        <NativeSelectOption value="all">All jobs</NativeSelectOption>
       </NativeSelect>
       <NativeSelect name="remote" defaultValue={filters.remote} aria-label="Remote">
         <NativeSelectOption value="any">Any location type</NativeSelectOption>
@@ -48,24 +53,43 @@ function Filters({ filters }: { filters: JobFilters }) {
         <NativeSelectOption value="closed">Closed</NativeSelectOption>
         <NativeSelectOption value="all">Open and closed</NativeSelectOption>
       </NativeSelect>
-      <NativeSelect name="sort" defaultValue={filters.sort} aria-label="Sort">
-        <NativeSelectOption value="found">Newest found</NativeSelectOption>
-        <NativeSelectOption value="posted">Newest posted</NativeSelectOption>
-        <NativeSelectOption value="score">Best score</NativeSelectOption>
-      </NativeSelect>
       <Button type="submit">Apply</Button>
       <Link href="/app/jobs" className={buttonVariants({ variant: "ghost" })}>Reset</Link>
-    </form>
+    </AutoSubmitForm>
   );
 }
 
 const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
-function ScoreBadge({ score, status, threshold }: { score: number | null; status: string | null; threshold: number }) {
-  if (status === "filtered") return <span className="text-xs text-muted-foreground">filtered</span>;
+/** Turns a hard-filter reason ("salary: 139000 below 150000") into a short label. */
+function reasonLabel(reason: string | null): string {
+  if (!reason) return "ruled out";
+  const salary = /^salary: d+ below (d+)$/.exec(reason);
+  if (salary) return `salary under $${Math.round(Number(salary[1]) / 1000)}k`;
+  return reason;
+}
+
+function ScoreBadge({ job, threshold }: { job: BrowsedJob; threshold: number }) {
+  const { score, matchStatus: status } = job;
+  if (status === "filtered") return <span className="text-xs text-muted-foreground">{reasonLabel(job.filterReason)}</span>;
   if (status === "failed") return <span className="text-xs text-destructive">failed</span>;
   if (score == null) return <span className="text-muted-foreground">—</span>;
   return <Badge variant={score >= threshold ? "default" : "secondary"} className="tabular-nums">{score}</Badge>;
+}
+
+/** A column header that sorts the list by its column (newest or best first), keeping the other filters. */
+function SortHead({ sort, current, params, className, children }: {
+  sort: JobFilters["sort"]; current: JobFilters["sort"]; params: Record<string, string>; className?: string; children: ReactNode;
+}) {
+  const href = `/app/jobs?${new URLSearchParams({ ...params, sort })}`;
+  const active = sort === current;
+  return (
+    <TableHead className={className} aria-sort={active ? "descending" : "none"}>
+      <Link href={href} className={active ? "font-semibold text-foreground underline underline-offset-4" : "hover:text-foreground hover:underline"}>
+        {children}{active ? " ↓" : ""}
+      </Link>
+    </TableHead>
+  );
 }
 
 async function Jobs({ searchParams }: { searchParams: SearchParams }) {
@@ -94,20 +118,20 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
             <Table containerClassName={scrollingTable.container}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
-                  <TableHead className="text-right">Score</TableHead>
+                  <SortHead sort="score" current={filters.sort} params={keep} className="text-right">Score</SortHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Salary</TableHead>
-                  <TableHead>Posted</TableHead>
-                  <TableHead>Found</TableHead>
+                  <SortHead sort="posted" current={filters.sort} params={keep}>Posted</SortHead>
+                  <SortHead sort="found" current={filters.sort} params={keep}>Found</SortHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {page.items.map((j) => (
                   <TableRow key={j.id} className={j.closed_at ? "text-muted-foreground" : ""}>
                     <TableCell className="text-right">
-                      <ScoreBadge score={j.score} status={j.matchStatus} threshold={threshold} />
+                      <ScoreBadge job={j} threshold={threshold} />
                     </TableCell>
                     <TableCell className="max-w-md whitespace-normal">
                       <Link href={`/app/jobs/${j.id}${detailQuery ? `?${detailQuery}` : ""}`} className="font-medium hover:underline">

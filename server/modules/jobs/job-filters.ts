@@ -10,8 +10,11 @@ export const FOUND_OPTIONS = ["any", "1", "7", "30"] as const;
 export const POSTED_OPTIONS = ["7", "30", "90", "any"] as const;
 /** Sort orders: newest found, newest posted, or best match score. */
 export const SORT_OPTIONS = ["found", "posted", "score"] as const;
-/** Match filter: all jobs, or only those scored at or above the threshold. */
-export const MATCH_OPTIONS = ["any", "matched"] as const;
+/**
+ * Match filter: "relevant" (everything not ruled out by a hard filter), "matched"
+ * (scored at or above the threshold), "ruled_out", or "all".
+ */
+export const MATCH_OPTIONS = ["relevant", "matched", "ruled_out", "all"] as const;
 
 const oneOf = <T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) =>
   z.preprocess((v) => (Array.isArray(v) ? v[0] : v), z.enum(values).catch(fallback as never)).default(fallback as never);
@@ -26,7 +29,7 @@ const filtersSchema = z.object({
   found: oneOf(FOUND_OPTIONS, "any"),
   posted: oneOf(POSTED_OPTIONS, "30"),
   sort: oneOf(SORT_OPTIONS, "found"),
-  match: oneOf(MATCH_OPTIONS, "any"),
+  match: oneOf(MATCH_OPTIONS, "relevant"),
 });
 
 /** Jobs-page filters, parsed from the URL with safe defaults. */

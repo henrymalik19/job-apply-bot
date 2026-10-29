@@ -11,7 +11,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/criteria.service";
-import { runMatch } from "@/server/modules/matching/matching.service";
+import { parseJobFilters } from "@/server/modules/jobs/jobs.service";
+import { browseJobs, runMatch } from "@/server/modules/matching/matching.service";
 import type {} from "./setup";
 
 const { url: URL, serviceRoleKey: SERVICE } = inject("supabase");
@@ -152,6 +153,23 @@ describe("matching", () => {
     expect((await getMatchCriteria(db)).versionId).toBe(changed.versionId);
     await match();
     expect((await matchRows()).length).toBe(12);
+  });
+
+  it("lists relevant, matched and ruled-out jobs, sorted in the database", async () => {
+    const days = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    await db.from("jobs").update({ posted_at: days(3) }).eq("id", jobIds.good);
+    await db.from("jobs").update({ posted_at: days(1) }).eq("id", jobIds.flaky);
+    await db.from("jobs").update({ posted_at: days(2) }).eq("id", jobIds.garbage);
+    const browse = async (match: string, sort = "found") =>
+      (await browseJobs(db, parseJobFilters({ q: tag, posted: "any", match, sort }), 1, new Date())).page.items;
+
+    const relevant = await browse("relevant", "posted");
+    expect(relevant.map((j) => j.id)).toEqual([jobIds.flaky, jobIds.garbage, jobIds.good]);
+    expect((await browse("matched", "score")).map((j) => j.id).sort()).toEqual([jobIds.good, jobIds.flaky].sort());
+    const ruledOut = await browse("ruled_out");
+    expect(ruledOut).toHaveLength(1);
+    expect(ruledOut[0]).toMatchObject({ id: jobIds.excluded, matchStatus: "filtered", filterReason: `excluded company: Excluded ${tag}` });
+    expect(await browse("all")).toHaveLength(4);
   });
 
   it("defers scoring once the monthly spend cap is reached", async () => {

@@ -18,7 +18,7 @@ import { failInterruptedRuns, finishRun, latestWorkerRun, startRun } from "@/ser
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { hardFilter } from "./hard-filters";
 import { DEFAULT_PAGE_SIZE, pageOf, type Page } from "@/shared/paginate";
-import { insertMatch, listMatchedJobIds, matchCounts, matchesForJobs, searchScoredJobs } from "./matches.repository";
+import { insertMatch, listMatchedJobIds, matchCounts, matchesForJobs, searchMatchedJobs } from "./matches.repository";
 import {
   buildScoringPrompt,
   scoreOutputSchema,
@@ -159,13 +159,20 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
   }
 }
 
-/** A Jobs-page row with its current match (score null until scored). */
-export type BrowsedJob = JobListItem & { score: number | null; matchStatus: string | null };
+/** A Jobs-page row with its current match (score null until scored; reason set when ruled out). */
+export type BrowsedJob = JobListItem & { score: number | null; matchStatus: string | null; filterReason: string | null };
+
+/** Match statuses each Jobs-page match option shows. "all" also includes jobs not matched yet. */
+const STATUSES_FOR: Record<Exclude<JobFilters["match"], "all">, string[]> = {
+  relevant: ["scored", "failed"],
+  matched: ["scored"],
+  ruled_out: ["filtered"],
+};
 
 /**
- * One page of the Jobs list with current-criteria scores. "Matched only" and
- * "best score" read from matches (sorted and filtered in the database); the
- * default list reads jobs and attaches each one's score.
+ * One page of the Jobs list with current-criteria scores. Every view except
+ * "all" reads from matches (filtered and sorted in the database), so ruled-out
+ * jobs are hidden by default; "all" reads jobs and attaches each one's match.
  */
 export async function browseJobs(
   db: Db,
@@ -174,16 +181,24 @@ export async function browseJobs(
   now: Date,
 ): Promise<{ page: Page<BrowsedJob>; threshold: number }> {
   const { versionId, criteria } = await getMatchCriteria(db);
-  if (filters.match === "matched" || filters.sort === "score") {
-    const minScore = filters.match === "matched" ? criteria.threshold : null;
-    const { rows, total } = await searchScoredJobs(db, versionId, minScore, filters, page, DEFAULT_PAGE_SIZE, now);
-    return { page: pageOf(rows.map((r) => ({ ...r, matchStatus: "scored" })), total, page), threshold: criteria.threshold };
+  if (filters.match !== "all") {
+    const options = {
+      statuses: STATUSES_FOR[filters.match],
+      minScore: filters.match === "matched" ? criteria.threshold : null,
+    };
+    const { rows, total } = await searchMatchedJobs(db, versionId, options, filters, page, DEFAULT_PAGE_SIZE, now);
+    return { page: pageOf(rows, total, page), threshold: criteria.threshold };
+  }
+  if (filters.sort === "score") {
+    const options = { statuses: ["scored", "failed", "filtered"], minScore: null };
+    const { rows, total } = await searchMatchedJobs(db, versionId, options, filters, page, DEFAULT_PAGE_SIZE, now);
+    return { page: pageOf(rows, total, page), threshold: criteria.threshold };
   }
   const list = await listJobs(db, filters, page, now);
   const matches = await matchesForJobs(db, versionId, list.items.map((j) => j.id));
   const items = list.items.map((j) => {
     const m = matches.get(j.id);
-    return { ...j, score: m?.score ?? null, matchStatus: m?.status ?? null };
+    return { ...j, score: m?.score ?? null, matchStatus: m?.status ?? null, filterReason: m?.hard_filter_reason ?? null };
   });
   return { page: { ...list, items }, threshold: criteria.threshold };
 }
