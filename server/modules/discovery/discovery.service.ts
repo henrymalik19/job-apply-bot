@@ -5,13 +5,22 @@ import type { Db } from "@/server/db/types";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
 import { getTitleFilter, passesTitleFilter, type TitleFilter } from "@/server/modules/criteria/criteria.service";
 import { insertDiscoveredJobs, listExternalIds, syncBoard } from "@/server/modules/jobs/jobs.service";
-import { boardSource, finishRun, listSourceStatus, shouldSkipBoard, startRun } from "@/server/modules/runs/runs.service";
+import {
+  boardSource,
+  failInterruptedRuns,
+  finishRun,
+  listSourceStatus,
+  shouldSkipBoard,
+  startRun,
+} from "@/server/modules/runs/runs.service";
 import { boardUrl, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
 import { defaultSleep, fetchJson } from "@/server/integrations/ats/http";
 import { dedupKey } from "@/shared/text";
 
 const WORKER = "discover";
 const INSERT_CHUNK = 100;
+/** A run with no finish after this long was killed (e.g. by a redeploy). */
+const INTERRUPTED_AFTER_MS = 60 * 60 * 1000;
 
 /** Dependencies of a discovery run; tests inject fetch, time and pacing. */
 export type DiscoverDeps = {
@@ -92,6 +101,8 @@ async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filter: T
  */
 export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> {
   const { db, now = () => new Date(), sleep = defaultSleep, hostDelayMs = 1000, log = () => {} } = deps;
+  const interrupted = await failInterruptedRuns(db, WORKER, new Date(now().getTime() - INTERRUPTED_AFTER_MS));
+  if (interrupted) log(`closed ${interrupted} interrupted run(s) from an earlier process`);
   const runId = await startRun(db, WORKER, null);
   const totals: DiscoverSummary["counts"] = {
     boards: 0, ok: 0, failed: 0, skipped: 0,

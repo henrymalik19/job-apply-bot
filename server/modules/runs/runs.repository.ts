@@ -30,6 +30,27 @@ export async function finishRun(db: Db, id: string, result: RunResult): Promise<
   );
 }
 
+/**
+ * Marks runs that never finished (the process was killed, e.g. by a redeploy)
+ * as failed, so Health and backoff see them. Only touches runs started before
+ * `startedBefore`, never a run that may still be going.
+ *
+ * @returns How many runs were closed.
+ */
+export async function failInterruptedRuns(db: Db, worker: string, startedBefore: Date): Promise<number> {
+  const rows = unwrap(
+    await db
+      .from("runs")
+      .update({ finished_at: new Date().toISOString(), ok: false, error: "interrupted (no finish recorded)" })
+      .eq("worker", worker)
+      .is("finished_at", null)
+      .lt("started_at", startedBefore.toISOString())
+      .select("id"),
+    "fail interrupted runs",
+  );
+  return rows.length;
+}
+
 /** Latest status of every source of a worker, from the `run_source_status` view. */
 export async function listSourceStatus(db: Db, worker: string): Promise<SourceStatus[]> {
   const rows = unwrap(

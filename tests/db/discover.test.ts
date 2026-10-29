@@ -182,6 +182,22 @@ describe("discover worker", () => {
   });
 });
 
+describe("interrupted runs", () => {
+  it("marks a run that never finished as failed on the next run", async () => {
+    const source = `${boards.ghA.ats}:${boards.ghA.token}`;
+    const { data, error } = await service
+      .from("runs")
+      .insert({ worker: "discover", source, started_at: new Date(Date.now() - 2 * 3600_000).toISOString() })
+      .select("id")
+      .single();
+    if (error) throw error;
+    await discover();
+    const { data: row } = await service.from("runs").select("ok, error, finished_at").eq("id", data.id).single();
+    expect(row).toMatchObject({ ok: false, error: "interrupted (no finish recorded)" });
+    expect(row?.finished_at).not.toBeNull();
+  });
+});
+
 describe("sync function permissions", () => {
   const args = {
     insert: { p_jobs: [] },
