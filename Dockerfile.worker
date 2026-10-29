@@ -1,0 +1,15 @@
+# Worker image for Railway cron services (see railway.json). Runs one worker
+# and exits; Railway starts it again on the next scheduled tick.
+FROM node:24-slim
+
+WORKDIR /app
+RUN npm install -g pnpm@10.34.7
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.json ./
+COPY lib ./lib
+COPY workers ./workers
+
+CMD ["pnpm", "worker:discover"]

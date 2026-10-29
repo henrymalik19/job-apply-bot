@@ -27,8 +27,9 @@ Public sign-ups are disabled; the owner account is created by an admin.
 pnpm worker:discover          # fetch every active board into jobs (reads .env.local)
 ```
 
-In production the `Pipeline` GitHub Actions workflow runs it every 30 minutes. It needs two repository
-secrets: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Board failures are recorded per board and shown
+In production a Railway cron service runs it every 30 minutes (`railway.json`, image from
+`Dockerfile.worker`, schedule in UTC). The service needs two variables: `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY`. Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 
 ## Checks

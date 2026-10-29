@@ -1,0 +1,12 @@
+# Never ship local secrets or build output into the worker image.
+.env*
+node_modules
+.next
+.git
+.github
+.claude
+tests
+supabase
+app
+public
+scripts

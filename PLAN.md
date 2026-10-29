@@ -17,6 +17,9 @@ Do not start the next milestone until the current one is deployed and verified.*
 
 ### Revisions
 
+- **2026-10-29** — Workers run on **Railway cron services** instead of GitHub Actions: private logs (a public repo
+  exposes Actions logs, which name target companies), on-time schedules, and room for Playwright/IMAP later.
+  One service per schedule, built from `Dockerfile.worker`; GitHub Actions keeps CI only.
 - **2026-10-29** — M2 implementation notes: one `runs` row per board (`source = ats:token`) plus one per run
   (`source = null`); a `run_source_status` view summarizes them for backoff and Health (PostgREST caps reads at 1,000
   rows, so history is never read raw). Board writes go through `insert_discovered_jobs` / `sync_board` (service role
@@ -68,7 +71,7 @@ Do not start the next milestone until the current one is deployed and verified.*
 | Database, auth, file storage | Supabase (Postgres, Supabase Auth, Supabase Storage) |
 | Web app | Next.js (App Router, TypeScript), deployed on Vercel |
 | UI | Tailwind + shadcn/ui; charts with Recharts |
-| Background workers | TypeScript scripts in `/workers`, run on a schedule by GitHub Actions |
+| Background workers | TypeScript scripts in `/workers`, run on a schedule by Railway cron services (`Dockerfile.worker`) |
 | LLM | Anthropic Claude API (`@anthropic-ai/sdk`). Scoring: `claude-haiku-5-5`. Tailoring/answers: `claude-sonnet-5-5` |
 | Email tracking | See decision D3 (IMAP with app password recommended) |
 | Notifications | See decision D6 |
@@ -401,11 +404,11 @@ For each selected job:
 - Jobs whose posting closed: queued/needs_input/manual applications → `expired`.
 - `needs_input`/`manual` older than `stale_days` (default 5) → nudge flag; older than 2× → `expired`.
 
-### Schedules (GitHub Actions)
-- `discover → match → prepare → notify` chained in one workflow every 30 minutes.
-- `track_email → notify` every 30 minutes. `expire` daily.
-- Concurrency group per workflow so runs never overlap.
-- CI workflow: typecheck, lint, unit tests, DB integration tests on every push.
+### Schedules (Railway cron services)
+- Pipeline service: `discover → match → prepare → notify` chained in one process every 30 minutes (UTC cron).
+- Email service: `track_email → notify` every 30 minutes. Expire service: daily.
+- Railway skips a tick while the previous run is still active, so runs never overlap; each run must exit.
+- CI (GitHub Actions): typecheck, lint, unit tests, DB integration tests on every push.
 
 ---
 
@@ -529,7 +532,7 @@ choices must not block it (see "Keep open" below).
 - pg_cron runs every 15 minutes and calls a function that enqueues due work into a `tasks` table, based on each
   user's schedule settings. "Run now" buttons just insert a task.
 - Workers claim tasks with `FOR UPDATE SKIP LOCKED`, retry with backoff, and write `runs` rows as today.
-  Replaces the fixed GitHub Actions schedules.
+  Replaces the fixed Railway cron schedules.
 
 **C. Browser extension (assisted apply; replaces the earlier Claude-in-Chrome submission idea)**
 - Runs in the user's own signed-in browser, so no logins or session cookies are stored server-side (principle 10).
@@ -577,7 +580,7 @@ choices must not block it (see "Keep open" below).
 - Master resume (entered via the settings editor), confirmed facts, and answer bank entries.
 - Target companies list with ATS + board tokens.
 - My own ATS accounts (e.g. Workday), created by me; passwords stay in my password manager.
-- Env vars set in Vercel and GitHub Actions secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+- Env vars set in Vercel and the Railway worker services: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, `ANTHROPIC_API_KEY`, `IMAP_HOST`, `IMAP_USER`,
   `IMAP_APP_PASSWORD`, and (D6) `NOTIFY_TO`, `SMTP_HOST`.
 - `.env.example` lists every variable with a comment; never real values.
