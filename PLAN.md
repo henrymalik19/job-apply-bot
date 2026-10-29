@@ -11,7 +11,7 @@ Do not start the next milestone until the current one is deployed and verified.*
 
 | Milestone | State |
 |---|---|
-| M1 Foundation | Built and verified locally (45 DB tests, owner login). **Not yet deployed** (needs hosted Supabase + Vercel). |
+| M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
 | M2–M7 | Not started |
 
 ### Revisions
@@ -457,7 +457,7 @@ Reads only `public_status`. `noindex, nofollow`.
 
 ## 7. Milestones and acceptance checks
 
-**M1 — Foundation** *(built locally; deploy pending)*
+**M1 — Foundation** *(done, deployed 2026-10-29)*
 - Next.js app on Vercel, Supabase project linked, migration applied, RLS on, admin login works.
 - Acceptance: unauthenticated request to any admin route or table is denied; authenticated owner sees
   an empty admin overview.
