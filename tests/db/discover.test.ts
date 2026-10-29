@@ -80,7 +80,7 @@ async function jobsFor(key: BoardKey) {
 
 async function lastBoardRun(key: BoardKey) {
   const { data } = await service
-    .from("runs")
+    .from("worker_runs")
     .select("ok, error, counts, finished_at")
     .eq("worker", "discover")
     .eq("source", `${boards[key].ats}:${boards[key].token}`)
@@ -113,8 +113,8 @@ afterAll(async () => {
   const ids = Object.values(companyIds);
   await service.from("jobs").delete().in("company_id", ids);
   await service.from("companies").delete().in("id", ids);
-  await service.from("runs").delete().in("source", Object.values(boards).map((b) => `${b.ats}:${b.token}`));
-  await service.from("runs").delete().in("id", runIds);
+  await service.from("worker_runs").delete().in("source", Object.values(boards).map((b) => `${b.ats}:${b.token}`));
+  await service.from("worker_runs").delete().in("id", runIds);
   await service.from("settings").update({ value: previousFilter }).eq("key", "discover_filter");
   if (previousJobFilter) await service.from("settings").upsert({ key: "discover_job_filter", value: previousJobFilter });
   else await service.from("settings").delete().eq("key", "discover_job_filter");
@@ -182,7 +182,7 @@ describe("discover worker", () => {
   });
 
   it("writes a finished run row for the whole run", async () => {
-    const { data } = await service.from("runs").select("ok, source, counts, finished_at").eq("id", runIds.at(-1)!).single();
+    const { data } = await service.from("worker_runs").select("ok, source, counts, finished_at").eq("id", runIds.at(-1)!).single();
     expect(data).toMatchObject({ ok: true, source: null });
     expect(data?.finished_at).not.toBeNull();
     expect(data?.counts).toMatchObject({ boards: 5, skipped: 1 });
@@ -193,13 +193,13 @@ describe("interrupted runs", () => {
   it("marks a run that never finished as failed on the next run", async () => {
     const source = `${boards.ghA.ats}:${boards.ghA.token}`;
     const { data, error } = await service
-      .from("runs")
+      .from("worker_runs")
       .insert({ worker: "discover", source, started_at: new Date(Date.now() - 2 * 3600_000).toISOString() })
       .select("id")
       .single();
     if (error) throw error;
     await discover();
-    const { data: row } = await service.from("runs").select("ok, error, finished_at").eq("id", data.id).single();
+    const { data: row } = await service.from("worker_runs").select("ok, error, finished_at").eq("id", data.id).single();
     expect(row).toMatchObject({ ok: false, error: "interrupted (no finish recorded)" });
     expect(row?.finished_at).not.toBeNull();
   });

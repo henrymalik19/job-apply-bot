@@ -1,6 +1,6 @@
 // The optional public status page: a read-only summary of the search that the
 // owner can switch on in Settings. Off by default. Reads only the
-// public_status view (title, company, status, dates) with the service role,
+// public_applications view (title, company, status, dates) with the service role,
 // server-side, and only while the setting is on.
 import { z } from "zod";
 import type { Db } from "@/server/db/types";

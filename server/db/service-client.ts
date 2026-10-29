@@ -5,7 +5,7 @@ import type { Db } from "./types";
 
 /**
  * Creates a service-role client, which bypasses RLS. For workers, scripts and
- * narrowly scoped server reads (e.g. the public_status view). Never import this
+ * narrowly scoped server reads (e.g. the public_applications view). Never import this
  * from client components and never return its rows to the browser unfiltered.
  *
  * Not marked `server-only` because workers run it under plain Node.

@@ -5,23 +5,61 @@ export type Database = {
   
   "public": {
           Tables: {
-            "answers": {
+            "application_events": {
                   Row: {
-                    "created_at": string,"question_id": string,"updated_at": string,"value": NonNullable<Json>
+                    "application_id": string | null,"cause": string,"created_at": string,"detail": Json | null,"from_status": string | null,"id": number,"job_id": string | null,"to_status": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"question_id": string,"updated_at"?: string,"value": NonNullable<Json>
+                    "application_id"?: string | null,"cause": string,"created_at"?: string,"detail"?: Json | null,"from_status"?: string | null,"id"?: never,"job_id"?: string | null,"to_status"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"question_id"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                    "application_id"?: string | null,"cause"?: string,"created_at"?: string,"detail"?: Json | null,"from_status"?: string | null,"id"?: never,"job_id"?: string | null,"to_status"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
-      foreignKeyName: "answers_question_id_fkey"
-      columns: ["question_id"]
-isOneToOne: true
-      referencedRelation: "questions"
+      foreignKeyName: "events_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "events_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "public_applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "events_job_id_fkey"
+      columns: ["job_id"]
+isOneToOne: false
+      referencedRelation: "jobs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"application_evidence_items": {
+                  Row: {
+                    "application_id": string,"created_at": string,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "application_id": string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "application_id"?: string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "evidence_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "evidence_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "public_applications"
       referencedColumns: ["id"]
     }
                   ]
@@ -47,7 +85,7 @@ isOneToOne: false
       foreignKeyName: "application_questions_application_id_fkey"
       columns: ["application_id"]
 isOneToOne: false
-      referencedRelation: "public_status"
+      referencedRelation: "public_applications"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "application_questions_question_id_fkey"
@@ -56,6 +94,20 @@ isOneToOne: false
       referencedRelation: "questions"
       referencedColumns: ["id"]
     }
+                  ]
+                },"application_status_transitions": {
+                  Row: {
+                    "created_at": string,"from_status": string,"to_status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"from_status": string,"to_status": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"from_status"?: string,"to_status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
                   ]
                 },"applications": {
                   Row: {
@@ -111,20 +163,6 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"confirmed_facts": {
-                  Row: {
-                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"sort_order": number,"source": string | null,"structured": Json | null,"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
-                  }
-                  Update: {
-                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 },"educations": {
                   Row: {
                     "completed": boolean,"created_at": string,"degree": string | null,"end_year": number | null,"field_of_study": string | null,"id": string,"institution": string,"sort_order": number,"start_year": number | null,"updated_at": string
@@ -161,7 +199,7 @@ isOneToOne: false
       foreignKeyName: "emails_application_id_fkey"
       columns: ["application_id"]
 isOneToOne: false
-      referencedRelation: "public_status"
+      referencedRelation: "public_applications"
       referencedColumns: ["id"]
     }
                   ]
@@ -224,64 +262,6 @@ isOneToOne: false
                   }
                   Relationships: [
                     
-                  ]
-                },"events": {
-                  Row: {
-                    "application_id": string | null,"cause": string,"created_at": string,"detail": Json | null,"from_status": string | null,"id": number,"job_id": string | null,"to_status": string | null,"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "application_id"?: string | null,"cause": string,"created_at"?: string,"detail"?: Json | null,"from_status"?: string | null,"id"?: never,"job_id"?: string | null,"to_status"?: string | null,"updated_at"?: string
-                  }
-                  Update: {
-                    "application_id"?: string | null,"cause"?: string,"created_at"?: string,"detail"?: Json | null,"from_status"?: string | null,"id"?: never,"job_id"?: string | null,"to_status"?: string | null,"updated_at"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "events_application_id_fkey"
-      columns: ["application_id"]
-isOneToOne: false
-      referencedRelation: "applications"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "events_application_id_fkey"
-      columns: ["application_id"]
-isOneToOne: false
-      referencedRelation: "public_status"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "events_job_id_fkey"
-      columns: ["job_id"]
-isOneToOne: false
-      referencedRelation: "jobs"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"evidence_items": {
-                  Row: {
-                    "application_id": string,"created_at": string,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null,"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "application_id": string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
-                  }
-                  Update: {
-                    "application_id"?: string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "evidence_application_id_fkey"
-      columns: ["application_id"]
-isOneToOne: false
-      referencedRelation: "applications"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "evidence_application_id_fkey"
-      columns: ["application_id"]
-isOneToOne: false
-      referencedRelation: "public_status"
-      referencedColumns: ["id"]
-    }
                   ]
                 },"jobs": {
                   Row: {
@@ -377,6 +357,40 @@ isOneToOne: true
       referencedColumns: ["id"]
     }
                   ]
+                },"profile_facts": {
+                  Row: {
+                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"sort_order": number,"source": string | null,"structured": Json | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"profile_skills": {
+                  Row: {
+                    "created_at": string,"last_used_year": number | null,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"years_override": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id": string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
+                  }
+                  Update: {
+                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id"?: string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "user_skills_skill_id_fkey"
+      columns: ["skill_id"]
+isOneToOne: true
+      referencedRelation: "skills"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "city": string | null,"country": string,"created_at": string,"email": string | null,"first_name": string | null,"github_url": string | null,"headline": string | null,"last_name": string | null,"linkedin_url": string | null,"notice_period": string | null,"phone": string | null,"postal_code": string | null,"preferred_name": string | null,"state": string | null,"summary": string | null,"updated_at": string,"user_id": string,"website_url": string | null
@@ -423,6 +437,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"question_answers": {
+                  Row: {
+                    "created_at": string,"question_id": string,"updated_at": string,"value": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"question_id": string,"updated_at"?: string,"value": NonNullable<Json>
+                  }
+                  Update: {
+                    "created_at"?: string,"question_id"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "answers_question_id_fkey"
+      columns: ["question_id"]
+isOneToOne: true
+      referencedRelation: "questions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"questions": {
                   Row: {
                     "answer_source": string,"answer_type": string,"category": string,"created_at": string,"id": string,"key": string,"label": string,"source_field": string | null,"updated_at": string
@@ -437,7 +471,7 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"resume_versions": {
+                },"resumes": {
                   Row: {
                     "content": NonNullable<Json>,"created_at": string,"id": string,"is_master": boolean,"label": string,"updated_at": string
                   }
@@ -447,20 +481,6 @@ isOneToOne: false
                   }
                   Update: {
                     "content"?: NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label"?: string,"updated_at"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
-                },"runs": {
-                  Row: {
-                    "counts": Json | null,"created_at": string,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"samples": Json | null,"source": string | null,"started_at": string,"updated_at": string,"worker": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker": string
-                  }
-                  Update: {
-                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker"?: string
                   }
                   Relationships: [
                     
@@ -513,40 +533,6 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"status_transitions": {
-                  Row: {
-                    "created_at": string,"from_status": string,"to_status": string,"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"from_status": string,"to_status": string,"updated_at"?: string
-                  }
-                  Update: {
-                    "created_at"?: string,"from_status"?: string,"to_status"?: string,"updated_at"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
-                },"user_skills": {
-                  Row: {
-                    "created_at": string,"last_used_year": number | null,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"years_override": number | null
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id": string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
-                  }
-                  Update: {
-                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id"?: string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "user_skills_skill_id_fkey"
-      columns: ["skill_id"]
-isOneToOne: true
-      referencedRelation: "skills"
-      referencedColumns: ["id"]
-    }
-                  ]
                 },"users": {
                   Row: {
                     "created_at": string,"id": string,"role": string,"updated_at": string
@@ -575,10 +561,24 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
+                },"worker_runs": {
+                  Row: {
+                    "counts": Json | null,"created_at": string,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"samples": Json | null,"source": string | null,"started_at": string,"updated_at": string,"worker": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker": string
+                  }
+                  Update: {
+                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
-            "public_status": {
+            "public_applications": {
                   Row: {
                     "company_name": string | null,"created_at": string | null,"id": string | null,"job_title": string | null,"job_url": string | null,"last_status_at": string | null,"status": string | null,"submitted_at": string | null
                   }
@@ -586,7 +586,7 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
-                },"run_source_status": {
+                },"worker_source_statuses": {
                   Row: {
                     "consecutive_failures": number | null,"first_run_at": string | null,"last_counts": Json | null,"last_error": string | null,"last_ok": boolean | null,"last_run_at": string | null,"last_success_at": string | null,"source": string | null,"worker": string | null
                   }

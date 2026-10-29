@@ -12,7 +12,7 @@ export type Employment = Row<"employments"> & {
 };
 
 /** A skill the owner has, with catalog fields. */
-export type UserSkill = Row<"user_skills"> & Pick<Row<"skills">, "name" | "normalized" | "category">;
+export type UserSkill = Row<"profile_skills"> & Pick<Row<"skills">, "name" | "normalized" | "category">;
 
 /** Everything known about the owner. */
 export type ProfileData = {
@@ -23,7 +23,7 @@ export type ProfileData = {
   skills: UserSkill[];
   certifications: Row<"certifications">[];
   /** Active free-form facts. */
-  facts: Row<"confirmed_facts">[];
+  facts: Row<"profile_facts">[];
 };
 
 /** A line of profile text for prompts. */

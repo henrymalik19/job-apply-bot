@@ -196,7 +196,7 @@ export async function removeSkill(db: Db, skillId: string): Promise<void> {
 /** Deletes one row from a profile list. */
 export async function removeProfileItem(
   db: Db,
-  kind: "work_authorizations" | "employments" | "educations" | "certifications" | "confirmed_facts",
+  kind: "work_authorizations" | "employments" | "educations" | "certifications" | "profile_facts",
   id: string,
 ): Promise<void> {
   await deleteRow(db, kind, z.string().uuid().parse(id));

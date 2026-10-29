@@ -20,14 +20,14 @@ export type FilteredSample = { title: string; company: string; reason: string };
  * @param source - `null` for the worker-level row, or a source key like `greenhouse:stripe`.
  */
 export async function startRun(db: Db, worker: string, source: string | null): Promise<string> {
-  return unwrap(await db.from("runs").insert({ worker, source }).select("id").single(), "start run").id;
+  return unwrap(await db.from("worker_runs").insert({ worker, source }).select("id").single(), "start run").id;
 }
 
 /** Closes a `runs` row with its outcome. Errors are truncated to 500 characters. */
 export async function finishRun(db: Db, id: string, result: RunResult): Promise<void> {
   check(
     await db
-      .from("runs")
+      .from("worker_runs")
       .update({
         finished_at: new Date().toISOString(),
         ok: result.ok,
@@ -50,7 +50,7 @@ export async function finishRun(db: Db, id: string, result: RunResult): Promise<
 export async function failInterruptedRuns(db: Db, worker: string, startedBefore: Date): Promise<number> {
   const rows = unwrap(
     await db
-      .from("runs")
+      .from("worker_runs")
       .update({ finished_at: new Date().toISOString(), ok: false, error: "interrupted (no finish recorded)" })
       .eq("worker", worker)
       .is("finished_at", null)
@@ -61,11 +61,11 @@ export async function failInterruptedRuns(db: Db, worker: string, startedBefore:
   return rows.length;
 }
 
-/** Latest status of every source of a worker, from the `run_source_status` view. */
+/** Latest status of every source of a worker, from the `worker_source_statuses` view. */
 export async function listSourceStatus(db: Db, worker: string): Promise<SourceStatus[]> {
   const rows = unwrap(
     await db
-      .from("run_source_status")
+      .from("worker_source_statuses")
       .select("worker, source, last_run_at, last_ok, last_error, last_counts, last_success_at, consecutive_failures, first_run_at")
       .eq("worker", worker),
     "list source status",
@@ -78,7 +78,7 @@ export async function listSourceStatus(db: Db, worker: string): Promise<SourceSt
 /** The most recent finished worker-level run (`source` is null), if any. */
 export async function latestWorkerRun(db: Db, worker: string): Promise<WorkerRun | null> {
   const res = await db
-    .from("runs")
+    .from("worker_runs")
     .select("started_at, finished_at, ok, counts, error")
     .eq("worker", worker)
     .is("source", null)
@@ -94,7 +94,7 @@ export async function latestWorkerRun(db: Db, worker: string): Promise<WorkerRun
 export async function recentSamples(db: Db, worker: string, limit: number): Promise<FilteredSample[]> {
   const rows = unwrap(
     await db
-      .from("runs")
+      .from("worker_runs")
       .select("samples")
       .eq("worker", worker)
       .not("samples", "is", null)

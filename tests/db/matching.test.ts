@@ -113,7 +113,7 @@ afterAll(async () => {
   else await db.from("match_criteria").delete().eq("user_id", ownerId);
   if (createdOwner) await db.from("users").delete().eq("id", ownerId);
   await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: previousCap as number });
-  await db.from("runs").delete().eq("worker", "match").gt("started_at", new Date(Date.now() - 3600_000).toISOString());
+  await db.from("worker_runs").delete().eq("worker", "match").gt("started_at", new Date(Date.now() - 3600_000).toISOString());
 });
 
 beforeEach(() => {

@@ -82,7 +82,7 @@ export async function editFactAction(_prev: FormMessageState, formData: FormData
   return run("Saved.", (db) => editFact(db, String(formData.get("id")), String(formData.get("fact") ?? "")));
 }
 
-const REMOVABLE = ["work_authorizations", "employments", "educations", "certifications", "confirmed_facts"] as const;
+const REMOVABLE = ["work_authorizations", "employments", "educations", "certifications", "profile_facts"] as const;
 
 /** Deletes one profile item (`kind` + `id`). */
 export async function removeItemAction(formData: FormData) {

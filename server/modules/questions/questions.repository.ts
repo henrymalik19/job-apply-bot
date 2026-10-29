@@ -24,7 +24,7 @@ export async function listAliases(db: Db): Promise<Map<string, QuestionAlias>> {
 
 /** Stored answers, keyed by question id. */
 export async function listAnswers(db: Db): Promise<Map<string, Json>> {
-  const rows = unwrap(await db.from("answers").select("question_id, value"), "list answers");
+  const rows = unwrap(await db.from("question_answers").select("question_id, value"), "list answers");
   return new Map(rows.map((a) => [a.question_id, a.value]));
 }
 
@@ -47,5 +47,5 @@ export async function insertAlias(db: Db, alias: Insert<"question_aliases">): Pr
 
 /** Saves the answer to a catalog question. */
 export async function saveAnswer(db: Db, questionId: string, value: NonNullable<Json>): Promise<void> {
-  check(await db.from("answers").upsert({ question_id: questionId, value }), "save answer");
+  check(await db.from("question_answers").upsert({ question_id: questionId, value }), "save answer");
 }

@@ -102,7 +102,7 @@ async function PublicStatus() {
 /**
  * Public status page: headline counts, sends per day and the list of sent
  * applications. Off by default (404) until switched on in Settings; reads only
- * the public_status view, server-side.
+ * the public_applications view, server-side.
  */
 export default function Home() {
   return (

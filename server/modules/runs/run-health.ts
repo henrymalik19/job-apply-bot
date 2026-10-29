@@ -1,5 +1,5 @@
 // Run-health rules shared by the discover worker (backoff) and the Health page.
-// Inputs come from the run_source_status view (one row per worker source) and
+// Inputs come from the worker_source_statuses view (one row per worker source) and
 // the latest worker-level runs row (source = null).
 
 /** Default discovery interval when `settings.discover_interval_minutes` is unset. */
@@ -25,7 +25,7 @@ export function formatMinutes(minutes: number): string {
 /** After two failures in a row, a board is retried at most this often. */
 export const BACKOFF_MS = 2 * 60 * 60 * 1000;
 
-/** Latest state of one worker source (e.g. `greenhouse:stripe`), from `run_source_status`. */
+/** Latest state of one worker source (e.g. `greenhouse:stripe`), from `worker_source_statuses`. */
 export type SourceStatus = {
   worker: string;
   source: string;

@@ -2,7 +2,7 @@ import type { Db } from "@/server/db/types";
 import { unwrap } from "@/server/core/errors";
 
 /**
- * The only fields the public page ever reads. `public_status` already hides
+ * The only fields the public page ever reads. `public_applications` already hides
  * pre-submission statuses; the job URL and row id are left out on purpose.
  */
 export type PublicApplication = {
@@ -17,7 +17,7 @@ export type PublicApplication = {
 export async function listPublicApplications(db: Db, limit = 500): Promise<PublicApplication[]> {
   return unwrap(
     await db
-      .from("public_status")
+      .from("public_applications")
       .select("job_title, company_name, status, submitted_at, last_status_at")
       .order("last_status_at", { ascending: false })
       .limit(limit),

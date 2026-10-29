@@ -12,10 +12,17 @@ import type {} from "./setup";
 
 const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");
 
+// Error codes for a table that doesn't exist (PostgREST schema cache, Postgres).
+const MISSING = ["PGRST205", "42P01"];
+
+// Every table and view in the public schema.
 const TABLES = [
-  "companies", "jobs", "criteria_versions", "matches", "resume_versions", "applications",
-  "answer_topics", "answer_topic_variants", "application_questions", "evidence_items", "emails", "events", "runs", "settings",
-  "status_transitions", "users", "run_source_status", "lessons", "confirmed_facts", "llm_calls", "profiles", "work_authorizations", "employments", "employment_responsibilities", "employment_skills", "skills", "user_skills", "educations", "certifications",
+  "application_events", "application_evidence_items", "application_questions", "application_status_transitions",
+  "applications", "certifications", "companies", "educations", "emails", "employment_responsibilities",
+  "employment_skills", "employments", "jobs", "lessons", "llm_calls", "match_criteria", "matches", "profile_facts",
+  "profile_skills", "profiles", "public_applications", "question_aliases", "question_answers", "questions",
+  "resumes", "settings", "skill_aliases", "skills", "users", "work_authorizations", "worker_runs",
+  "worker_source_statuses",
 ];
 
 const opts = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -79,11 +86,12 @@ afterAll(async () => {
 describe("anonymous access", () => {
   it.each(TABLES)("cannot read %s", async (table) => {
     const { data, error } = await anon.from(table).select("*").limit(1);
+    expect(MISSING).not.toContain(error?.code); // a missing table must fail, not pass as "denied"
     expect(error !== null || data?.length === 0).toBe(true);
   });
 
-  it("cannot read public_status directly", async () => {
-    const { data, error } = await anon.from("public_status").select("*");
+  it("cannot read public_applications directly", async () => {
+    const { data, error } = await anon.from("public_applications").select("*");
     expect(error).not.toBeNull();
     expect(data).toBeNull();
   });
@@ -111,6 +119,7 @@ describe("anonymous access", () => {
 describe("authenticated non-owner", () => {
   it.each(TABLES)("sees no rows in %s", async (table) => {
     const { data, error } = await stranger.from(table).select("*").limit(5);
+    expect(MISSING).not.toContain(error?.code);
     if (error) return; // permission denied is also acceptable
     expect(data).toEqual([]);
   });
@@ -140,7 +149,7 @@ describe("owner", () => {
 
   it("can create jobs and applications, and creation is logged", async () => {
     const app = await insertApplication(owner);
-    const { data: events } = await owner.from("events").select("*").eq("application_id", app.id);
+    const { data: events } = await owner.from("application_events").select("*").eq("application_id", app.id);
     expect(events).toHaveLength(1);
     expect(events![0]).toMatchObject({ from_status: null, to_status: "queued", cause: "system:create" });
   });
@@ -158,7 +167,7 @@ describe("status transitions", () => {
     expect(updated.status).toBe("approved");
     expect(updated.approved_at).not.toBeNull();
 
-    const { data: events } = await owner.from("events").select("*")
+    const { data: events } = await owner.from("application_events").select("*")
       .eq("application_id", app.id).order("id");
     expect(events!.at(-1)).toMatchObject({
       from_status: "queued", to_status: "approved", cause: "user:approve", detail: { via: "test" },
@@ -168,7 +177,7 @@ describe("status transitions", () => {
   it("rejects an illegal move without writing an event", async () => {
     const app = await insertApplication(owner);
     await expect(transition(owner, app.id, "offer", "user:approve")).rejects.toBeInstanceOf(IllegalTransitionError);
-    const { data: events } = await owner.from("events").select("id").eq("application_id", app.id);
+    const { data: events } = await owner.from("application_events").select("id").eq("application_id", app.id);
     expect(events).toHaveLength(1); // only the creation event
   });
 

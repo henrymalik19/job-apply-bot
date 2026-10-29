@@ -14,9 +14,9 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
       .order("is_current", { ascending: false })
       .order("start_date", { ascending: false }),
     db.from("educations").select("*").order("sort_order").order("end_year", { ascending: false, nullsFirst: true }),
-    db.from("user_skills").select("*, skills(name, normalized, category)").order("sort_order").order("created_at"),
+    db.from("profile_skills").select("*, skills(name, normalized, category)").order("sort_order").order("created_at"),
     db.from("certifications").select("*").order("sort_order").order("issued_on", { ascending: false }),
-    db.from("confirmed_facts").select("*").eq("active", true).order("category").order("sort_order"),
+    db.from("profile_facts").select("*").eq("active", true).order("category").order("sort_order"),
   ]);
   type JobRow = Row<"employments"> & {
     employment_responsibilities: Row<"employment_responsibilities">[];
@@ -29,7 +29,7 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
       skills: employment_skills.map((s) => s.skills?.name).filter((n): n is string => Boolean(n)).sort(),
     }),
   );
-  type SkillRow = Row<"user_skills"> & { skills: Pick<Row<"skills">, "name" | "normalized" | "category"> };
+  type SkillRow = Row<"profile_skills"> & { skills: Pick<Row<"skills">, "name" | "normalized" | "category"> };
   const userSkills: UserSkill[] = (unwrap(skills, "load skills") as unknown as SkillRow[]).map(({ skills: s, ...us }) => ({ ...us, ...s }));
   if (profile.error) unwrap(profile, "load profile");
   return {
@@ -64,7 +64,7 @@ export async function upsertWorkAuthorization(db: Db, row: Insert<"work_authoriz
 /** Generic delete by id for the profile's list tables. */
 export async function deleteRow(
   db: Db,
-  table: "work_authorizations" | "employments" | "educations" | "certifications" | "confirmed_facts",
+  table: "work_authorizations" | "employments" | "educations" | "certifications" | "profile_facts",
   id: string,
 ): Promise<void> {
   check(await db.from(table).delete().eq("id", id), `delete from ${table}`);
@@ -129,9 +129,9 @@ export async function setEmploymentSkills(db: Db, employmentId: string, skillIds
  *
  * @param keepExisting - Only add missing skills; leave existing rows (and their overrides) as they are.
  */
-export async function upsertUserSkills(db: Db, rows: Insert<"user_skills">[], keepExisting = false): Promise<void> {
+export async function upsertUserSkills(db: Db, rows: Insert<"profile_skills">[], keepExisting = false): Promise<void> {
   if (rows.length) {
-    check(await db.from("user_skills").upsert(rows, { onConflict: "skill_id", ignoreDuplicates: keepExisting }), "save skills");
+    check(await db.from("profile_skills").upsert(rows, { onConflict: "skill_id", ignoreDuplicates: keepExisting }), "save skills");
   }
 }
 
@@ -142,7 +142,7 @@ export async function deleteResponsibilities(db: Db, employmentId: string): Prom
 
 /** Removes a skill from the owner's list (the catalog keeps it). */
 export async function deleteUserSkill(db: Db, skillId: string): Promise<void> {
-  check(await db.from("user_skills").delete().eq("skill_id", skillId), "remove skill");
+  check(await db.from("profile_skills").delete().eq("skill_id", skillId), "remove skill");
 }
 
 /** Adds an education entry. */
