@@ -38,7 +38,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
         <CardHeader>
           <CardTitle>Boards</CardTitle>
           <CardDescription>
-            {active.toLocaleString()} active of {boards.length.toLocaleString()}. Higher priority boards are checked first.
+            {active.toLocaleString()} active of {boards.length.toLocaleString()}.
           </CardDescription>
         </CardHeader>
         <CardContent className={scrollingTable.content}>
@@ -51,7 +51,6 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                 <TableRow>
                   <TableHead>Company</TableHead>
                   <TableHead>Board</TableHead>
-                  <TableHead className="text-right">Priority</TableHead>
                   <TableHead>Last check</TableHead>
                   <TableHead className="text-right">Listed</TableHead>
                   <TableHead />
@@ -62,7 +61,6 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                   <TableRow key={b.id} className={b.active ? "" : "text-muted-foreground"}>
                     <TableCell className="font-medium">{b.name}</TableCell>
                     <TableCell className="font-mono text-xs">{b.ats}:{b.board_token}</TableCell>
-                    <TableCell className="text-right tabular-nums">{b.priority}</TableCell>
                     <TableCell><BoardStatus board={b} now={now} /></TableCell>
                     <TableCell className="text-right tabular-nums">
                       {b.status?.last_counts?.fetched?.toLocaleString() ?? "—"}

@@ -13,7 +13,7 @@ import {
   type MatchableJobRow,
 } from "@/server/modules/jobs/jobs.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
-import { listActiveFacts } from "@/server/modules/profile/profile.service";
+import { getProfileLines } from "@/server/modules/profile/profile.service";
 import { failInterruptedRuns, finishRun, latestWorkerRun, startRun } from "@/server/modules/runs/runs.service";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { hardFilter } from "./hard-filters";
@@ -99,7 +99,7 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
     const [{ versionId, criteria }, jobs, facts, lessons, budget] = await Promise.all([
       getMatchCriteria(db),
       listOpenJobsForMatching(db),
-      listActiveFacts(db),
+      getProfileLines(db),
       lessonsFor(db, "scoring"),
       getMonthlySpend(db, now()),
     ]);

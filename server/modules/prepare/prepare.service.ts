@@ -9,12 +9,13 @@ import { fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@
 import type { AppStatus } from "@/server/modules/applications/applications.service";
 import { getMatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
-import { listActiveFacts } from "@/server/modules/profile/profile.service";
+import { resolvePlace } from "@/server/modules/criteria/places";
+import { getProfile, profileLines, type ProfileData } from "@/server/modules/profile/profile.service";
 import { failInterruptedRuns, finishRun, startRun } from "@/server/modules/runs/runs.service";
 import { getSetting } from "@/server/modules/settings/settings.service";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { findAiRestriction, postingFlags, visibleText, type ApplicationFlag } from "./ai-rules";
-import { declineOption, factValue, normalizeQuestion, shapeAnswer, type TopicValue } from "./answers";
+import { declineOption, isProfileTopic, normalizeQuestion, profileValue, shapeAnswer, type TopicValue } from "./answers";
 import {
   buildClassifyPrompt,
   buildDraftPrompt,
@@ -91,7 +92,12 @@ type RunContext = {
   topics: Map<string, Topic>;
   topicsById: Map<string, Topic>;
   variants: Map<string, Variant>;
+  profile: ProfileData;
+  /** The profile as prompt lines. */
   facts: { category: string; fact: string }[];
+  /** The posting's country (ISO code), set per job. */
+  country: string;
+  now: Date;
   answerLessons: { rule: string; scope: string; active: boolean }[];
   spend: { cost: number };
 };
@@ -115,23 +121,23 @@ function baseRow(q: FormQuestion, index: number): Draft {
     answer: null,
     answer_value: null,
     answer_source: null,
-    answer_bank_id: null,
+    answer_topic_id: null,
     needs_check: false,
     reason: null,
   };
 }
 
 function topicValue(topic: Topic, ctx: RunContext): TopicValue | null {
-  if (topic.source === "fact") return factValue(topic.key, ctx.facts);
+  if (isProfileTopic(topic.key)) return profileValue(topic.key, ctx.profile, { country: ctx.country, now: ctx.now });
   return (topic.value as TopicValue | null) ?? null;
 }
 
 /** Fills a row from a topic: auto when the value fits the form, otherwise Needs you. */
 function answerFromTopic(row: Draft, q: FormQuestion, topic: Topic, ctx: RunContext, variant: { inverted: boolean; confirmed: boolean }): Draft {
   const value = topicValue(topic, ctx);
-  const linked = { ...row, answer_bank_id: topic.id };
+  const linked = { ...row, answer_topic_id: topic.id };
   if (value == null) {
-    const why = topic.source === "fact" ? `no reviewed fact states "${topic.label}"` : `no saved answer for "${topic.label}"`;
+    const why = isProfileTopic(topic.key) ? `your profile doesn't say "${topic.label}"` : `no saved answer for "${topic.label}"`;
     return { ...linked, bucket: "needs_user", reason: why };
   }
   const shaped = shapeAnswer(q, value, variant.inverted);
@@ -141,7 +147,7 @@ function answerFromTopic(row: Draft, q: FormQuestion, topic: Topic, ctx: RunCont
     bucket: "auto",
     answer: shaped.answer,
     answer_value: asJson(shaped.value),
-    answer_source: topic.source === "fact" ? "fact" : "bank",
+    answer_source: isProfileTopic(topic.key) ? "fact" : "bank",
     needs_check: !variant.confirmed,
   };
 }
@@ -170,9 +176,12 @@ async function callWithRetry<T>(
 export async function prepareJob(
   deps: PrepareDeps,
   candidate: PrepareCandidate,
-  ctx: RunContext,
+  runCtx: RunContext,
 ): Promise<{ status: AppStatus; flags: ApplicationFlag[]; questions: NewQuestion[]; error?: string }> {
   const { job } = candidate;
+  // Work-authorization questions are about the posting's country; US unless its location names exactly one other.
+  const countries = resolvePlace(job.location ?? "").countries;
+  const ctx: RunContext = { ...runCtx, country: countries.size === 1 ? [...countries][0] : "US" };
   const fetchForm = deps.fetchForm ?? ((ats, token, id) => fetchApplicationForm(ats, token, id));
   const form = await fetchForm(job.source, job.board_token, job.external_id);
   if (!form) return { status: "manual", flags: [], questions: [], error: `no application form available from ${job.source}` };
@@ -207,7 +216,7 @@ export async function prepareJob(
     } else {
       const identity = IDENTITY_FIELDS[q.fieldName];
       const variant = ctx.variants.get(normalizeQuestion(q.label));
-      const topic = identity ? ctx.topics.get(identity.key) : variant ? ctx.topicsById.get(variant.answer_bank_id) : undefined;
+      const topic = identity ? ctx.topics.get(identity.key) : variant ? ctx.topicsById.get(variant.answer_topic_id) : undefined;
       if (topic) {
         rows.push(answerFromTopic(row, q, topic, ctx, {
           inverted: !identity && variant?.polarity === "inverted",
@@ -215,7 +224,7 @@ export async function prepareJob(
         }));
       } else if (identity) {
         // A standard field whose topic doesn't exist yet: create it so Needs you can save the answer.
-        const created = await ensureTopicCached(deps.db, ctx, { ...identity, category: "other" });
+        const created = await ensureTopicCached(deps.db, ctx, { ...identity, category: "other", source: "fact" });
         rows.push(answerFromTopic(row, q, created, ctx, { inverted: false, confirmed: true }));
       } else {
         rows.push(row);
@@ -285,7 +294,7 @@ export async function prepareJob(
 async function ensureTopicCached(
   db: Db,
   ctx: RunContext,
-  topic: { key: string; label: string; category: string; value_type: string },
+  topic: { key: string; label: string; category: string; value_type: string; source?: string },
 ): Promise<Topic> {
   const existing = ctx.topics.get(topic.key);
   if (existing) return existing;
@@ -321,12 +330,12 @@ async function applyClassification(
       const topic = known ?? (c.new_topic ? await ensureTopicCached(db, ctx, c.new_topic) : undefined);
       if (!topic) return { bucket: "needs_user", reason: c.reason };
       if (c.confidence >= VARIANT_CONFIDENCE) {
-        const variant = { normalized_text: normalizeQuestion(q.label), answer_bank_id: topic.id, polarity: c.polarity, confidence: c.confidence, confirmed: false };
+        const variant = { normalized_text: normalizeQuestion(q.label), answer_topic_id: topic.id, polarity: c.polarity, confidence: c.confidence, confirmed: false };
         await insertVariant(db, variant);
-        ctx.variants.set(variant.normalized_text, { ...variant, created_at: new Date().toISOString() });
+        ctx.variants.set(variant.normalized_text, { ...variant, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
         return answerFromTopic(row, q, topic, ctx, { inverted: c.polarity === "inverted", confirmed: false });
       }
-      return { ...row, answer_bank_id: topic.id, bucket: "needs_user", reason: `not sure this is "${topic.label}"` };
+      return { ...row, answer_topic_id: topic.id, bucket: "needs_user", reason: `not sure this is "${topic.label}"` };
     }
   }
 }
@@ -348,9 +357,9 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
   const counts: PrepareCounts = { candidates: 0, queued: 0, needs_input: 0, manual: 0, failed: 0, deferred: 0, cost_usd: 0 };
 
   try {
-    const [{ versionId, criteria }, facts, answerLessons, topics, variants, budget, cap, today] = await Promise.all([
+    const [{ versionId, criteria }, profile, answerLessons, topics, variants, budget, cap, today] = await Promise.all([
       getMatchCriteria(db),
-      listActiveFacts(db),
+      getProfile(db),
       lessonsFor(db, "answers"),
       listTopics(db),
       listVariants(db),
@@ -370,8 +379,10 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       topics: new Map(topics.map((t) => [t.key, t])),
       topicsById: new Map(topics.map((t) => [t.id, t])),
       variants,
-      // The fact guard: answers use reviewed facts only.
-      facts: facts.filter((f) => f.reviewed).map((f) => ({ category: f.category, fact: f.fact })),
+      profile,
+      facts: profileLines(profile, now()),
+      country: "US",
+      now: now(),
       answerLessons: answerLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
       spend: { cost: 0 },
     };

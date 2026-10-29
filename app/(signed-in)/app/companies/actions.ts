@@ -11,7 +11,7 @@ import {
 } from "@/server/modules/companies/companies.service";
 
 /** Values typed into the add-company form, echoed back so they survive React's form reset. */
-export type CompanyValues = { name?: string; ats?: string; board_token?: string; priority?: string };
+export type CompanyValues = { name?: string; ats?: string; board_token?: string };
 
 /** State shared by the Companies page forms. */
 export type FormState = { ok?: string; error?: string; sample?: string[]; values?: CompanyValues };
@@ -32,7 +32,6 @@ export async function companyFormAction(_prev: FormState, formData: FormData): P
     name: String(formData.get("name") ?? ""),
     ats: String(formData.get("ats") ?? ""),
     board_token: String(formData.get("board_token") ?? ""),
-    priority: String(formData.get("priority") ?? "0"),
   };
   const input: CompanyInput = values;
   try {

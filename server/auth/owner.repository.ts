@@ -2,9 +2,11 @@ import type { Db } from "@/server/db/types";
 import { check } from "@/server/core/errors";
 
 /**
- * Records which auth user is the owner (the single row RLS checks through
- * `is_owner()`). Service role only: RLS hides this table from everyone else.
+ * Makes an auth user the owner (RLS checks `users` through `is_owner()`).
+ * There is one owner during the MVP, so a previous owner becomes a member
+ * (nothing is deleted, so their profile stays). Service role only.
  */
 export async function setOwner(db: Db, userId: string): Promise<void> {
-  check(await db.from("owner").upsert({ singleton: true, user_id: userId }), "set owner");
+  check(await db.from("users").update({ role: "member" }).eq("role", "owner").neq("id", userId), "demote previous owner");
+  check(await db.from("users").upsert({ id: userId, role: "owner" }, { onConflict: "id" }), "set owner");
 }

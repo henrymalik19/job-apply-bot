@@ -15,3 +15,6 @@ export type Row<T extends keyof Database["public"]["Tables"]> = Database["public
 
 /** Insert type of a public table, e.g. `Insert<"companies">`. */
 export type Insert<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Insert"];
+
+/** Update type of a public table, e.g. `Update<"jobs">`. */
+export type Update<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Update"];

@@ -1,5 +1,5 @@
 // M5 prepare against a local Supabase, with a fake form fetcher and fake LLM:
-//   - a known topic is answered from reviewed facts, by rule
+//   - a known topic is answered from the profile (work authorization), by rule
 //   - an unknown required question lands in Needs you (needs_input)
 //   - a confident new wording is saved as a variant, so the next job skips the LLM
 //   - a posting that restricts AI routes its free-text questions to Needs you
@@ -19,7 +19,7 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false } }) as un
 
 const tag = randomUUID().slice(0, 8);
 let companyId = "";
-let factId = "";
+let previousAuth: Record<string, unknown> | null = null;
 const jobIds: Record<string, string> = {};
 let previousCap: unknown;
 
@@ -87,12 +87,9 @@ beforeAll(async () => {
   await db.from("settings").upsert({ key: "daily_cap", value: 1000 });
   await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 1000 });
 
-  const { data: fact } = await db
-    .from("confirmed_facts")
-    .insert({ category: "authorization", fact: `Authorized to work in the United States; does not require visa sponsorship. (${tag})`, reviewed: true })
-    .select("id")
-    .single();
-  factId = fact!.id;
+  const { data: auth } = await db.from("work_authorizations").select("*").eq("country", "US").maybeSingle();
+  previousAuth = auth;
+  await db.from("work_authorizations").upsert({ country: "US", authorized: true, requires_sponsorship: false }, { onConflict: "country" });
 
   const { data: company } = await db.from("companies").insert({ name: `PrepCo ${tag}`, ats: "greenhouse", board_token: `prep${tag}` }).select("id").single();
   companyId = company!.id;
@@ -112,14 +109,15 @@ afterAll(async () => {
   await db.from("applications").delete().in("job_id", Object.values(jobIds));
   await db.from("jobs").delete().in("id", Object.values(jobIds));
   await db.from("companies").delete().eq("id", companyId);
-  await db.from("confirmed_facts").delete().eq("id", factId);
-  await db.from("answer_bank").delete().eq("key", `security_clearance_${tag}`);
-  await db.from("answer_bank_variants").delete().like("normalized_text", `%${tag}%`);
+  if (previousAuth) await db.from("work_authorizations").upsert(previousAuth as never, { onConflict: "country" });
+  else await db.from("work_authorizations").delete().eq("country", "US");
+  await db.from("answer_topics").delete().eq("key", `security_clearance_${tag}`);
+  await db.from("answer_topic_variants").delete().like("normalized_text", `%${tag}%`);
   await db.from("settings").upsert({ key: "daily_cap", value: previousCap as number });
 });
 
 describe("prepare", () => {
-  it("answers from facts, drafts open-ended answers and sends unknown questions to Needs you", async () => {
+  it("answers from the profile, drafts open-ended answers and sends unknown questions to Needs you", async () => {
     const { counts } = await prepare(["plain"]);
     expect(counts).toMatchObject({ candidates: 1, needs_input: 1 });
     const app = await application("plain");

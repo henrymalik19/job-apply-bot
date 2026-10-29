@@ -32,10 +32,6 @@ export function AddCompanyForm() {
           <Label htmlFor="board_token">Board token</Label>
           <Input id="board_token" name="board_token" placeholder="e.g. stripe" defaultValue={v.board_token} />
         </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="priority">Priority</Label>
-          <Input id="priority" name="priority" type="number" min={-100} max={100} defaultValue={v.priority ?? 0} />
-        </div>
       </div>
       <div className="flex gap-2">
         <Button type="submit" name="intent" value="test" variant="outline" disabled={pending}>Test board</Button>

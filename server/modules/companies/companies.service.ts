@@ -12,13 +12,12 @@ const boardInput = z.object({
 
 const companyInput = boardInput.extend({
   name: z.string().trim().min(1, "Enter the company name.").max(200),
-  priority: z.coerce.number().int().min(-100).max(100).default(0),
 });
 
 /** Raw form values for a board (strings straight from the form). */
 export type BoardInput = { ats?: unknown; board_token?: unknown };
 /** Raw form values for a company. */
-export type CompanyInput = BoardInput & { name?: unknown; priority?: unknown };
+export type CompanyInput = BoardInput & { name?: unknown };
 
 /** Result of checking a board before adding it. */
 export type BoardCheck = { count: number; sampleTitles: string[] };
@@ -101,7 +100,7 @@ export async function importCompanies(
   const invalidTokens = wanted.filter((c) => !BOARD_TOKEN.test(c.board_token)).map((c) => c.board_token);
   const rows = wanted
     .filter((c) => BOARD_TOKEN.test(c.board_token))
-    .map((c) => ({ name: c.name, ats: c.ats, board_token: c.board_token, priority: Math.min(c.remote_fit_roles, 100) }));
+    .map((c) => ({ name: c.name, ats: c.ats, board_token: c.board_token }));
   await companies.upsertCompanies(db, rows);
   return { imported: rows.length, invalidTokens };
 }

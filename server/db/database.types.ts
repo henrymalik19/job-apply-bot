@@ -5,57 +5,57 @@ export type Database = {
   
   "public": {
           Tables: {
-            "answer_bank": {
+            "answer_topic_variants": {
                   Row: {
-                    "category": string,"id": string,"key": string,"label": string,"source": string,"updated_at": string,"value": Json | null,"value_type": string
+                    "answer_topic_id": string,"confidence": number | null,"confirmed": boolean,"created_at": string,"normalized_text": string,"polarity": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "category"?: string,"id"?: string,"key": string,"label": string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type": string
+                    "answer_topic_id": string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text": string,"polarity"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "category"?: string,"id"?: string,"key"?: string,"label"?: string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type"?: string
+                    "answer_topic_id"?: string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text"?: string,"polarity"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "answer_topic_variants_answer_topic_id_fkey"
+      columns: ["answer_topic_id"]
+isOneToOne: false
+      referencedRelation: "answer_topics"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"answer_topics": {
+                  Row: {
+                    "category": string,"created_at": string,"id": string,"key": string,"label": string,"source": string,"updated_at": string,"value": Json | null,"value_type": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "category"?: string,"created_at"?: string,"id"?: string,"key": string,"label": string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type": string
+                  }
+                  Update: {
+                    "category"?: string,"created_at"?: string,"id"?: string,"key"?: string,"label"?: string,"source"?: string,"updated_at"?: string,"value"?: Json | null,"value_type"?: string
                   }
                   Relationships: [
                     
                   ]
-                },"answer_bank_variants": {
-                  Row: {
-                    "answer_bank_id": string,"confidence": number | null,"confirmed": boolean,"created_at": string,"normalized_text": string,"polarity": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "answer_bank_id": string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text": string,"polarity"?: string
-                  }
-                  Update: {
-                    "answer_bank_id"?: string,"confidence"?: number | null,"confirmed"?: boolean,"created_at"?: string,"normalized_text"?: string,"polarity"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "answer_bank_variants_answer_bank_id_fkey"
-      columns: ["answer_bank_id"]
-isOneToOne: false
-      referencedRelation: "answer_bank"
-      referencedColumns: ["id"]
-    }
-                  ]
                 },"application_questions": {
                   Row: {
-                    "answer": string | null,"answer_bank_id": string | null,"answer_source": string | null,"answer_value": Json | null,"application_id": string,"bucket": string,"created_at": string,"description": string | null,"field_name": string | null,"field_type": string | null,"id": string,"needs_check": boolean,"options": Json | null,"question": string,"reason": string | null,"required": boolean,"sort_order": number,"user_approved": boolean
+                    "answer": string | null,"answer_source": string | null,"answer_topic_id": string | null,"answer_value": Json | null,"application_id": string,"bucket": string,"created_at": string,"description": string | null,"field_name": string | null,"field_type": string | null,"id": string,"needs_check": boolean,"options": Json | null,"question": string,"reason": string | null,"required": boolean,"sort_order": number,"updated_at": string,"user_approved": boolean
                   }
                   ComputedFields: never
                   Insert: {
-                    "answer"?: string | null,"answer_bank_id"?: string | null,"answer_source"?: string | null,"answer_value"?: Json | null,"application_id": string,"bucket": string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question": string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"user_approved"?: boolean
+                    "answer"?: string | null,"answer_source"?: string | null,"answer_topic_id"?: string | null,"answer_value"?: Json | null,"application_id": string,"bucket": string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question": string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"updated_at"?: string,"user_approved"?: boolean
                   }
                   Update: {
-                    "answer"?: string | null,"answer_bank_id"?: string | null,"answer_source"?: string | null,"answer_value"?: Json | null,"application_id"?: string,"bucket"?: string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question"?: string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"user_approved"?: boolean
+                    "answer"?: string | null,"answer_source"?: string | null,"answer_topic_id"?: string | null,"answer_value"?: Json | null,"application_id"?: string,"bucket"?: string,"created_at"?: string,"description"?: string | null,"field_name"?: string | null,"field_type"?: string | null,"id"?: string,"needs_check"?: boolean,"options"?: Json | null,"question"?: string,"reason"?: string | null,"required"?: boolean,"sort_order"?: number,"updated_at"?: string,"user_approved"?: boolean
                   }
                   Relationships: [
                     {
-      foreignKeyName: "application_questions_answer_bank_id_fkey"
-      columns: ["answer_bank_id"]
+      foreignKeyName: "application_questions_answer_topic_id_fkey"
+      columns: ["answer_topic_id"]
 isOneToOne: false
-      referencedRelation: "answer_bank"
+      referencedRelation: "answer_topics"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "application_questions_application_id_fkey"
@@ -73,14 +73,14 @@ isOneToOne: false
                   ]
                 },"applications": {
                   Row: {
-                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"prepare_error": string | null,"prepared_at": string | null,"resume_content": Json | null,"resume_pdf_path": string | null,"status": Database["public"]['Enums']["app_status"],"submitted_at": string | null
+                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"prepare_error": string | null,"prepared_at": string | null,"resume_content": Json | null,"resume_pdf_path": string | null,"status": Database["public"]['Enums']["app_status"],"submitted_at": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: Database["public"]['Enums']["app_status"],"submitted_at"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -97,58 +97,86 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"companies": {
+                },"certifications": {
                   Row: {
-                    "active": boolean,"ats": string,"board_token": string | null,"created_at": string,"id": string,"name": string,"priority": number
+                    "created_at": string,"credential_url": string | null,"expires_on": string | null,"id": string,"issued_on": string | null,"issuer": string | null,"name": string,"sort_order": number,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"ats": string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name": string,"priority"?: number
+                    "created_at"?: string,"credential_url"?: string | null,"expires_on"?: string | null,"id"?: string,"issued_on"?: string | null,"issuer"?: string | null,"name": string,"sort_order"?: number,"updated_at"?: string
                   }
                   Update: {
-                    "active"?: boolean,"ats"?: string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"priority"?: number
+                    "created_at"?: string,"credential_url"?: string | null,"expires_on"?: string | null,"id"?: string,"issued_on"?: string | null,"issuer"?: string | null,"name"?: string,"sort_order"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"companies": {
+                  Row: {
+                    "active": boolean,"ats": string,"board_token": string | null,"created_at": string,"id": string,"name": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"ats": string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "active"?: boolean,"ats"?: string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"confirmed_facts": {
                   Row: {
-                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"reviewed": boolean,"sort_order": number,"source": string | null,"structured": Json | null
+                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"sort_order": number,"source": string | null,"structured": Json | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"reviewed"?: boolean,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null
+                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
                   }
                   Update: {
-                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"reviewed"?: boolean,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null
+                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"criteria_versions": {
                   Row: {
-                    "created_at": string,"criteria": NonNullable<Json>,"id": string
+                    "created_at": string,"criteria": NonNullable<Json>,"id": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"criteria": NonNullable<Json>,"id"?: string
+                    "created_at"?: string,"criteria": NonNullable<Json>,"id"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"criteria"?: NonNullable<Json>,"id"?: string
+                    "created_at"?: string,"criteria"?: NonNullable<Json>,"id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"educations": {
+                  Row: {
+                    "completed": boolean,"created_at": string,"degree": string | null,"end_year": number | null,"field_of_study": string | null,"id": string,"institution": string,"sort_order": number,"start_year": number | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "completed"?: boolean,"created_at"?: string,"degree"?: string | null,"end_year"?: number | null,"field_of_study"?: string | null,"id"?: string,"institution": string,"sort_order"?: number,"start_year"?: number | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "completed"?: boolean,"created_at"?: string,"degree"?: string | null,"end_year"?: number | null,"field_of_study"?: string | null,"id"?: string,"institution"?: string,"sort_order"?: number,"start_year"?: number | null,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"emails": {
                   Row: {
-                    "application_id": string | null,"classification": string | null,"from_addr": string | null,"id": string,"match_confidence": number | null,"message_id": string,"processed_at": string,"received_at": string,"snippet": string | null,"subject": string | null
+                    "application_id": string | null,"classification": string | null,"created_at": string,"from_addr": string | null,"id": string,"match_confidence": number | null,"message_id": string,"processed_at": string,"received_at": string,"snippet": string | null,"subject": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id"?: string | null,"classification"?: string | null,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id": string,"processed_at"?: string,"received_at": string,"snippet"?: string | null,"subject"?: string | null
+                    "application_id"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id": string,"processed_at"?: string,"received_at": string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "application_id"?: string | null,"classification"?: string | null,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id"?: string,"processed_at"?: string,"received_at"?: string,"snippet"?: string | null,"subject"?: string | null
+                    "application_id"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id"?: string,"processed_at"?: string,"received_at"?: string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -165,16 +193,76 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"events": {
+                },"employment_responsibilities": {
                   Row: {
-                    "application_id": string | null,"cause": string,"created_at": string,"detail": Json | null,"from_status": Database["public"]['Enums']["app_status"] | null,"id": number,"job_id": string | null,"to_status": Database["public"]['Enums']["app_status"] | null
+                    "created_at": string,"employment_id": string,"id": string,"sort_order": number,"text": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id"?: string | null,"cause": string,"created_at"?: string,"detail"?: Json | null,"from_status"?: Database["public"]['Enums']["app_status"] | null,"id"?: never,"job_id"?: string | null,"to_status"?: Database["public"]['Enums']["app_status"] | null
+                    "created_at"?: string,"employment_id": string,"id"?: string,"sort_order"?: number,"text": string,"updated_at"?: string
                   }
                   Update: {
-                    "application_id"?: string | null,"cause"?: string,"created_at"?: string,"detail"?: Json | null,"from_status"?: Database["public"]['Enums']["app_status"] | null,"id"?: never,"job_id"?: string | null,"to_status"?: Database["public"]['Enums']["app_status"] | null
+                    "created_at"?: string,"employment_id"?: string,"id"?: string,"sort_order"?: number,"text"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "employment_responsibilities_employment_id_fkey"
+      columns: ["employment_id"]
+isOneToOne: false
+      referencedRelation: "employments"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"employment_skills": {
+                  Row: {
+                    "created_at": string,"employment_id": string,"skill_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"employment_id": string,"skill_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"employment_id"?: string,"skill_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "employment_skills_employment_id_fkey"
+      columns: ["employment_id"]
+isOneToOne: false
+      referencedRelation: "employments"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "employment_skills_skill_id_fkey"
+      columns: ["skill_id"]
+isOneToOne: false
+      referencedRelation: "skills"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"employments": {
+                  Row: {
+                    "created_at": string,"description": string | null,"employer": string,"employment_type": string | null,"end_date": string | null,"id": string,"is_current": boolean,"location": string | null,"sort_order": number,"start_date": string,"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"description"?: string | null,"employer": string,"employment_type"?: string | null,"end_date"?: string | null,"id"?: string,"is_current"?: boolean,"location"?: string | null,"sort_order"?: number,"start_date": string,"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"description"?: string | null,"employer"?: string,"employment_type"?: string | null,"end_date"?: string | null,"id"?: string,"is_current"?: boolean,"location"?: string | null,"sort_order"?: number,"start_date"?: string,"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"events": {
+                  Row: {
+                    "application_id": string | null,"cause": string,"created_at": string,"detail": Json | null,"from_status": Database["public"]['Enums']["app_status"] | null,"id": number,"job_id": string | null,"to_status": Database["public"]['Enums']["app_status"] | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "application_id"?: string | null,"cause": string,"created_at"?: string,"detail"?: Json | null,"from_status"?: Database["public"]['Enums']["app_status"] | null,"id"?: never,"job_id"?: string | null,"to_status"?: Database["public"]['Enums']["app_status"] | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "application_id"?: string | null,"cause"?: string,"created_at"?: string,"detail"?: Json | null,"from_status"?: Database["public"]['Enums']["app_status"] | null,"id"?: never,"job_id"?: string | null,"to_status"?: Database["public"]['Enums']["app_status"] | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -197,16 +285,16 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"evidence": {
+                },"evidence_items": {
                   Row: {
-                    "application_id": string,"created_at": string,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null
+                    "application_id": string,"created_at": string,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id": string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null
+                    "application_id": string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "application_id"?: string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null
+                    "application_id"?: string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -225,14 +313,14 @@ isOneToOne: false
                   ]
                 },"jobs": {
                   Row: {
-                    "apply_url": string | null,"closed_at": string | null,"company_id": string | null,"company_name": string,"dedup_key": string,"description_md": string | null,"external_id": string | null,"first_seen_at": string,"id": string,"last_seen_at": string,"location": string | null,"posted_at": string | null,"raw": Json | null,"remote_type": string | null,"salary_currency": string | null,"salary_max": number | null,"salary_min": number | null,"source": string,"title": string,"url": string
+                    "apply_url": string | null,"closed_at": string | null,"company_id": string | null,"company_name": string,"created_at": string,"dedup_key": string,"description_md": string | null,"external_id": string | null,"first_seen_at": string,"id": string,"last_seen_at": string,"location": string | null,"posted_at": string | null,"raw": Json | null,"remote_type": string | null,"salary_currency": string | null,"salary_max": number | null,"salary_min": number | null,"source": string,"title": string,"updated_at": string,"url": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_url"?: string | null,"closed_at"?: string | null,"company_id"?: string | null,"company_name": string,"dedup_key": string,"description_md"?: string | null,"external_id"?: string | null,"first_seen_at"?: string,"id"?: string,"last_seen_at"?: string,"location"?: string | null,"posted_at"?: string | null,"raw"?: Json | null,"remote_type"?: string | null,"salary_currency"?: string | null,"salary_max"?: number | null,"salary_min"?: number | null,"source": string,"title": string,"url": string
+                    "apply_url"?: string | null,"closed_at"?: string | null,"company_id"?: string | null,"company_name": string,"created_at"?: string,"dedup_key": string,"description_md"?: string | null,"external_id"?: string | null,"first_seen_at"?: string,"id"?: string,"last_seen_at"?: string,"location"?: string | null,"posted_at"?: string | null,"raw"?: Json | null,"remote_type"?: string | null,"salary_currency"?: string | null,"salary_max"?: number | null,"salary_min"?: number | null,"source": string,"title": string,"updated_at"?: string,"url": string
                   }
                   Update: {
-                    "apply_url"?: string | null,"closed_at"?: string | null,"company_id"?: string | null,"company_name"?: string,"dedup_key"?: string,"description_md"?: string | null,"external_id"?: string | null,"first_seen_at"?: string,"id"?: string,"last_seen_at"?: string,"location"?: string | null,"posted_at"?: string | null,"raw"?: Json | null,"remote_type"?: string | null,"salary_currency"?: string | null,"salary_max"?: number | null,"salary_min"?: number | null,"source"?: string,"title"?: string,"url"?: string
+                    "apply_url"?: string | null,"closed_at"?: string | null,"company_id"?: string | null,"company_name"?: string,"created_at"?: string,"dedup_key"?: string,"description_md"?: string | null,"external_id"?: string | null,"first_seen_at"?: string,"id"?: string,"last_seen_at"?: string,"location"?: string | null,"posted_at"?: string | null,"raw"?: Json | null,"remote_type"?: string | null,"salary_currency"?: string | null,"salary_max"?: number | null,"salary_min"?: number | null,"source"?: string,"title"?: string,"updated_at"?: string,"url"?: string
                   }
                   Relationships: [
                     {
@@ -245,28 +333,28 @@ isOneToOne: false
                   ]
                 },"lessons": {
                   Row: {
-                    "active": boolean,"created_at": string,"id": string,"platform": string | null,"rule": string,"scope": string,"source": string | null
+                    "active": boolean,"created_at": string,"id": string,"platform": string | null,"rule": string,"scope": string,"source": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule": string,"scope"?: string,"source"?: string | null
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule": string,"scope"?: string,"source"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule"?: string,"scope"?: string,"source"?: string | null
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"platform"?: string | null,"rule"?: string,"scope"?: string,"source"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
-                },"llm_usage": {
+                },"llm_calls": {
                   Row: {
-                    "cache_read_tokens": number,"cache_write_tokens": number,"cost_usd": number,"created_at": string,"id": string,"input_tokens": number,"job_id": string | null,"model": string,"output_tokens": number,"purpose": string
+                    "cache_read_tokens": number,"cache_write_tokens": number,"cost_usd": number,"created_at": string,"id": string,"input_tokens": number,"job_id": string | null,"model": string,"output_tokens": number,"purpose": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model": string,"output_tokens"?: number,"purpose": string
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model": string,"output_tokens"?: number,"purpose": string,"updated_at"?: string
                   }
                   Update: {
-                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model"?: string,"output_tokens"?: number,"purpose"?: string
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"created_at"?: string,"id"?: string,"input_tokens"?: number,"job_id"?: string | null,"model"?: string,"output_tokens"?: number,"purpose"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -279,14 +367,14 @@ isOneToOne: false
                   ]
                 },"matches": {
                   Row: {
-                    "created_at": string,"criteria_version_id": string,"error": string | null,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null,"status": string
+                    "created_at": string,"criteria_version_id": string,"error": string | null,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null,"status": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"criteria_version_id": string,"error"?: string | null,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string
+                    "created_at"?: string,"criteria_version_id": string,"error"?: string | null,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"criteria_version_id"?: string,"error"?: string | null,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string
+                    "created_at"?: string,"criteria_version_id"?: string,"error"?: string | null,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -303,72 +391,140 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"owner": {
+                },"profiles": {
                   Row: {
-                    "created_at": string,"singleton": boolean,"user_id": string
+                    "city": string | null,"country": string,"created_at": string,"email": string | null,"first_name": string | null,"github_url": string | null,"headline": string | null,"last_name": string | null,"linkedin_url": string | null,"notice_period": string | null,"phone": string | null,"postal_code": string | null,"preferred_name": string | null,"state": string | null,"summary": string | null,"updated_at": string,"user_id": string,"website_url": string | null,"willing_to_relocate": boolean | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"singleton"?: boolean,"user_id": string
+                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id": string,"website_url"?: string | null,"willing_to_relocate"?: boolean | null
                   }
                   Update: {
-                    "created_at"?: string,"singleton"?: boolean,"user_id"?: string
+                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id"?: string,"website_url"?: string | null,"willing_to_relocate"?: boolean | null
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "profiles_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"resume_versions": {
                   Row: {
-                    "content": NonNullable<Json>,"created_at": string,"id": string,"is_master": boolean,"label": string
+                    "content": NonNullable<Json>,"created_at": string,"id": string,"is_master": boolean,"label": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "content": NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label": string
+                    "content": NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label": string,"updated_at"?: string
                   }
                   Update: {
-                    "content"?: NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label"?: string
+                    "content"?: NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"runs": {
                   Row: {
-                    "counts": Json | null,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"samples": Json | null,"source": string | null,"started_at": string,"worker": string
+                    "counts": Json | null,"created_at": string,"error": string | null,"finished_at": string | null,"id": string,"ok": boolean | null,"samples": Json | null,"source": string | null,"started_at": string,"updated_at": string,"worker": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"worker": string
+                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker": string
                   }
                   Update: {
-                    "counts"?: Json | null,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"worker"?: string
+                    "counts"?: Json | null,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"ok"?: boolean | null,"samples"?: Json | null,"source"?: string | null,"started_at"?: string,"updated_at"?: string,"worker"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"settings": {
                   Row: {
-                    "key": string,"updated_at": string,"value": NonNullable<Json>
+                    "created_at": string,"key": string,"updated_at": string,"value": NonNullable<Json>
                   }
                   ComputedFields: never
                   Insert: {
-                    "key": string,"updated_at"?: string,"value": NonNullable<Json>
+                    "created_at"?: string,"key": string,"updated_at"?: string,"value": NonNullable<Json>
                   }
                   Update: {
-                    "key"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                    "created_at"?: string,"key"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"skills": {
+                  Row: {
+                    "aliases": (string)[],"category": string | null,"created_at": string,"id": string,"name": string,"normalized": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "aliases"?: (string)[],"category"?: string | null,"created_at"?: string,"id"?: string,"name": string,"normalized": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "aliases"?: (string)[],"category"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"normalized"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
                   ]
                 },"status_transitions": {
                   Row: {
-                    "from_status": Database["public"]['Enums']["app_status"],"to_status": Database["public"]['Enums']["app_status"]
+                    "created_at": string,"from_status": Database["public"]['Enums']["app_status"],"to_status": Database["public"]['Enums']["app_status"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "from_status": Database["public"]['Enums']["app_status"],"to_status": Database["public"]['Enums']["app_status"]
+                    "created_at"?: string,"from_status": Database["public"]['Enums']["app_status"],"to_status": Database["public"]['Enums']["app_status"],"updated_at"?: string
                   }
                   Update: {
-                    "from_status"?: Database["public"]['Enums']["app_status"],"to_status"?: Database["public"]['Enums']["app_status"]
+                    "created_at"?: string,"from_status"?: Database["public"]['Enums']["app_status"],"to_status"?: Database["public"]['Enums']["app_status"],"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"user_skills": {
+                  Row: {
+                    "created_at": string,"last_used_year": number | null,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"years_override": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id": string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
+                  }
+                  Update: {
+                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id"?: string,"sort_order"?: number,"updated_at"?: string,"years_override"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "user_skills_skill_id_fkey"
+      columns: ["skill_id"]
+isOneToOne: true
+      referencedRelation: "skills"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"users": {
+                  Row: {
+                    "created_at": string,"id": string,"role": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id": string,"role"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"role"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"work_authorizations": {
+                  Row: {
+                    "authorized": boolean,"country": string,"created_at": string,"id": string,"notes": string | null,"requires_sponsorship": boolean,"status": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "authorized": boolean,"country": string,"created_at"?: string,"id"?: string,"notes"?: string | null,"requires_sponsorship": boolean,"status"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "authorized"?: boolean,"country"?: string,"created_at"?: string,"id"?: string,"notes"?: string | null,"requires_sponsorship"?: boolean,"status"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -421,7 +577,8 @@ isOneToOne: false
 "resume_content": Json | null,
 "resume_pdf_path": string | null,
 "status": Database["public"]['Enums']["app_status"],
-"submitted_at": string | null
+"submitted_at": string | null,
+"updated_at": string
             }
                           SetofOptions: {
         from: "*"

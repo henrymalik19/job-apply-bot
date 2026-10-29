@@ -95,7 +95,7 @@ beforeAll(async () => {
 afterAll(async () => {
   const ids = Object.values(jobIds);
   await db.from("matches").delete().in("job_id", ids);
-  await db.from("llm_usage").delete().in("job_id", ids);
+  await db.from("llm_calls").delete().in("job_id", ids);
   await db.from("jobs").delete().in("id", ids);
   await db.from("companies").delete().eq("id", companyId);
   await db.from("lessons").delete().in("id", lessonIds);
@@ -125,7 +125,7 @@ describe("matching", () => {
   });
 
   it("records usage and cost for every LLM call", async () => {
-    const { data } = await db.from("llm_usage").select("purpose, cost_usd").in("job_id", Object.values(jobIds));
+    const { data } = await db.from("llm_calls").select("purpose, cost_usd").in("job_id", Object.values(jobIds));
     // good 1 + flaky 2 + garbage 2 = 5 calls at $0.00015 each (1,000 in, 100 out on Haiku)
     expect(data).toHaveLength(5);
     expect(data!.every((u) => u.purpose === "score" && Number(u.cost_usd) === 0.00015)).toBe(true);

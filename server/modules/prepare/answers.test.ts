@@ -1,31 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { declineOption, factValue, normalizeQuestion, shapeAnswer } from "./answers";
+import type { ProfileData } from "@/server/modules/profile/profile.service";
+import { declineOption, isProfileTopic, normalizeQuestion, profileValue, shapeAnswer } from "./answers";
 
-const facts = [
-  { category: "authorization", fact: "Authorized to work in the United States; does not require visa sponsorship." },
-  { category: "logistics", fact: "Based in Houston, TX; prefers remote work; not willing to relocate." },
-  { category: "link", fact: "LinkedIn: https://www.linkedin.com/in/someone." },
-  { category: "link", fact: "GitHub: https://github.com/someone" },
-];
+const now = new Date("2026-10-01T00:00:00Z");
+const job = (employer: string, start: string, end: string | null, skills: string[], current = false) => ({
+  id: employer, employer, title: "Engineer", location: null, employment_type: null, start_date: start, end_date: end,
+  is_current: current, description: null, sort_order: 0, created_at: "", updated_at: "", responsibilities: [], skills,
+});
+const data: ProfileData = {
+  profile: {
+    user_id: "u", first_name: "Sam", last_name: "Lee", preferred_name: null, email: "sam@example.test", phone: null,
+    city: "Houston", state: "TX", country: "US", postal_code: null, linkedin_url: "https://www.linkedin.com/in/someone",
+    github_url: null, website_url: null, headline: null, summary: null, willing_to_relocate: false, notice_period: null,
+    created_at: "", updated_at: "",
+  },
+  workAuthorizations: [{ id: "a", country: "US", authorized: true, requires_sponsorship: false, status: null, notes: null, created_at: "", updated_at: "" }],
+  employment: [job("A", "2019-01-01", "2022-01-01", ["AWS"]), job("B", "2021-01-01", null, ["AWS", "TypeScript"], true)],
+  education: [],
+  skills: [{ skill_id: "s1", name: "Kubernetes", normalized: "kubernetes", aliases: ["k8s"], category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" }],
+  certifications: [],
+  facts: [],
+};
+const opts = { country: "US", now };
 
 const select = (...labels: string[]) => ({
   fieldType: "select" as const,
   options: labels.map((label, i) => ({ label, value: String(i) })),
 });
 
-describe("factValue", () => {
-  it("reads fact topics from confirmed facts", () => {
-    expect(factValue("work_authorization", facts)).toBe(true);
-    expect(factValue("requires_sponsorship", facts)).toBe(false);
-    expect(factValue("current_location", facts)).toBe("Houston, TX");
-    expect(factValue("linkedin_url", facts)).toBe("https://www.linkedin.com/in/someone");
-    expect(factValue("github_url", facts)).toBe("https://github.com/someone");
-    expect(factValue("website_url", facts)).toBeNull();
+describe("profileValue", () => {
+  it("reads profile topics from the structured profile", () => {
+    expect(profileValue("full_name", data, opts)).toBe("Sam Lee");
+    expect(profileValue("current_location", data, opts)).toBe("Houston, TX");
+    expect(profileValue("linkedin_url", data, opts)).toBe("https://www.linkedin.com/in/someone");
+    expect(profileValue("willing_to_relocate", data, opts)).toBe(false);
+    expect(profileValue("github_url", data, opts)).toBeNull();
   });
 
-  it("returns null when no fact states it", () => {
-    expect(factValue("requires_sponsorship", [])).toBeNull();
-    expect(factValue("unknown_topic", facts)).toBeNull();
+  it("answers work authorization for the posting's country only", () => {
+    expect(profileValue("work_authorization", data, opts)).toBe(true);
+    expect(profileValue("requires_sponsorship", data, opts)).toBe(false);
+    expect(profileValue("requires_sponsorship", data, { ...opts, country: "CA" })).toBeNull();
+  });
+
+  it("computes years with a skill from overlapping jobs, or uses the override", () => {
+    expect(profileValue("years:aws", data, opts)).toBe(7.8); // Jan 2019 – Oct 2026, overlap counted once
+    expect(profileValue("years:TypeScript", data, opts)).toBe(5.8);
+    expect(profileValue("years:k8s", data, opts)).toBe(3);
+    expect(profileValue("years:cobol", data, opts)).toBeNull();
+    expect(isProfileTopic("years:go") && isProfileTopic("email") && !isProfileTopic("salary_expectation")).toBe(true);
   });
 });
 

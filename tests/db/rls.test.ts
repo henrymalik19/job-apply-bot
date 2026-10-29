@@ -5,6 +5,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { setOwner } from "@/server/auth/owner.repository";
+import type { Db } from "@/server/db/types";
 import { IllegalTransitionError, transition } from "@/server/modules/applications/applications.repository";
 import type {} from "./setup";
 
@@ -12,8 +14,8 @@ const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");
 
 const TABLES = [
   "companies", "jobs", "criteria_versions", "matches", "resume_versions", "applications",
-  "answer_bank", "application_questions", "evidence", "emails", "events", "runs", "settings",
-  "status_transitions", "owner", "run_source_status", "lessons", "confirmed_facts", "llm_usage",
+  "answer_topics", "answer_topic_variants", "application_questions", "evidence_items", "emails", "events", "runs", "settings",
+  "status_transitions", "users", "run_source_status", "lessons", "confirmed_facts", "llm_calls", "profiles", "work_authorizations", "employments", "employment_responsibilities", "employment_skills", "skills", "user_skills", "educations", "certifications",
 ];
 
 const opts = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -57,21 +59,20 @@ async function insertApplication(db: SupabaseClient) {
 }
 
 beforeAll(async () => {
-  const { data } = await service.from("owner").select("user_id").maybeSingle();
-  previousOwner = data?.user_id ?? null;
+  const { data } = await service.from("users").select("id").eq("role", "owner").maybeSingle();
+  previousOwner = data?.id ?? null;
 
   owner = await signedInUser();
   stranger = await signedInUser();
-  const { error } = await service.from("owner").upsert({ singleton: true, user_id: userIds[0] });
-  if (error) throw error;
+  await setOwner(service as unknown as Db, userIds[0]);
 });
 
 afterAll(async () => {
   // Leave the local database as we found it (events cascade from both).
   await service.from("applications").delete().in("job_id", jobIds);
   await service.from("jobs").delete().in("id", jobIds);
-  if (previousOwner) await service.from("owner").upsert({ singleton: true, user_id: previousOwner });
-  else await service.from("owner").delete().eq("singleton", true);
+  if (previousOwner) await setOwner(service as unknown as Db, previousOwner);
+  await service.from("users").delete().in("id", userIds);
   for (const id of userIds) await service.auth.admin.deleteUser(id);
 });
 
@@ -144,8 +145,8 @@ describe("owner", () => {
     expect(events![0]).toMatchObject({ from_status: null, to_status: "queued", cause: "system:create" });
   });
 
-  it("cannot read the owner table", async () => {
-    const { data } = await owner.from("owner").select("*");
+  it("cannot read the users table", async () => {
+    const { data } = await owner.from("users").select("*");
     expect(data ?? []).toEqual([]);
   });
 });

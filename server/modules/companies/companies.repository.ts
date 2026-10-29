@@ -10,23 +10,22 @@ export type Company = Row<"companies">;
 export type BoardCompany = { id: string; name: string; ats: BoardAts; board_token: string };
 
 /** Fields for adding a company. */
-export type NewCompany = Pick<Insert<"companies">, "name" | "ats" | "board_token" | "priority">;
+export type NewCompany = Pick<Insert<"companies">, "name" | "ats" | "board_token">;
 
-/** All companies: active first, then by priority (highest first), then name. */
+/** All companies: active first, then by name. */
 export async function listCompanies(db: Db): Promise<Company[]> {
   return unwrap(
     await db
       .from("companies")
       .select("*")
       .order("active", { ascending: false })
-      .order("priority", { ascending: false })
       .order("name"),
     "list companies",
   );
 }
 
 /**
- * Active companies on a supported ATS with a board token, highest priority first.
+ * Active companies on a supported ATS with a board token, by name.
  *
  * @param onlyIds - Restrict to these company ids (used by tests).
  */
@@ -37,7 +36,7 @@ export async function listActiveBoards(db: Db, onlyIds?: string[]): Promise<Boar
     .eq("active", true)
     .in("ats", [...BOARD_ATS])
     .not("board_token", "is", null)
-    .order("priority", { ascending: false });
+    .order("name");
   if (onlyIds) query = query.in("id", onlyIds);
   return unwrap(await query, "list active boards") as BoardCompany[];
 }
@@ -57,7 +56,7 @@ export async function setCompanyActive(db: Db, id: string, active: boolean): Pro
 }
 
 /**
- * Inserts companies or updates name/priority of existing ones, matched on
+ * Inserts companies or updates the name of existing ones, matched on
  * `(ats, board_token)`. Leaves `active` untouched so paused boards stay paused.
  */
 export async function upsertCompanies(db: Db, companies: NewCompany[]): Promise<void> {

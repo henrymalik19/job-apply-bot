@@ -3,8 +3,8 @@
 -- their questions gain what the prepare worker and approval screens need.
 
 -- ---------------------------------------------------------------------------
--- Answer bank, reshaped. The M1 table was never written to; refuse to drop it
--- if it somehow has rows.
+-- Answer bank, reshaped into answer_topics. The M1 answer_bank table was
+-- never written to; refuse to drop it if it somehow has rows.
 -- ---------------------------------------------------------------------------
 do $$
 begin
@@ -14,10 +14,11 @@ begin
 end $$;
 
 alter table application_questions drop constraint application_questions_answer_bank_id_fkey;
+alter table application_questions rename column answer_bank_id to answer_topic_id;
 drop table answer_bank;
 
 -- One row per topic answered once. Rows, not columns: new topics need no migration.
-create table answer_bank (
+create table answer_topics (
   id uuid primary key default gen_random_uuid(),
   key text not null unique,
   label text not null,
@@ -32,16 +33,16 @@ create table answer_bank (
 );
 
 -- Every question wording seen, mapped to its topic.
-create table answer_bank_variants (
+create table answer_topic_variants (
   normalized_text text primary key,
-  answer_bank_id uuid not null references answer_bank(id) on delete cascade,
+  answer_topic_id uuid not null references answer_topics(id) on delete cascade,
   -- 'inverted': the wording asks the opposite ("authorized WITHOUT sponsorship?").
   polarity text not null default 'same' check (polarity in ('same','inverted')),
   confidence numeric,
   confirmed boolean not null default false,
   created_at timestamptz not null default now()
 );
-create index answer_bank_variants_topic_idx on answer_bank_variants (answer_bank_id);
+create index answer_topic_variants_topic_idx on answer_topic_variants (answer_topic_id);
 
 -- ---------------------------------------------------------------------------
 -- Applications and their questions.
@@ -61,12 +62,12 @@ alter table application_questions
   add column needs_check boolean not null default false,  -- derived from an unconfirmed variant
   add column reason text,                 -- why it's needs_user / cannot_automate
   add column created_at timestamptz not null default now(),
-  add constraint application_questions_answer_bank_id_fkey
-    foreign key (answer_bank_id) references answer_bank(id) on delete set null;
+  add constraint application_questions_answer_topic_id_fkey
+    foreign key (answer_topic_id) references answer_topics(id) on delete set null;
 create index application_questions_app_idx on application_questions (application_id, sort_order);
 
 -- Fact topics: their value comes from confirmed_facts, so they exist from the start.
-insert into answer_bank (key, label, category, value_type, source) values
+insert into answer_topics (key, label, category, value_type, source) values
   ('work_authorization', 'Authorized to work in the US', 'authorization', 'boolean', 'fact'),
   ('requires_sponsorship', 'Requires visa sponsorship', 'authorization', 'boolean', 'fact'),
   ('current_location', 'Where I live (city, state)', 'logistics', 'text', 'fact'),
@@ -77,7 +78,7 @@ insert into answer_bank (key, label, category, value_type, source) values
 do $$
 declare t text;
 begin
-  foreach t in array array['answer_bank','answer_bank_variants'] loop
+  foreach t in array array['answer_topics','answer_topic_variants'] loop
     execute format('alter table %I enable row level security', t);
     execute format('alter table %I force row level security', t);
     execute format(
@@ -85,4 +86,4 @@ begin
   end loop;
 end $$;
 
-revoke all on answer_bank, answer_bank_variants from anon;
+revoke all on answer_topics, answer_topic_variants from anon;

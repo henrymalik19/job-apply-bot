@@ -1,71 +1,97 @@
-// Imports the owner's profile from the old app export (data/old, git-ignored):
-// facts (unreviewed), the master resume, and initial matching criteria from
-// the old "Remote Development" search. Skips each part that already exists.
+// Imports the owner's profile from the old app export (data/old, git-ignored)
+// into the structured profile tables (contact details, work authorization,
+// employment with responsibilities and skills used, education, skills), the
+// master resume, and initial matching criteria from the old "Remote
+// Development" search. Skips each part that already exists.
 //   pnpm import:profile
 import { readFileSync } from "node:fs";
 import { createServiceClient } from "@/server/db/service-client";
 import { getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/criteria.service";
-import { importFacts, importMasterResume, type NewFact } from "@/server/modules/profile/profile.service";
+import { getProfile, importMasterResume, importProfile, type ProfileImport } from "@/server/modules/profile/profile.service";
 import { parseWorkerEnv } from "@/shared/env";
 
 const OWNER = "user_3EFlbJRuJcCvNFjdzJaa3dkeoNP"; // the real account in the old app
-const SOURCE = "old app (Aug 2026 profile)";
 const read = <T>(file: string): T => JSON.parse(readFileSync(`data/old/${file}`, "utf8")) as T;
 
 type Profile = Record<string, string | boolean | number | string[] | null>;
-type Work = { career_profile_id: string; company: string; title: string; start_date: string; end_date: string | null; is_current: boolean; achievements: string[] | null };
-type Education = { career_profile_id: string; institution: string; degree: string; field_of_study: string; start_year: number | null; end_year: number | null };
+type Work = {
+  career_profile_id: string; company: string; title: string; location: string | null; is_remote: boolean;
+  start_date: string; end_date: string | null; is_current: boolean; description: string | null;
+  achievements: string[] | null; technologies: string[] | null;
+};
+type Education = { career_profile_id: string; institution: string; degree: string; field_of_study: string; start_year: number | null; end_year: number | null; is_current: boolean };
 type Skill = { career_profile_id: string; name: string; years_experience: number | null };
 
-function buildFacts(): NewFact[] {
-  const profile = read<Profile[]>("profiles.json").find((p) => p.user_id === OWNER);
-  if (!profile) throw new Error("owner profile not found in data/old/profiles.json");
-  const pid = profile.id;
-  const facts: NewFact[] = [];
-  const add = (category: string, fact: string, structured: Record<string, unknown> | null = null) =>
-    facts.push({ category, fact, structured: structured as NewFact["structured"], source: SOURCE, reviewed: false, sort_order: facts.length });
+// "08/2021" → "2021-08" (what the month inputs send).
+const month = (mmyyyy: string | null) => {
+  const m = /^(\d{1,2})\/(\d{4})$/.exec(mmyyyy ?? "");
+  return m ? `${m[2]}-${m[1].padStart(2, "0")}` : "";
+};
+const str = (v: unknown) => (v == null ? "" : String(v));
 
-  if (profile.summary) add("summary", String(profile.summary));
+function buildImport(existingSummary: string | null): ProfileImport {
+  const p = read<Profile[]>("profiles.json").find((x) => x.user_id === OWNER);
+  if (!p) throw new Error("owner profile not found in data/old/profiles.json");
+  const state = str(p.state).trim().toUpperCase();
 
-  // Current job first (what the owner told us), then the old history newest first.
-  add("employment", "Staff Software Engineer at Second Nature, 2026 to present (start month to confirm).", {
-    employer: "Second Nature", title: "Staff Software Engineer", current: true,
-  });
-  const work = read<Work[]>("work_experiences.json")
-    .filter((w) => w.career_profile_id === pid)
-    .sort((a, b) => b.start_date.split("/").reverse().join("").localeCompare(a.start_date.split("/").reverse().join("")));
-  for (const w of work) {
-    const end = w.is_current ? "2026 (end month to confirm)" : w.end_date;
-    add("employment", `${w.title} at ${w.company}, ${w.start_date} to ${end}.`, { employer: w.company, title: w.title, start: w.start_date, end });
-    for (const a of w.achievements ?? []) add("metric", `At ${w.company} (${w.title}): ${a}`, { employer: w.company });
-  }
+  // The old app's "current" job ended when the owner joined Second Nature (2026); its end month isn't known yet.
+  const work = read<Work[]>("work_experiences.json").filter((w) => w.career_profile_id === p.id);
+  const employment: Record<string, unknown>[] = [
+    { employer: "Second Nature", title: "Staff Software Engineer", start_date: "2026-01", end_date: "", is_current: "true", responsibilities: "", skills: "" },
+    ...work.map((w) => ({
+      employer: w.company,
+      title: w.title,
+      location: w.location ?? (w.is_remote ? "Remote" : ""),
+      start_date: month(w.start_date),
+      end_date: w.is_current ? "" : month(w.end_date),
+      is_current: "false",
+      description: (w.description ?? "").slice(0, 500),
+      responsibilities: (w.achievements ?? []).join("\n"),
+      skills: (w.technologies ?? []).join(", "),
+    })),
+  ];
 
-  for (const e of read<Education[]>("educations.json").filter((x) => x.career_profile_id === pid)) {
-    const years = e.end_year ? `${e.start_year ?? ""}–${e.end_year}` : `started ${e.start_year} (completion year to confirm)`;
-    add("education", `${e.degree} in ${e.field_of_study}, ${e.institution}, ${years}.`);
-  }
-
-  const skills = read<Skill[]>("skills.json").filter((s) => s.career_profile_id === pid);
-  const withYears = skills.filter((s) => s.years_experience).sort((a, b) => (b.years_experience ?? 0) - (a.years_experience ?? 0));
-  const other = skills.filter((s) => !s.years_experience).map((s) => s.name);
-  if (withYears.length) add("skill", `Skills with years of experience: ${withYears.map((s) => `${s.name} (${s.years_experience})`).join(", ")}.`);
-  if (other.length) add("skill", `Other skills: ${other.join(", ")}.`);
-
-  if (profile.requires_sponsorship === false) {
-    add("authorization", "Authorized to work in the United States; does not require visa sponsorship.");
-  }
-  add("logistics", `Based in ${profile.city}, ${profile.state}; prefers ${String(profile.remote_preference).toLowerCase()} work; not willing to relocate; available immediately.`);
-  if (profile.salary_min) add("logistics", `Salary expectation: $${Number(profile.salary_min).toLocaleString()}–$${Number(profile.salary_max).toLocaleString()} per year.`);
-  for (const [label, key] of [["LinkedIn", "linkedin_url"], ["GitHub", "github_url"], ["Website", "portfolio_url"]] as const) {
-    if (profile[key]) add("link", `${label}: ${profile[key]}`);
-  }
-  return facts;
+  return {
+    profile: {
+      preferred_name: str(p.preferred_name),
+      phone: str(p.phone),
+      city: str(p.city),
+      state: state.length === 2 ? state : "",
+      country: "US",
+      postal_code: str(p.zip_code),
+      linkedin_url: str(p.linkedin_url),
+      github_url: str(p.github_url),
+      website_url: str(p.portfolio_url),
+      summary: existingSummary ?? str(p.summary),
+      willing_to_relocate: /^(yes|true)$/i.test(str(p.willing_to_relocate)) ? "yes" : /^(no|false)$/i.test(str(p.willing_to_relocate)) ? "no" : "",
+      notice_period: str(p.start_date),
+    },
+    workAuthorizations: (Array.isArray(p.work_authorized_countries) ? p.work_authorized_countries : ["US"]).map((country) => ({
+      country,
+      authorized: "yes",
+      requires_sponsorship: p.requires_sponsorship ? "yes" : "no",
+    })),
+    employment,
+    education: read<Education[]>("educations.json")
+      .filter((e) => e.career_profile_id === p.id)
+      .map((e) => ({
+        institution: e.institution, degree: e.degree, field_of_study: e.field_of_study,
+        start_year: str(e.start_year), end_year: str(e.end_year), completed: e.is_current ? "false" : "true",
+      })),
+    skills: read<Skill[]>("skills.json")
+      .filter((s) => s.career_profile_id === p.id)
+      .sort((x, y) => (y.years_experience ?? 0) - (x.years_experience ?? 0))
+      .map((s) => ({ name: s.name, years: s.years_experience ?? null })),
+  };
 }
 
 async function main() {
   const db = createServiceClient(parseWorkerEnv(process.env));
 
-  const facts = await importFacts(db, buildFacts());
+  const owner = await db.from("users").select("id").eq("role", "owner").single();
+  if (owner.error) throw new Error("no owner set (pnpm owner:set)");
+  const existing = await getProfile(db);
+  const profile = await importProfile(db, owner.data.id, buildImport(existing.profile.summary));
 
   const resume = read<{ user_id: string; content: string; name: string }[]>("master_resumes.json").find((r) => r.user_id === OWNER);
   const resumeStored = resume ? await importMasterResume(db, `Imported: ${resume.name}`, resume.content) : false;
@@ -89,7 +115,7 @@ async function main() {
     ).created;
   }
 
-  console.log(JSON.stringify({ ok: true, facts, resumeStored, criteria }));
+  console.log(JSON.stringify({ ok: true, profile, resumeStored, criteria }));
 }
 
 main().catch((err) => {

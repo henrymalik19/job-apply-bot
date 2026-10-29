@@ -1,5 +1,5 @@
 // Imports companies exported from the old app (data/old/companies.json, git-ignored).
-// See importCompanies() for which boards are kept and how priority is set.
+// See importCompanies() for which boards are kept.
 //   pnpm import:companies -- --exclude "Second Nature"
 import { readFileSync } from "node:fs";
 import { z } from "zod";

@@ -1,16 +1,14 @@
-// Deriving a form's answer from an answer-bank topic: fact topics read their
-// value from confirmed facts, and every value is fitted to the question's field
-// type and options by rule. Anything that doesn't fit cleanly returns null and
-// the question goes to the owner.
+// Deriving a form's answer from an answer topic: profile topics read their
+// value from the structured profile, and every value is fitted to the
+// question's field type and options by rule. Anything that doesn't fit cleanly
+// returns null and the question goes to the owner.
 import type { FormOption, FormQuestion } from "@/server/integrations/ats/forms";
 import { resolvePlace } from "@/server/modules/criteria/places";
+import { findUserSkill, skillYears, type ProfileData } from "@/server/modules/profile/profile.service";
 import { normalize } from "@/shared/text";
 
 /** A topic's value: boolean, number, salary-style range, or text. */
 export type TopicValue = boolean | number | { min: number; max: number } | string;
-
-/** The minimal fact shape fact topics read. */
-export type FactText = { category: string; fact: string };
 
 /** The answer for one form field: display text plus the structured value the form takes. */
 export type ShapedAnswer = { answer: string; value: string | string[] | boolean };
@@ -20,42 +18,45 @@ export function normalizeQuestion(label: string): string {
   return normalize(label);
 }
 
-const link = (facts: FactText[], label: RegExp): string | null => {
-  for (const f of facts) {
-    if (f.category !== "link" || !label.test(f.fact)) continue;
-    const url = /https?:\/\/\S+/.exec(f.fact)?.[0];
-    if (url) return url.replace(/[.,;)]+$/, "");
-  }
-  return null;
-};
+/** Topic keys answered from the profile rather than a saved answer. */
+export const PROFILE_TOPICS = [
+  "first_name", "last_name", "full_name", "preferred_name", "email", "phone", "current_location", "city", "state",
+  "postal_code", "linkedin_url", "github_url", "website_url", "work_authorization", "requires_sponsorship",
+  "willing_to_relocate", "notice_period",
+] as const;
+
+/** Whether a topic's value comes from the profile: the keys above and "years:<skill>". */
+export function isProfileTopic(key: string): boolean {
+  return (PROFILE_TOPICS as readonly string[]).includes(key) || key.startsWith("years:");
+}
 
 /**
- * The value of a fact topic, read from reviewed confirmed facts, or null when
- * no fact states it.
+ * The value of a profile topic, or null when the profile doesn't state it.
  *
- * @param key - A topic with `source = 'fact'`.
+ * @param country - The posting's country (ISO code), for work authorization.
  */
-export function factValue(key: string, facts: FactText[]): TopicValue | null {
-  const text = (category: string) => facts.filter((f) => f.category === category).map((f) => f.fact).join("\n");
+export function profileValue(key: string, data: ProfileData, opts: { country: string; now: Date }): TopicValue | null {
+  const p = data.profile;
+  const auth = data.workAuthorizations.find((a) => a.country === opts.country);
+  const full = [p.first_name, p.last_name].filter(Boolean).join(" ");
+  if (key.startsWith("years:")) {
+    // A listed skill (or alias) first, else a skill only named on a job.
+    const name = key.slice("years:".length);
+    const skill = findUserSkill(data, name);
+    return skillYears(data, opts.now).get(skill?.normalized ?? normalize(name)) ?? null;
+  }
   switch (key) {
-    case "work_authorization": {
-      const t = text("authorization");
-      if (/\b(not|isn'?t) authorized to work\b/i.test(t)) return false;
-      return /\bauthorized to work\b/i.test(t) ? true : null;
-    }
-    case "requires_sponsorship": {
-      const t = text("authorization");
-      if (/\b(does not|doesn'?t|do not|will not|won'?t)\s+(now or in the future\s+)?require\b[^.]*\bsponsorship\b/i.test(t)) return false;
-      return /\brequires?\b[^.]*\bsponsorship\b/i.test(t) ? true : null;
-    }
+    case "full_name":
+      return full || null;
     case "current_location":
-      return /\bBased in ([^;.\n]+)/i.exec(text("logistics"))?.[1].trim() ?? null;
-    case "linkedin_url":
-      return link(facts, /linkedin/i);
-    case "github_url":
-      return link(facts, /github/i);
-    case "website_url":
-      return link(facts, /website|portfolio/i);
+      return p.city && p.state ? `${p.city}, ${p.state}` : p.city ?? null;
+    case "work_authorization":
+      return auth ? auth.authorized : null;
+    case "requires_sponsorship":
+      return auth ? auth.requires_sponsorship : null;
+    case "first_name": case "last_name": case "preferred_name": case "email": case "phone": case "city": case "state":
+    case "postal_code": case "linkedin_url": case "github_url": case "website_url": case "willing_to_relocate": case "notice_period":
+      return p[key] ?? null;
     default:
       return null;
   }

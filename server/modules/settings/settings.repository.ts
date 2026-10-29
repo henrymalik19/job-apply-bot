@@ -11,7 +11,7 @@ export async function getSetting(db: Db, key: string): Promise<Json | null> {
 /** Creates or replaces one setting. */
 export async function putSetting(db: Db, key: string, value: NonNullable<Json>): Promise<void> {
   check(
-    await db.from("settings").upsert({ key, value, updated_at: new Date().toISOString() }),
+    await db.from("settings").upsert({ key, value }),
     `put setting ${key}`,
   );
 }

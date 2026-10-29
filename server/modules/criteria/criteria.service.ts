@@ -6,7 +6,7 @@ import { z } from "zod";
 import { ValidationError } from "@/server/core/errors";
 import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { listActiveFacts } from "@/server/modules/profile/profile.service";
+import { getProfileLines } from "@/server/modules/profile/profile.service";
 import { recordUsage } from "@/server/modules/usage/usage.service";
 import * as settings from "@/server/modules/settings/settings.service";
 import {
@@ -145,7 +145,7 @@ export async function suggestTitleFilter(
   db: Db,
   call: StructuredCall,
 ): Promise<{ keep: TitleSuggestion[]; skip: TitleSuggestion[] }> {
-  const [facts, filter, { criteria }] = await Promise.all([listActiveFacts(db), getTitleFilter(db), getMatchCriteria(db)]);
+  const [facts, filter, { criteria }] = await Promise.all([getProfileLines(db), getTitleFilter(db), getMatchCriteria(db)]);
   const system = `You help a job seeker set up a job-title filter. Discovery keeps a posting only if its title contains at
 least one "keep" phrase and no "skip" phrase (whole words, case-insensitive).
 
