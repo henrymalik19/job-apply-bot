@@ -23,6 +23,7 @@ function Message({ state }: { state: FormState }) {
   );
 }
 
+/** Add-company form with "Test board" (fetch once) and "Add company" buttons. */
 export function AddCompanyForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(companyFormAction, {});
   const v = state.values ?? {};
@@ -62,6 +63,7 @@ export function AddCompanyForm() {
   );
 }
 
+/** Title-filter form: keep/skip phrase lists for job titles. */
 export function FilterForm({ include, exclude }: { include: string[]; exclude: string[] }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveFilterAction, {});
   return (

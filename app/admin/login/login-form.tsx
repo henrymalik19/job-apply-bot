@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { signIn, type LoginState } from "./actions";
 
+/** Email/password form for the owner's sign-in. */
 export function LoginForm() {
   const [state, action, pending] = useActionState<LoginState, FormData>(signIn, {});
   return (

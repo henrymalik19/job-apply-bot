@@ -3,8 +3,10 @@ import { createServerClient } from "@supabase/ssr";
 import { isOwnerId } from "@/server/auth/owner";
 import { serverEnv } from "@/shared/env";
 
-// Refreshes the Supabase session cookie and does an optimistic redirect for
-// admin routes. Real authorization happens in requireOwner() and in RLS.
+/**
+ * Refreshes the Supabase session cookie and does an optimistic redirect for
+ * admin routes. Real authorization happens in `ownerContext()` and in RLS.
+ */
 export async function proxy(request: NextRequest) {
   const env = serverEnv();
   let response = NextResponse.next({ request });

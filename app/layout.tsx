@@ -18,6 +18,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/** Root HTML shell (fonts, global styles, noindex metadata). */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html

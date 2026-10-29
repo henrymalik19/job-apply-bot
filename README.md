@@ -48,9 +48,11 @@ runs as the signed-in owner (RLS) in the web app and as the service role in work
 pnpm worker:discover          # fetch every active board into jobs (reads .env.local)
 ```
 
-In production a Railway cron service runs it every 30 minutes (image from `Dockerfile.worker`,
-schedule in UTC). Its settings live on the Railway service, not in a repo file: cron `*/30 * * * *`,
-start command `pnpm worker:discover`, Dockerfile path `Dockerfile.worker`, restart policy Never. The service needs two variables: `SUPABASE_URL` and
+In production a Railway cron service runs it every 4 hours (image from `Dockerfile.worker`,
+schedule in UTC). Its settings live on the Railway service, not in a repo file: cron `0 */4 * * *`,
+start command `pnpm worker:discover`, Dockerfile path `Dockerfile.worker`, restart policy Never.
+When changing the cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
+"late" means: it flags a source after two missed runs plus 30 minutes. The service needs two variables: `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY`. Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 

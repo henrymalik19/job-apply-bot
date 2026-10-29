@@ -2,8 +2,26 @@
 // Inputs come from the run_source_status view (one row per worker source) and
 // the latest worker-level runs row (source = null).
 
-/** A source with no successful run for this long is flagged on Health. */
-export const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
+/** Default discovery interval when `settings.discover_interval_minutes` is unset. */
+export const DEFAULT_INTERVAL_MINUTES = 240;
+
+/** Settings key holding the discovery interval; must match the Railway cron schedule. */
+export const INTERVAL_SETTING_KEY = "discover_interval_minutes";
+
+/**
+ * How long without a successful run before Health flags it: two missed runs
+ * plus 30 minutes of slack (Railway starts cron runs a few minutes late).
+ *
+ * @param intervalMinutes - Minutes between scheduled runs.
+ */
+export function staleAfterMs(intervalMinutes: number): number {
+  return (2 * intervalMinutes + 30) * 60_000;
+}
+
+/** Human-readable duration, e.g. 30 → "30m", 240 → "4h", 510 → "8.5h". */
+export function formatMinutes(minutes: number): string {
+  return minutes < 60 ? `${minutes}m` : `${Math.round((minutes / 60) * 10) / 10}h`;
+}
 /** After two failures in a row, a board is retried at most this often. */
 export const BACKOFF_MS = 2 * 60 * 60 * 1000;
 
@@ -40,11 +58,19 @@ const age = (iso: string, now: Date) => now.getTime() - new Date(iso).getTime();
  *
  * @param status - The source's latest status, if it has run.
  * @param now - Reference time.
+ * @param intervalMinutes - Minutes between scheduled runs.
  */
-export function sourceProblem(status: SourceStatus | undefined, now: Date): string | null {
+export function sourceProblem(
+  status: SourceStatus | undefined,
+  now: Date,
+  intervalMinutes = DEFAULT_INTERVAL_MINUTES,
+): string | null {
   if (!status) return null;
   if (status.consecutive_failures >= 2) return `failed ${status.consecutive_failures} runs in a row`;
-  if (age(status.last_success_at ?? status.first_run_at, now) > STALE_AFTER_MS) return "no successful run in 2h";
+  const stale = staleAfterMs(intervalMinutes);
+  if (age(status.last_success_at ?? status.first_run_at, now) > stale) {
+    return `no successful run in ${formatMinutes(stale / 60_000)}`;
+  }
   return null;
 }
 
@@ -57,12 +83,19 @@ export function shouldSkipBoard(status: SourceStatus | undefined, now: Date): bo
 }
 
 /**
- * Why the worker schedule itself needs attention (never ran, stale, or the last
- * run failed), or `null` when it is fine.
+ * Why the worker schedule itself needs attention (never ran, missed two runs,
+ * or the last run failed), or `null` when it is fine.
+ *
+ * @param intervalMinutes - Minutes between scheduled runs.
  */
-export function workerProblem(lastRun: WorkerRun | null, now: Date): string | null {
+export function workerProblem(
+  lastRun: WorkerRun | null,
+  now: Date,
+  intervalMinutes = DEFAULT_INTERVAL_MINUTES,
+): string | null {
   if (!lastRun) return "has never run";
-  if (age(lastRun.started_at, now) > STALE_AFTER_MS) return "hasn't run in 2h";
+  const stale = staleAfterMs(intervalMinutes);
+  if (age(lastRun.started_at, now) > stale) return `hasn't run in ${formatMinutes(stale / 60_000)}`;
   if (lastRun.ok === false) return `last run failed: ${lastRun.error ?? "unknown error"}`;
   return null;
 }

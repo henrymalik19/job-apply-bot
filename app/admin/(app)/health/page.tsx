@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { ownerContext } from "@/server/auth/require-owner";
-import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { formatMinutes, loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
 
 const COUNT_LABELS: [string, string][] = [
@@ -15,7 +15,7 @@ function Counts({ counts }: { counts: Record<string, number> | null | undefined 
 async function Health() {
   const { db } = await ownerContext();
   const now = new Date();
-  const { boards, worker, workerProblem } = await loadDiscoveryHealth(db, now);
+  const { boards, worker, workerProblem, intervalMinutes } = await loadDiscoveryHealth(db, now);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
     ...(workerProblem ? [`Discovery ${workerProblem}.`] : []),
@@ -34,7 +34,7 @@ async function Health() {
       )}
 
       <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">Discovery (every 30 minutes)</h2>
+        <h2 className="font-semibold">Discovery (every {formatMinutes(intervalMinutes)})</h2>
         <p className="text-sm">
           Last run: {worker ? `${worker.ok ? "ok" : "failed"} · ${ago(worker.started_at, now)}` : "never"}
           {worker?.counts && (

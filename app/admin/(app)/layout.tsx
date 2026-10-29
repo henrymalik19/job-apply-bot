@@ -19,6 +19,7 @@ async function Account() {
   );
 }
 
+/** Admin shell: navigation and the signed-in account with Sign out. */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
