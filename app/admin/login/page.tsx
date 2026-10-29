@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -9,9 +10,16 @@ export const metadata: Metadata = {
 /** Admin sign-in page. */
 export default function LoginPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-4">
-      <h1 className="text-xl font-semibold">Job Search Autopilot</h1>
-      <LoginForm />
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Job Search Autopilot</CardTitle>
+          <CardDescription>Sign in with the owner account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LoginForm />
+        </CardContent>
+      </Card>
     </main>
   );
 }

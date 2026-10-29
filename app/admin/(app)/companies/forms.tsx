@@ -1,21 +1,21 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import { companyFormAction, saveFilterAction, type FormState } from "./actions";
 
-const input = "rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900";
-const button =
-  "rounded bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
-const secondary = "rounded border border-zinc-300 px-3 py-2 text-sm font-medium disabled:opacity-50 dark:border-zinc-700";
-
 function Message({ state }: { state: FormState }) {
-  if (state.error) return <p role="alert" className="text-sm text-red-600">{state.error}</p>;
+  if (state.error) return <p role="alert" className="text-sm text-destructive">{state.error}</p>;
   if (!state.ok) return null;
   return (
-    <div className="text-sm text-green-700 dark:text-green-400">
-      <p>{state.ok}</p>
+    <div className="text-sm">
+      <p className="text-emerald-700 dark:text-emerald-400">{state.ok}</p>
       {state.sample && state.sample.length > 0 && (
-        <ul className="mt-1 list-disc pl-5 text-zinc-600 dark:text-zinc-400">
+        <ul className="mt-1 list-disc pl-5 text-muted-foreground">
           {state.sample.map((t, i) => <li key={i}>{t}</li>)}
         </ul>
       )}
@@ -29,34 +29,32 @@ export function AddCompanyForm() {
   const v = state.values ?? {};
   return (
     // key remounts the fields so defaultValue picks up the echoed values.
-    <form key={JSON.stringify(v)} action={action} className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-[1fr_10rem_1fr_6rem]">
-        <label className="flex flex-col gap-1 text-sm">
-          Company
-          <input name="name" maxLength={200} defaultValue={v.name} className={input} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          ATS
-          <select name="ats" defaultValue={v.ats || "greenhouse"} className={input}>
-            <option value="greenhouse">Greenhouse</option>
-            <option value="lever">Lever</option>
-            <option value="ashby">Ashby</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Board token
-          <input name="board_token" placeholder="e.g. stripe" defaultValue={v.board_token} className={input} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Priority
-          <input name="priority" type="number" defaultValue={v.priority ?? 0} min={-100} max={100} className={input} />
-        </label>
+    <form key={JSON.stringify(v)} action={action} className="flex flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-[1fr_10rem_1fr_6rem]">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="name">Company</Label>
+          <Input id="name" name="name" maxLength={200} defaultValue={v.name} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="ats">ATS</Label>
+          <NativeSelect id="ats" name="ats" defaultValue={v.ats || "greenhouse"} className="w-full">
+            <NativeSelectOption value="greenhouse">Greenhouse</NativeSelectOption>
+            <NativeSelectOption value="lever">Lever</NativeSelectOption>
+            <NativeSelectOption value="ashby">Ashby</NativeSelectOption>
+          </NativeSelect>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="board_token">Board token</Label>
+          <Input id="board_token" name="board_token" placeholder="e.g. stripe" defaultValue={v.board_token} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="priority">Priority</Label>
+          <Input id="priority" name="priority" type="number" min={-100} max={100} defaultValue={v.priority ?? 0} />
+        </div>
       </div>
       <div className="flex gap-2">
-        <button type="submit" name="intent" value="test" disabled={pending} className={secondary}>Test board</button>
-        <button type="submit" name="intent" value="add" disabled={pending} className={button}>
-          {pending ? "Working…" : "Add company"}
-        </button>
+        <Button type="submit" name="intent" value="test" variant="outline" disabled={pending}>Test board</Button>
+        <Button type="submit" name="intent" value="add" disabled={pending}>{pending ? "Working…" : "Add company"}</Button>
       </div>
       <Message state={state} />
     </form>
@@ -67,19 +65,19 @@ export function AddCompanyForm() {
 export function FilterForm({ include, exclude }: { include: string[]; exclude: string[] }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveFilterAction, {});
   return (
-    <form action={action} className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          Keep titles containing any of (empty = keep all)
-          <textarea name="include" rows={3} defaultValue={include.join(", ")} placeholder="engineer, developer" className={input} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Skip titles containing any of
-          <textarea name="exclude" rows={3} defaultValue={exclude.join(", ")} placeholder="intern, sales" className={input} />
-        </label>
+    <form action={action} className="flex flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="include">Keep titles containing any of</Label>
+          <Textarea id="include" name="include" rows={4} defaultValue={include.join(", ")} placeholder="Empty keeps everything" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="exclude">Skip titles containing any of</Label>
+          <Textarea id="exclude" name="exclude" rows={4} defaultValue={exclude.join(", ")} placeholder="intern, sales" />
+        </div>
       </div>
       <div>
-        <button type="submit" disabled={pending} className={button}>{pending ? "Saving…" : "Save filter"}</button>
+        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save filter"}</Button>
       </div>
       <Message state={state} />
     </form>

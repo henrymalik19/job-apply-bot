@@ -34,6 +34,7 @@ server/
   auth/                  owner checks and sessions
   db/                    Supabase clients and generated types (pnpm db:types)
   core/                  shared errors
+components/ui/           shadcn/ui components (Base UI + Tailwind); add more with `pnpm dlx shadcn@latest add <name>`
 shared/                  pure helpers with no I/O (text, format, env)
 workers/                 deployable entry points, one per Railway service
 ```

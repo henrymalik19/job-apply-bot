@@ -13,7 +13,7 @@ Do not start the next milestone until the current one is deployed and verified.*
 |---|---|
 | M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
 | M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
-| M2.5 Structure | In progress: domain modules + repositories, generated DB types, TSDoc, shadcn/ui foundation. |
+| M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
 | M3–M7 | Not started |
 
 ### Revisions
