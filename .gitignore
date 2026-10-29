@@ -48,3 +48,6 @@ supabase/.temp
 
 # personal data snapshots (old app export, resumes, answers): never commit
 /data/
+
+# Vercel CLI project link
+.vercel
