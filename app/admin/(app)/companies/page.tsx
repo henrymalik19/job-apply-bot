@@ -5,15 +5,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import { getTitleFilter } from "@/server/modules/companies/companies.service";
 import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus } from "../_components/board-status";
+import { Pager, scrollingTable } from "../_components/data-table";
 import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FilterForm } from "./forms";
 
-async function Companies() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+async function Companies({ searchParams }: { searchParams: SearchParams }) {
   const { db } = await ownerContext();
   const now = new Date();
-  const [{ boards }, filter] = await Promise.all([loadDiscoveryHealth(db, now), getTitleFilter(db)]);
+  const [{ boards }, filter, params] = await Promise.all([
+    loadDiscoveryHealth(db, now),
+    getTitleFilter(db),
+    searchParams,
+  ]);
   const active = boards.filter((b) => b.active).length;
+  const page = paginate(boards, parsePage(params.page));
 
   return (
     <>
@@ -43,19 +52,20 @@ async function Companies() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={scrollingTable.card}>
         <CardHeader>
           <CardTitle>Boards</CardTitle>
           <CardDescription>
             {active.toLocaleString()} active of {boards.length.toLocaleString()}. Higher priority boards are checked first.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className={scrollingTable.content}>
           {boards.length === 0 ? (
             <p className="text-sm text-muted-foreground">No companies yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
+            <>
+            <Table containerClassName={scrollingTable.container}>
+              <TableHeader className={scrollingTable.header}>
                 <TableRow>
                   <TableHead>Company</TableHead>
                   <TableHead>Board</TableHead>
@@ -66,7 +76,7 @@ async function Companies() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {boards.map((b) => (
+                {page.items.map((b) => (
                   <TableRow key={b.id} className={b.active ? "" : "text-muted-foreground"}>
                     <TableCell className="font-medium">{b.name}</TableCell>
                     <TableCell className="font-mono text-xs">{b.ats}:{b.board_token}</TableCell>
@@ -86,6 +96,8 @@ async function Companies() {
                 ))}
               </TableBody>
             </Table>
+            <Pager page={page} basePath="/admin/companies" />
+            </>
           )}
         </CardContent>
       </Card>
@@ -94,12 +106,12 @@ async function Companies() {
 }
 
 /** Companies: add and test boards, pause or resume them, and edit the title filter. */
-export default function CompaniesPage() {
+export default function CompaniesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <main className="flex flex-col gap-6">
+    <main className="flex flex-col gap-6 md:h-full">
       <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-        <Companies />
+        <Companies searchParams={searchParams} />
       </Suspense>
     </main>
   );

@@ -6,12 +6,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import { formatMinutes, loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
+import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../_components/board-status";
+import { Pager, scrollingTable } from "../_components/data-table";
 
-async function Health() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+async function Health({ searchParams }: { searchParams: SearchParams }) {
   const { db } = await ownerContext();
   const now = new Date();
-  const { boards, worker, workerProblem, intervalMinutes } = await loadDiscoveryHealth(db, now);
+  const [{ boards, worker, workerProblem, intervalMinutes }, params] = await Promise.all([
+    loadDiscoveryHealth(db, now),
+    searchParams,
+  ]);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
     ...(workerProblem ? [`Discovery ${workerProblem}.`] : []),
@@ -19,6 +26,7 @@ async function Health() {
   ];
   // Problem boards first, then by name.
   const rows = [...active].sort((a, b) => Number(!!b.problem) - Number(!!a.problem) || a.name.localeCompare(b.name));
+  const page = paginate(rows, parsePage(params.page));
 
   return (
     <>
@@ -56,17 +64,18 @@ async function Health() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={scrollingTable.card}>
         <CardHeader>
           <CardTitle>Boards</CardTitle>
           <CardDescription>{active.length.toLocaleString()} active boards, problems first.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className={scrollingTable.content}>
           {active.length === 0 ? (
             <p className="text-sm text-muted-foreground">No active boards. Add companies on the Companies page.</p>
           ) : (
-            <Table>
-              <TableHeader>
+            <>
+            <Table containerClassName={scrollingTable.container}>
+              <TableHeader className={scrollingTable.header}>
                 <TableRow>
                   <TableHead>Board</TableHead>
                   <TableHead>Last run</TableHead>
@@ -75,7 +84,7 @@ async function Health() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((b) => (
+                {page.items.map((b) => (
                   <TableRow key={b.id}>
                     <TableCell>
                       <div className="font-medium">{b.name}</div>
@@ -97,6 +106,8 @@ async function Health() {
                 ))}
               </TableBody>
             </Table>
+            <Pager page={page} basePath="/admin/health" />
+            </>
           )}
         </CardContent>
       </Card>
@@ -105,12 +116,12 @@ async function Health() {
 }
 
 /** Health: discovery schedule status, per-board results and a banner for anything failing. */
-export default function HealthPage() {
+export default function HealthPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <main className="flex flex-col gap-6">
+    <main className="flex flex-col gap-6 md:h-full">
       <h1 className="text-2xl font-semibold tracking-tight">Health</h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-        <Health />
+        <Health searchParams={searchParams} />
       </Suspense>
     </main>
   );

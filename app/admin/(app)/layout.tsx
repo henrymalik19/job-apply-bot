@@ -36,8 +36,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Suspense>
         </div>
       </aside>
-      <div className="w-full min-w-0 flex-1 px-4 py-8 md:px-8">
-        <div className="max-w-6xl">{children}</div>
+      <div className="w-full min-w-0 flex-1 px-4 py-8 md:h-screen md:overflow-y-auto md:px-8">
+        {children}
       </div>
     </div>
   );
