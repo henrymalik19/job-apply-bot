@@ -12,10 +12,16 @@ Do not start the next milestone until the current one is deployed and verified.*
 | Milestone | State |
 |---|---|
 | M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
-| M2–M7 | Not started |
+| M2 Discovery | Built and verified locally (5 real boards, 1,519 jobs; 55 DB tests). Deploy pending. |
+| M3–M7 | Not started |
 
 ### Revisions
 
+- **2026-10-29** — M2 implementation notes: one `runs` row per board (`source = ats:token`) plus one per run
+  (`source = null`); a `run_source_status` view summarizes them for backoff and Health (PostgREST caps reads at 1,000
+  rows, so history is never read raw). Board writes go through `insert_discovered_jobs` / `sync_board` (service role
+  only); only jobs not yet stored for a board are sent in full. Title pre-filter lives in `settings.discover_filter`.
+  A posting with the same company + title + location as a stored one counts as a duplicate each run.
 - **2026-10-29** — Added the After MVP section: multiple users (invite-only, per-user forwarding inbox instead of
   IMAP passwords), pg_cron + `tasks` queue, and a browser extension that fills LinkedIn Easy Apply and ATS forms
   in my signed-in browser while I click Submit (replaces the old "Later" assisted-submission note).
@@ -462,7 +468,7 @@ Reads only `public_status`. `noindex, nofollow`.
 - Acceptance: unauthenticated request to any admin route or table is denied; authenticated owner sees
   an empty admin overview.
 
-**M2 — Discovery**
+**M2 — Discovery** *(built locally; deploy pending)*
 - Greenhouse, Lever, Ashby sources; companies settings page with "test board"; scheduled workflow (every 30 min);
   Health page.
 - Acceptance: with 5 seeded companies, a run inserts jobs, a second run inserts zero duplicates and

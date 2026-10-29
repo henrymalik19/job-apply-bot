@@ -13,7 +13,7 @@ const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");
 const TABLES = [
   "companies", "jobs", "criteria_versions", "matches", "resume_versions", "applications",
   "answer_bank", "application_questions", "evidence", "emails", "events", "runs", "settings",
-  "status_transitions", "owner",
+  "status_transitions", "owner", "run_source_status",
 ];
 
 const opts = { auth: { persistSession: false, autoRefreshToken: false } };

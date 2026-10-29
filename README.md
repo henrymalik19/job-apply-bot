@@ -3,7 +3,7 @@
 Private, self-hosted job search pipeline: discover → score → prepare → approve → track.
 Every application needs your approval in the admin UI, and every status change is logged.
 
-Current milestone: **M1 — Foundation** (schema, RLS, owner-only admin login, empty overview).
+Current milestone: **M2 — Discovery** (Greenhouse/Lever/Ashby boards every 30 minutes, Companies and Health pages).
 
 ## Local setup
 
@@ -20,6 +20,16 @@ The local owner's email and password are in `.env.local` (`LOCAL_OWNER_EMAIL`/`L
 For a hosted project, create the owner in the dashboard, set `OWNER_USER_ID`, and run `pnpm owner:set`.
 
 Public sign-ups are disabled; the owner account is created by an admin.
+
+## Workers
+
+```bash
+pnpm worker:discover          # fetch every active board into jobs (reads .env.local)
+```
+
+In production the `Pipeline` GitHub Actions workflow runs it every 30 minutes. It needs two repository
+secrets: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Board failures are recorded per board and shown
+on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 
 ## Checks
 

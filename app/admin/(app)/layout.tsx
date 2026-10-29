@@ -25,6 +25,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="mb-8 flex items-center justify-between gap-4">
         <nav className="flex gap-4 text-sm font-medium">
           <Link href="/admin">Overview</Link>
+          <Link href="/admin/companies">Companies</Link>
+          <Link href="/admin/health">Health</Link>
         </nav>
         <Suspense fallback={null}>
           <Account />
