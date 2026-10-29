@@ -132,5 +132,7 @@
   }
   html {
     @apply font-sans;
+    /* base-nova is compact (12-14px text); scale every rem-based size by 1.125. */
+    font-size: 112.5%;
   }
 }
