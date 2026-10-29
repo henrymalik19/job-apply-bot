@@ -15,10 +15,16 @@ Do not start the next milestone until the current one is deployed and verified.*
 | M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
 | M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
 | M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page at / (off → 404). |
-| M4–M7 | Not started |
+| M4 Matching | Built and tested (69 DB tests incl. acceptance). Deployed; live scoring waits on ANTHROPIC_API_KEY in Railway/Vercel. |
+| M5–M8 | Not started |
 
 ### Revisions
 
+- **2026-10-30** — M4 notes: scoring uses `claude-haiku-5-5` with structured outputs (zod), effort low, system prompt
+  cached; invalid output retries once then the match is `failed`. Matches have a `status` (filtered/scored/failed).
+  `confirmed_facts` gained `reviewed` (imported facts start unreviewed; tailoring will require reviewed) and `source`.
+  `llm_usage` + `settings.llm_monthly_cap_usd` (default $5) cap spend. The Railway service runs `worker:pipeline`
+  (discover → match). Profile, master resume and initial criteria imported from the old app.
 - **2026-10-29** — M3 notes: routes are `/login`, `/app/*` (the user's workspace) and `/admin/*` (running the system);
   per-user public pages later use `/u/<slug>`, never ids. Discovery gained a work-type, location and posting-age filter
   (age capped at 90 days, default 30); locations resolve to country/state/city so "US" keeps "Houston, TX". Saved jobs
@@ -497,7 +503,7 @@ Reads only `public_status`. `noindex, nofollow`.
 - Acceptance: public page shows only `public_status` fields (verify by inspecting network responses);
   toggle off → 404.
 
-**M4 — Matching**
+**M4 — Matching** *(built; live scoring pending API key)*
 - AI title suggestions on the Search page ("Suggest from my profile": Claude proposes keep/skip phrases with reasons
   from the resume and confirmed facts; the owner approves), plus a sample of recently filtered-out titles.
 - Exclude the current employer (Second Nature) and update work history (now at Second Nature, not HUB).
@@ -530,6 +536,13 @@ Reads only `public_status`. `noindex, nofollow`.
 **M7 — Insights + expire**
 - Insights page, expire worker, nudges, weekly export.
 - Acceptance: insights hide rates with n < 10; stale items expire on schedule.
+
+**M8 — UI polish**
+- Location picker on the Search page: country, then state (for the US), then city dropdowns built from the same
+  place data the matcher uses; picks show as removable chips and are stored as structured places
+  (`{country}`, `{country, state}`, `{country, state, city}`), with an "other place" text box for anything unlisted.
+- Visual pass over every screen once they all exist (spacing, colours, empty states).
+- Acceptance: the current text locations migrate to structured places with no change in which jobs pass.
 
 ## After MVP
 

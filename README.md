@@ -3,7 +3,7 @@
 Private, self-hosted job search pipeline: discover → score → prepare → approve → track.
 Every application needs your approval in the admin UI, and every status change is logged.
 
-Current milestone: **M4 — Matching** is next. M1–M3 are deployed: discovery, the /app workspace, /admin, and the public page.
+Current milestone: **M4 — Matching** (Claude scores each saved job against your profile and criteria).
 
 ## Local setup
 
@@ -46,15 +46,19 @@ runs as the signed-in owner (RLS) in the web app and as the service role in work
 ## Workers
 
 ```bash
-pnpm worker:discover          # fetch every active board into jobs (reads .env.local)
+pnpm worker:pipeline          # discover → match (what Railway runs; reads .env.local)
+pnpm worker:discover          # discovery only
+pnpm import:profile           # one-time: facts, master resume and criteria from data/old
+pnpm apply:filters            # re-apply discovery filters to saved jobs
 ```
 
 In production a Railway cron service runs it every 4 hours (image from `Dockerfile.worker`,
 schedule in UTC). Its settings live on the Railway service, not in a repo file: cron `0 */4 * * *`,
-start command `pnpm worker:discover`, Dockerfile path `Dockerfile.worker`, restart policy Never.
+start command `pnpm worker:pipeline`, Dockerfile path `Dockerfile.worker`, restart policy Never.
 When changing the cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
 "late" means: it flags a source after two missed runs plus 30 minutes. The service needs two variables: `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`. Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
+`SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching (without it, matching is skipped).
+Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 
 ## Checks
