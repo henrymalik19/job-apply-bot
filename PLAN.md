@@ -17,6 +17,11 @@ Do not start the next milestone until the current one is deployed and verified.*
 
 ### Revisions
 
+- **2026-10-29** — Railway reads `railway.json` (Config as Code) only until **2026-12-01**. Its replacement
+  (`.railway/railway.ts`, IaC) has no documented cron field yet and `railway config migrate` dropped the schedule,
+  so we have not cut over. Before Dec 1: re-check IaC for cron support; otherwise set Cron Schedule `*/30 * * * *`,
+  Dockerfile path `Dockerfile.worker` and restart policy Never in the service settings, then delete `railway.json`.
+  Company import never changes `active`, so boards paused in the UI (e.g. aggregators like Jobgether) stay paused.
 - **2026-10-29** — Workers run on **Railway cron services** instead of GitHub Actions: private logs (a public repo
   exposes Actions logs, which name target companies), on-time schedules, and room for Playwright/IMAP later.
   One service per schedule, built from `Dockerfile.worker`; GitHub Actions keeps CI only.

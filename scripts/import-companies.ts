@@ -1,6 +1,7 @@
 // Imports companies exported from the old app (data/old/companies.json, git-ignored).
 // Keeps boards that listed at least one remote role matching the search; priority
-// is that role count (capped at 100). Re-running updates name/priority in place.
+// is that role count (capped at 100). Re-running updates name/priority in place
+// but never `active`, so boards paused in the admin UI stay paused.
 //   pnpm import:companies -- --exclude "Second Nature"
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
@@ -39,7 +40,6 @@ async function main() {
       ats: c.ats,
       board_token: c.board_token,
       priority: Math.min(c.remote_fit_roles, 100),
-      active: true,
     }));
 
   const { error } = await db.from("companies").upsert(rows, { onConflict: "ats,board_token" });
