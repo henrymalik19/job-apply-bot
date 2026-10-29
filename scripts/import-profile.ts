@@ -63,7 +63,6 @@ function buildImport(existingSummary: string | null): ProfileImport {
       github_url: str(p.github_url),
       website_url: str(p.portfolio_url),
       summary: existingSummary ?? str(p.summary),
-      willing_to_relocate: /^(yes|true)$/i.test(str(p.willing_to_relocate)) ? "yes" : /^(no|false)$/i.test(str(p.willing_to_relocate)) ? "no" : "",
       notice_period: str(p.start_date),
     },
     workAuthorizations: (Array.isArray(p.work_authorized_countries) ? p.work_authorized_countries : ["US"]).map((country) => ({
@@ -99,20 +98,22 @@ async function main() {
   // Initial matching criteria from the old "Remote Development" search, only if still the defaults.
   let criteria = false;
   const current = await getMatchCriteria(db);
-  if (current.criteria.roles.length === 0) {
+  if (current.roles.length === 0) {
     const search = read<{ user_id: string; name: string; target_roles: string[]; target_salary_min: number | null }[]>("job_searches.json")
       .find((s) => s.user_id === OWNER);
     criteria = (
-      await saveMatchCriteria(db, {
+      await saveMatchCriteria(db, owner.data.id, {
         roles: (search?.target_roles ?? []).join(", "),
         seniority: ["senior", "staff", "principal", "lead", "manager"],
-        minSalary: String(search?.target_salary_min ?? ""),
+        salaryMin: String(search?.target_salary_min ?? ""),
+        salaryMax: "",
+        relocate: "",
         dealbreakers: "",
         excludedCompanies: "Second Nature",
         threshold: "75",
         notes: "",
       })
-    ).created;
+    ).changed;
   }
 
   console.log(JSON.stringify({ ok: true, profile, resumeStored, criteria }));

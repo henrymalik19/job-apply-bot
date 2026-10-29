@@ -1,10 +1,10 @@
 // Search criteria: what jobs the owner is looking for. Discovery pre-filters
 // (job titles; work type, location and posting age) live in settings; matching
-// criteria (roles, seniority, salary floor, dealbreakers, threshold) are
-// versioned in criteria_versions so every score records what it was judged on.
+// criteria (roles, seniority, salary range, dealbreakers, threshold,
+// relocation) are one editable match_criteria row.
 import { z } from "zod";
 import { ValidationError } from "@/server/core/errors";
-import type { Db, Json } from "@/server/db/types";
+import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { getProfileLines } from "@/server/modules/profile/profile.service";
 import { recordUsage } from "@/server/modules/usage/usage.service";
@@ -17,7 +17,7 @@ import {
   type JobFilter,
   type WorkType,
 } from "./job-filter";
-import { insertCriteriaVersion, latestCriteriaVersion } from "./criteria.repository";
+import { getCriteriaRow, upsertCriteriaRow } from "./criteria.repository";
 import { matchCriteriaSchema, SENIORITY_LEVELS, type MatchCriteria, type Seniority } from "./match-criteria";
 import { parseKeywords, TITLE_FILTER_KEY, titleFilterSchema, type TitleFilter } from "./title-filter";
 
@@ -79,51 +79,59 @@ export async function saveJobFilter(db: Db, input: JobFilterInput): Promise<JobF
   return filter;
 }
 
-/** The current matching criteria and the id of the version they come from. */
-export type CurrentCriteria = { versionId: string; criteria: MatchCriteria };
-
 /**
- * The current matching criteria (the newest version). Creates a first version
- * with defaults when none exists, so matching always has a version to score against.
+ * The current matching criteria, or the defaults when none are saved yet.
  */
-export async function getMatchCriteria(db: Db): Promise<CurrentCriteria> {
-  const latest = (await latestCriteriaVersion(db)) ?? (await insertCriteriaVersion(db, matchCriteriaSchema.parse({}) as NonNullable<Json>));
-  return { versionId: latest.id, criteria: matchCriteriaSchema.parse(latest.criteria) };
+export async function getMatchCriteria(db: Db): Promise<MatchCriteria> {
+  const row = await getCriteriaRow(db);
+  return matchCriteriaSchema.parse(row ?? {});
 }
 
 /** Raw values from the matching-criteria form. */
 export type MatchCriteriaInput = {
   roles: string;
   seniority: string[];
-  minSalary: string;
+  salaryMin: string;
+  salaryMax: string;
   dealbreakers: string;
   excludedCompanies: string;
   threshold: string;
   notes: string;
+  /** "yes", "no" or "" (not set). */
+  relocate: string;
+};
+
+const money = (v: string) => {
+  const n = Number(v.replace(/[^0-9]/g, ""));
+  return n > 0 ? n : null;
 };
 
 /**
- * Saves matching criteria. Creates a new version only when something changed,
- * so jobs are rescored against the new criteria and old scores stay attached
- * to the version they were made with.
+ * Saves matching criteria. Changes apply to jobs matched from now on;
+ * existing matches keep their score.
  *
- * @returns The current criteria and whether a new version was created.
+ * @returns The saved criteria and whether anything changed.
+ * @throws {@link ValidationError} when the salary range is reversed.
  */
-export async function saveMatchCriteria(db: Db, input: MatchCriteriaInput): Promise<CurrentCriteria & { created: boolean }> {
-  const salary = Number(input.minSalary.replace(/[^0-9]/g, ""));
+export async function saveMatchCriteria(db: Db, userId: string, input: MatchCriteriaInput): Promise<{ criteria: MatchCriteria; changed: boolean }> {
   const next = matchCriteriaSchema.parse({
     roles: parseKeywords(input.roles),
     seniority: input.seniority.filter((s): s is Seniority => (SENIORITY_LEVELS as readonly string[]).includes(s)),
-    min_salary: salary > 0 ? salary : null,
+    salary_min: money(input.salaryMin),
+    salary_max: money(input.salaryMax),
     dealbreakers: parseKeywords(input.dealbreakers),
     excluded_companies: parseKeywords(input.excludedCompanies),
     threshold: Math.min(100, Math.max(0, Math.trunc(Number(input.threshold) || 0))),
     notes: input.notes.trim().slice(0, 2000),
+    willing_to_relocate: input.relocate === "yes" ? true : input.relocate === "no" ? false : null,
   });
+  if (next.salary_min != null && next.salary_max != null && next.salary_max < next.salary_min) {
+    throw new ValidationError("The top of the salary range is below the floor.");
+  }
   const current = await getMatchCriteria(db);
-  if (JSON.stringify(current.criteria) === JSON.stringify(next)) return { ...current, created: false };
-  const row = await insertCriteriaVersion(db, next as NonNullable<Json>);
-  return { versionId: row.id, criteria: next, created: true };
+  if (JSON.stringify(current) === JSON.stringify(next)) return { criteria: current, changed: false };
+  await upsertCriteriaRow(db, userId, next);
+  return { criteria: next, changed: true };
 }
 
 /** One suggested title phrase and why. */
@@ -145,7 +153,7 @@ export async function suggestTitleFilter(
   db: Db,
   call: StructuredCall,
 ): Promise<{ keep: TitleSuggestion[]; skip: TitleSuggestion[] }> {
-  const [facts, filter, { criteria }] = await Promise.all([getProfileLines(db), getTitleFilter(db), getMatchCriteria(db)]);
+  const [facts, filter, criteria] = await Promise.all([getProfileLines(db), getTitleFilter(db), getMatchCriteria(db)]);
   const system = `You help a job seeker set up a job-title filter. Discovery keeps a posting only if its title contains at
 least one "keep" phrase and no "skip" phrase (whole words, case-insensitive).
 

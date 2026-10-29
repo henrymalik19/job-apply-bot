@@ -8,15 +8,15 @@ export type Match = Row<"matches">;
 /** Fields for recording one match outcome. */
 export type NewMatch = Pick<
   Insert<"matches">,
-  "job_id" | "criteria_version_id" | "hard_filter_passed" | "hard_filter_reason" | "score" | "reasons" | "model" | "status" | "error"
+  "job_id" | "hard_filter_passed" | "hard_filter_reason" | "score" | "reasons" | "model" | "status" | "error"
 >;
 
-/** Ids of jobs that already have a match for a criteria version. */
-export async function listMatchedJobIds(db: Db, criteriaVersionId: string): Promise<Set<string>> {
+/** Ids of jobs that already have a match. */
+export async function listMatchedJobIds(db: Db): Promise<Set<string>> {
   const ids = new Set<string>();
   for (let from = 0; ; from += 1000) {
     const rows = unwrap(
-      await db.from("matches").select("job_id").eq("criteria_version_id", criteriaVersionId).order("id").range(from, from + 999),
+      await db.from("matches").select("job_id").order("id").range(from, from + 999),
       "list matched job ids",
     );
     for (const r of rows) ids.add(r.job_id);
@@ -25,34 +25,34 @@ export async function listMatchedJobIds(db: Db, criteriaVersionId: string): Prom
 }
 
 /**
- * Records a match. A second result for the same job and criteria version is
- * ignored, so re-running never duplicates rows.
+ * Records a match. A second result for the same job is ignored, so re-running
+ * never duplicates rows (and a job, once matched, keeps its score).
  */
 export async function insertMatch(db: Db, match: NewMatch): Promise<void> {
   check(
-    await db.from("matches").upsert(match, { onConflict: "job_id,criteria_version_id", ignoreDuplicates: true }),
+    await db.from("matches").upsert(match, { onConflict: "job_id", ignoreDuplicates: true }),
     "insert match",
   );
 }
 
-/** Matches for some jobs under one criteria version, keyed by job id. */
-export async function matchesForJobs(db: Db, criteriaVersionId: string, jobIds: string[]): Promise<Map<string, Match>> {
+/** Matches for some jobs, keyed by job id. */
+export async function matchesForJobs(db: Db, jobIds: string[]): Promise<Map<string, Match>> {
   if (jobIds.length === 0) return new Map();
   const rows = unwrap(
-    await db.from("matches").select("*").eq("criteria_version_id", criteriaVersionId).in("job_id", jobIds),
+    await db.from("matches").select("*").in("job_id", jobIds),
     "matches for jobs",
   );
   return new Map(rows.map((m) => [m.job_id, m]));
 }
 
-/** Counts of match outcomes for one criteria version. */
-export async function matchCounts(db: Db, criteriaVersionId: string, threshold: number) {
+/** Counts of match outcomes. */
+export async function matchCounts(db: Db, threshold: number) {
   const count = async (build: (q: ReturnType<typeof base>) => ReturnType<typeof base>, what: string) => {
     const res = await build(base());
     if (res.error) unwrap(res, what);
     return res.count ?? 0;
   };
-  const base = () => db.from("matches").select("id", { count: "exact", head: true }).eq("criteria_version_id", criteriaVersionId);
+  const base = () => db.from("matches").select("id", { count: "exact", head: true });
   const [scored, aboveThreshold, filtered, failed] = await Promise.all([
     count((q) => q.eq("status", "scored"), "count scored"),
     count((q) => q.eq("status", "scored").gte("score", threshold), "count matched"),
@@ -62,12 +62,11 @@ export async function matchCounts(db: Db, criteriaVersionId: string, threshold: 
   return { scored, aboveThreshold, filtered, failed };
 }
 
-/** A job list row with its match outcome under one criteria version. */
+/** A job list row with its match outcome. */
 export type MatchedJobRow = JobListItem & { score: number | null; matchStatus: string; filterReason: string | null };
 
 /**
- * One page of jobs that have a match in the given statuses for a criteria
- * version, with the Jobs-page filters applied to the joined job and sorted by
+ * One page of jobs that have a match in the given statuses, with the Jobs-page filters applied to the joined job and sorted by
  * score, posting date or found date. Starts from `matches` so it can filter and
  * sort on match fields in the database.
  *
@@ -76,7 +75,6 @@ export type MatchedJobRow = JobListItem & { score: number | null; matchStatus: s
  */
 export async function searchMatchedJobs(
   db: Db,
-  criteriaVersionId: string,
   options: { statuses: string[]; minScore: number | null },
   filters: JobFilters,
   page: number,
@@ -87,7 +85,6 @@ export async function searchMatchedJobs(
   let query = db
     .from("matches")
     .select(`score, status, hard_filter_reason, jobs!inner(${LIST_COLUMNS})`, { count: "exact" })
-    .eq("criteria_version_id", criteriaVersionId)
     .in("status", options.statuses);
   if (options.minScore != null) query = query.gte("score", options.minScore);
   if (c.text) query = query.or(c.text, { referencedTable: "jobs" });

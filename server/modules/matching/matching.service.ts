@@ -96,14 +96,14 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
   const counts: MatchCounts = { candidates: 0, filtered: 0, scored: 0, failed: 0, deferred: 0, cost_usd: 0 };
 
   try {
-    const [{ versionId, criteria }, jobs, facts, lessons, budget] = await Promise.all([
+    const [criteria, jobs, facts, lessons, budget] = await Promise.all([
       getMatchCriteria(db),
       listOpenJobsForMatching(db),
       getProfileLines(db),
       lessonsFor(db, "scoring"),
       getMonthlySpend(db, now()),
     ]);
-    const done = await listMatchedJobIds(db, versionId);
+    const done = await listMatchedJobIds(db);
     const only = deps.onlyJobIds ? new Set(deps.onlyJobIds) : null;
     const todo = jobs.filter((j) => !done.has(j.id) && (!only || only.has(j.id)));
     counts.candidates = todo.length;
@@ -113,7 +113,7 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
       criteria,
       lessons: lessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
     };
-    const base = { job_id: "", criteria_version_id: versionId };
+    const base = { job_id: "" };
 
     // Hard filters first: no LLM call, no budget.
     const toScore: MatchableJobRow[] = [];
@@ -180,22 +180,22 @@ export async function browseJobs(
   page: number,
   now: Date,
 ): Promise<{ page: Page<BrowsedJob>; threshold: number }> {
-  const { versionId, criteria } = await getMatchCriteria(db);
+  const criteria = await getMatchCriteria(db);
   if (filters.match !== "all") {
     const options = {
       statuses: STATUSES_FOR[filters.match],
       minScore: filters.match === "matched" ? criteria.threshold : null,
     };
-    const { rows, total } = await searchMatchedJobs(db, versionId, options, filters, page, DEFAULT_PAGE_SIZE, now);
+    const { rows, total } = await searchMatchedJobs(db, options, filters, page, DEFAULT_PAGE_SIZE, now);
     return { page: pageOf(rows, total, page), threshold: criteria.threshold };
   }
   if (filters.sort === "score") {
     const options = { statuses: ["scored", "failed", "filtered"], minScore: null };
-    const { rows, total } = await searchMatchedJobs(db, versionId, options, filters, page, DEFAULT_PAGE_SIZE, now);
+    const { rows, total } = await searchMatchedJobs(db, options, filters, page, DEFAULT_PAGE_SIZE, now);
     return { page: pageOf(rows, total, page), threshold: criteria.threshold };
   }
   const list = await listJobs(db, filters, page, now);
-  const matches = await matchesForJobs(db, versionId, list.items.map((j) => j.id));
+  const matches = await matchesForJobs(db, list.items.map((j) => j.id));
   const items = list.items.map((j) => {
     const m = matches.get(j.id);
     return { ...j, score: m?.score ?? null, matchStatus: m?.status ?? null, filterReason: m?.hard_filter_reason ?? null };
@@ -205,8 +205,8 @@ export async function browseJobs(
 
 /** A job's match under the current criteria, with its parsed reasons, or null when not matched yet. */
 export async function getJobMatch(db: Db, jobId: string) {
-  const { versionId, criteria } = await getMatchCriteria(db);
-  const m = (await matchesForJobs(db, versionId, [jobId])).get(jobId);
+  const criteria = await getMatchCriteria(db);
+  const m = (await matchesForJobs(db, [jobId])).get(jobId);
   if (!m) return null;
   const reasons = (m.reasons ?? {}) as { fits?: string[]; gaps?: string[]; summary?: string };
   return {
@@ -223,8 +223,8 @@ export async function getJobMatch(db: Db, jobId: string) {
 
 /** Match counts under the current criteria, for the overview and Health. */
 export async function getMatchSummary(db: Db) {
-  const { versionId, criteria } = await getMatchCriteria(db);
-  return { threshold: criteria.threshold, ...(await matchCounts(db, versionId, criteria.threshold)) };
+  const criteria = await getMatchCriteria(db);
+  return { threshold: criteria.threshold, ...(await matchCounts(db, criteria.threshold)) };
 }
 
 /** What Health shows about matching: the last run, outcome counts, and this month's LLM spend. */

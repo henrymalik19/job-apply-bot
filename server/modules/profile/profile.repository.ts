@@ -14,7 +14,7 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
       .order("is_current", { ascending: false })
       .order("start_date", { ascending: false }),
     db.from("educations").select("*").order("sort_order").order("end_year", { ascending: false, nullsFirst: true }),
-    db.from("user_skills").select("*, skills(name, normalized, aliases, category)").order("sort_order").order("created_at"),
+    db.from("user_skills").select("*, skills(name, normalized, category)").order("sort_order").order("created_at"),
     db.from("certifications").select("*").order("sort_order").order("issued_on", { ascending: false }),
     db.from("confirmed_facts").select("*").eq("active", true).order("category").order("sort_order"),
   ]);
@@ -29,7 +29,7 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
       skills: employment_skills.map((s) => s.skills?.name).filter((n): n is string => Boolean(n)).sort(),
     }),
   );
-  type SkillRow = Row<"user_skills"> & { skills: Pick<Row<"skills">, "name" | "normalized" | "aliases" | "category"> };
+  type SkillRow = Row<"user_skills"> & { skills: Pick<Row<"skills">, "name" | "normalized" | "category"> };
   const userSkills: UserSkill[] = (unwrap(skills, "load skills") as unknown as SkillRow[]).map(({ skills: s, ...us }) => ({ ...us, ...s }));
   if (profile.error) unwrap(profile, "load profile");
   return {
@@ -47,7 +47,7 @@ function emptyProfile(): Row<"profiles"> {
   return {
     user_id: "", first_name: null, last_name: null, preferred_name: null, email: null, phone: null, city: null, state: null,
     country: "US", postal_code: null, linkedin_url: null, github_url: null, website_url: null, headline: null, summary: null,
-    willing_to_relocate: null, notice_period: null, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString(),
+    notice_period: null, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString(),
   };
 }
 
@@ -101,6 +101,19 @@ export async function ensureSkills(db: Db, names: string[]): Promise<Map<string,
   check(await db.from("skills").upsert(rows, { onConflict: "normalized", ignoreDuplicates: true }), "add skills");
   const found = unwrap(await db.from("skills").select("id, normalized").in("normalized", [...unique.keys()]), "read skills");
   return new Map(found.map((s) => [s.normalized, s.id]));
+}
+
+/**
+ * The catalog skill a name refers to: an alias ("k8s" → Kubernetes) first,
+ * then the skill's own name; a name never seen before is added to the catalog.
+ */
+export async function resolveSkillId(db: Db, name: string): Promise<string | null> {
+  const key = normalize(name);
+  if (!key) return null;
+  const alias = await db.from("skill_aliases").select("skill_id").eq("alias", key).maybeSingle();
+  if (alias.error) unwrap(alias, "resolve skill alias");
+  if (alias.data) return alias.data.skill_id;
+  return (await ensureSkills(db, [name])).get(key) ?? null;
 }
 
 /** Replaces the skills used at a job. */

@@ -86,7 +86,7 @@ ${profile}
 Target roles:
 ${list(criteria.roles)}
 Seniority wanted: ${criteria.seniority.length ? criteria.seniority.join(", ") : "any"}
-Salary floor: ${criteria.min_salary ? `${criteria.min_salary} per year` : "none"}
+Salary floor: ${criteria.salary_min ? `${criteria.salary_min} per year` : "none"}
 Preferences: ${criteria.notes.trim() || "(none)"}
 </criteria>
 

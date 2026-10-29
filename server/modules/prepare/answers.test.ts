@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { matchCriteriaSchema } from "@/server/modules/criteria/criteria.service";
 import type { ProfileData } from "@/server/modules/profile/profile.service";
-import { declineOption, isProfileTopic, normalizeQuestion, profileValue, shapeAnswer } from "./answers";
+import { criteriaValue, declineOption, normalizeQuestion, profileValue, shapeAnswer, skillYearsValue } from "./answers";
 
 const now = new Date("2026-10-01T00:00:00Z");
 const job = (employer: string, start: string, end: string | null, skills: string[], current = false) => ({
@@ -11,17 +12,21 @@ const data: ProfileData = {
   profile: {
     user_id: "u", first_name: "Sam", last_name: "Lee", preferred_name: null, email: "sam@example.test", phone: null,
     city: "Houston", state: "TX", country: "US", postal_code: null, linkedin_url: "https://www.linkedin.com/in/someone",
-    github_url: null, website_url: null, headline: null, summary: null, willing_to_relocate: false, notice_period: null,
+    github_url: null, website_url: null, headline: null, summary: null, notice_period: null,
     created_at: "", updated_at: "",
   },
   workAuthorizations: [{ id: "a", country: "US", authorized: true, requires_sponsorship: false, status: null, notes: null, created_at: "", updated_at: "" }],
   employment: [job("A", "2019-01-01", "2022-01-01", ["AWS"]), job("B", "2021-01-01", null, ["AWS", "TypeScript"], true)],
   education: [],
-  skills: [{ skill_id: "s1", name: "Kubernetes", normalized: "kubernetes", aliases: ["k8s"], category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" }],
+  skills: [
+    { skill_id: "s-aws", name: "AWS", normalized: "aws", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" },
+    { skill_id: "s-ts", name: "TypeScript", normalized: "typescript", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 1, created_at: "", updated_at: "" },
+    { skill_id: "s-k8s", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 2, created_at: "", updated_at: "" },
+  ],
   certifications: [],
   facts: [],
 };
-const opts = { country: "US", now };
+const opts = { country: "US" };
 
 const select = (...labels: string[]) => ({
   fieldType: "select" as const,
@@ -33,7 +38,6 @@ describe("profileValue", () => {
     expect(profileValue("full_name", data, opts)).toBe("Sam Lee");
     expect(profileValue("current_location", data, opts)).toBe("Houston, TX");
     expect(profileValue("linkedin_url", data, opts)).toBe("https://www.linkedin.com/in/someone");
-    expect(profileValue("willing_to_relocate", data, opts)).toBe(false);
     expect(profileValue("github_url", data, opts)).toBeNull();
   });
 
@@ -44,11 +48,20 @@ describe("profileValue", () => {
   });
 
   it("computes years with a skill from overlapping jobs, or uses the override", () => {
-    expect(profileValue("years:aws", data, opts)).toBe(7.8); // Jan 2019 – Oct 2026, overlap counted once
-    expect(profileValue("years:TypeScript", data, opts)).toBe(5.8);
-    expect(profileValue("years:k8s", data, opts)).toBe(3);
-    expect(profileValue("years:cobol", data, opts)).toBeNull();
-    expect(isProfileTopic("years:go") && isProfileTopic("email") && !isProfileTopic("salary_expectation")).toBe(true);
+    expect(skillYearsValue("s-aws", data, now)).toBe(7.8); // Jan 2019 – Oct 2026, overlap counted once
+    expect(skillYearsValue("s-ts", data, now)).toBe(5.8);
+    expect(skillYearsValue("s-k8s", data, now)).toBe(3);
+    expect(skillYearsValue("s-cobol", data, now)).toBeNull();
+  });
+});
+
+describe("criteriaValue", () => {
+  it("states the salary range and relocation from the criteria", () => {
+    const c = matchCriteriaSchema.parse({ salary_min: 160000, salary_max: 190000, willing_to_relocate: false });
+    expect(criteriaValue("salary_expectation", c)).toEqual({ min: 160000, max: 190000 });
+    expect(criteriaValue("salary_expectation", matchCriteriaSchema.parse({ salary_min: 150000 }))).toEqual({ min: 150000, max: 150000 });
+    expect(criteriaValue("salary_expectation", matchCriteriaSchema.parse({}))).toBeNull();
+    expect(criteriaValue("willing_to_relocate", c)).toBe(false);
   });
 });
 

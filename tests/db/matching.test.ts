@@ -1,8 +1,7 @@
 // M4 acceptance against a local Supabase, with a fake LLM:
 //   - hard filters record a reason without an LLM call
 //   - invalid LLM output is retried once, then the job is marked failed
-//   - re-running doesn't duplicate rows; changing criteria creates a new
-//     version and rescoring adds rows for it
+//   - one match per job: re-running and changing criteria don't rescore
 //   - an active scoring lesson is in the prompt, an inactive one isn't
 //   - usage is recorded per call, and the monthly cap defers scoring
 import { randomUUID } from "node:crypto";
@@ -22,7 +21,9 @@ const tag = randomUUID().slice(0, 8);
 let companyId = "";
 const jobIds: Record<string, string> = {};
 const lessonIds: string[] = [];
-let previousVersionTime = "";
+let ownerId = "";
+let createdOwner = false;
+let previousCriteria: Record<string, unknown> | null = null;
 let previousCap: unknown;
 
 // Fake model: answers by job title. "Garbage" never validates; "Flaky" fails once.
@@ -44,7 +45,9 @@ const fakeCall: StructuredCall = async ({ system, user }) => {
 const criteriaInput = (excluded: string) => ({
   roles: "Staff Software Engineer",
   seniority: [],
-  minSalary: "",
+  salaryMin: "",
+  salaryMax: "",
+  relocate: "",
   dealbreakers: "",
   excludedCompanies: excluded,
   threshold: "75",
@@ -60,8 +63,15 @@ async function matchRows() {
 }
 
 beforeAll(async () => {
-  const { data: latest } = await db.from("criteria_versions").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  previousVersionTime = latest?.created_at ?? "1970-01-01T00:00:00Z";
+  // Criteria belong to the owner; use the local owner (or a temporary one) and restore its criteria after.
+  const { data: owner } = await db.from("users").select("id").eq("role", "owner").maybeSingle();
+  ownerId = owner?.id ?? randomUUID();
+  if (!owner) {
+    await db.from("users").insert({ id: ownerId, role: "owner" });
+    createdOwner = true;
+  }
+  const { data: criteriaRow } = await db.from("match_criteria").select("*").eq("user_id", ownerId).maybeSingle();
+  previousCriteria = criteriaRow;
   const { data: cap } = await db.from("settings").select("value").eq("key", "llm_monthly_cap_usd").maybeSingle();
   previousCap = cap?.value ?? 5;
   await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 1000 });
@@ -83,7 +93,7 @@ beforeAll(async () => {
     if (jobErr) throw jobErr;
     jobIds[key] = job.id;
   }
-  await saveMatchCriteria(db, criteriaInput(`Excluded ${tag}`));
+  await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}`));
 
   for (const [rule, active] of [[`Prefer platform teams ${tag}`, true], [`Ignore fintech ${tag}`, false]] as const) {
     const { data, error: lessonErr } = await db.from("lessons").insert({ rule, scope: "scoring", active }).select("id").single();
@@ -99,7 +109,9 @@ afterAll(async () => {
   await db.from("jobs").delete().in("id", ids);
   await db.from("companies").delete().eq("id", companyId);
   await db.from("lessons").delete().in("id", lessonIds);
-  await db.from("criteria_versions").delete().gt("created_at", previousVersionTime);
+  if (previousCriteria) await db.from("match_criteria").upsert(previousCriteria as never);
+  else await db.from("match_criteria").delete().eq("user_id", ownerId);
+  if (createdOwner) await db.from("users").delete().eq("id", ownerId);
   await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: previousCap as number });
   await db.from("runs").delete().eq("worker", "match").gt("started_at", new Date(Date.now() - 3600_000).toISOString());
 });
@@ -132,27 +144,25 @@ describe("matching", () => {
   });
 
   it("includes active scoring lessons in the prompt and leaves out inactive ones", async () => {
-    await saveMatchCriteria(db, criteriaInput(`Excluded ${tag}, Someone Else ${tag}`));
+    await db.from("matches").delete().eq("job_id", jobIds.good);
     await match();
     expect(prompts.length).toBeGreaterThan(0);
     expect(prompts[0]).toContain(`Prefer platform teams ${tag}`);
     expect(prompts[0]).not.toContain(`Ignore fintech ${tag}`);
   });
 
-  it("doesn't duplicate rows on re-run, and adds rows when criteria change", async () => {
-    const before = (await matchRows()).length; // two versions × 4 jobs
-    expect(before).toBe(8);
+  it("keeps one match per job: re-runs and criteria changes don't rescore", async () => {
+    expect((await matchRows()).length).toBe(4);
     const again = await match();
     expect(again.counts.candidates).toBe(0);
-    expect((await matchRows()).length).toBe(8);
 
-    const unchanged = await saveMatchCriteria(db, criteriaInput(`Excluded ${tag}, Someone Else ${tag}`));
-    expect(unchanged.created).toBe(false);
-    const changed = await saveMatchCriteria(db, criteriaInput(`Excluded ${tag}`));
-    expect(changed.created).toBe(true);
-    expect((await getMatchCriteria(db)).versionId).toBe(changed.versionId);
-    await match();
-    expect((await matchRows()).length).toBe(12);
+    const unchanged = await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}`));
+    expect(unchanged.changed).toBe(false);
+    const changed = await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}, Someone Else ${tag}`));
+    expect(changed.changed).toBe(true);
+    expect((await getMatchCriteria(db)).excluded_companies).toContain(`Someone Else ${tag}`);
+    expect((await match()).counts.candidates).toBe(0);
+    expect((await matchRows()).length).toBe(4);
   });
 
   it("lists relevant, matched and ruled-out jobs, sorted in the database", async () => {
@@ -174,7 +184,7 @@ describe("matching", () => {
 
   it("defers scoring once the monthly spend cap is reached", async () => {
     await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 0.000001 });
-    await saveMatchCriteria(db, criteriaInput(`Excluded ${tag}, Cap Test ${tag}`));
+    await db.from("matches").delete().in("job_id", Object.values(jobIds));
     const { counts } = await match();
     expect(counts).toMatchObject({ candidates: 4, filtered: 1, scored: 0, failed: 0, deferred: 3 });
     await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 1000 });

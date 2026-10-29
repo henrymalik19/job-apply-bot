@@ -47,25 +47,29 @@ export async function pruneSavedJobsAction(): Promise<FormMessageState> {
   };
 }
 
-/** Matching-criteria form action. A change creates a new criteria version (jobs are rescored). */
+/** Matching-criteria form action. Changes apply to jobs matched from now on. */
 export async function saveMatchCriteriaAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const field = (name: string) => String(formData.get(name) ?? "");
-  const saved = await saveMatchCriteria(db, {
+  let saved: Awaited<ReturnType<typeof saveMatchCriteria>>;
+  try {
+    saved = await saveMatchCriteria(db, owner.id, {
     roles: field("roles"),
     seniority: formData.getAll("seniority").map(String),
-    minSalary: field("minSalary"),
+    salaryMin: field("salaryMin"),
+    salaryMax: field("salaryMax"),
+    relocate: field("relocate"),
     dealbreakers: field("dealbreakers"),
     excludedCompanies: field("excludedCompanies"),
     threshold: field("threshold"),
     notes: field("notes"),
-  });
+    });
+  } catch (err) {
+    if (err instanceof ValidationError) return { error: err.message };
+    throw err;
+  }
   refresh();
-  return {
-    ok: saved.created
-      ? "Saved as a new criteria version. Jobs are rescored on the next matching run."
-      : "No changes to save.",
-  };
+  return { ok: saved.changed ? "Saved. New jobs are matched against these criteria." : "No changes to save." };
 }
 
 /** State of the title-suggestions panel. */

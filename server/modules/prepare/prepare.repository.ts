@@ -1,45 +1,8 @@
-import type { Db, Insert, Json, Row } from "@/server/db/types";
-import { check, unwrap } from "@/server/core/errors";
+import type { Db, Insert, Json } from "@/server/db/types";
+import { unwrap } from "@/server/core/errors";
 
-/** A row of `answer_topics`. */
-export type Topic = Row<"answer_topics">;
-/** A row of `answer_topic_variants`. */
-export type Variant = Row<"answer_topic_variants">;
 /** A new `application_questions` row (application id added on insert). */
 export type NewQuestion = Omit<Insert<"application_questions">, "application_id">;
-
-/** Every topic in the answer bank. */
-export async function listTopics(db: Db): Promise<Topic[]> {
-  return unwrap(await db.from("answer_topics").select("*").order("key"), "list topics");
-}
-
-/** Every known wording, keyed by normalized text. */
-export async function listVariants(db: Db): Promise<Map<string, Variant>> {
-  const rows: Variant[] = [];
-  for (let from = 0; ; from += 1000) {
-    const page = unwrap(await db.from("answer_topic_variants").select("*").range(from, from + 999), "list variants");
-    rows.push(...page);
-    if (page.length < 1000) break;
-  }
-  return new Map(rows.map((v) => [v.normalized_text, v]));
-}
-
-/** Creates a topic, or returns the existing one with the same key. */
-export async function ensureTopic(
-  db: Db,
-  topic: Pick<Insert<"answer_topics">, "key" | "label" | "category" | "value_type">,
-): Promise<Topic> {
-  check(await db.from("answer_topics").upsert(topic, { onConflict: "key", ignoreDuplicates: true }), "ensure topic");
-  return unwrap(await db.from("answer_topics").select("*").eq("key", topic.key).single(), "read topic");
-}
-
-/** Records a wording → topic mapping; an existing mapping is left alone. */
-export async function insertVariant(db: Db, variant: Insert<"answer_topic_variants">): Promise<void> {
-  check(
-    await db.from("answer_topic_variants").upsert(variant, { onConflict: "normalized_text", ignoreDuplicates: true }),
-    "insert variant",
-  );
-}
 
 /** A matched job ready to prepare, with what the form fetch needs. */
 export type PrepareCandidate = {
@@ -58,14 +21,13 @@ export type PrepareCandidate = {
 };
 
 /**
- * Open jobs scored at or above `minScore` under a criteria version, best first,
+ * Open jobs scored at or above `minScore`, best first,
  * that have no application yet.
  */
-export async function listPrepareCandidates(db: Db, criteriaVersionId: string, minScore: number, limit: number): Promise<PrepareCandidate[]> {
+export async function listPrepareCandidates(db: Db, minScore: number, limit: number): Promise<PrepareCandidate[]> {
   const res = await db
     .from("matches")
     .select("id, score, jobs!inner(id, title, company_name, source, external_id, description_md, location, closed_at, companies!inner(board_token), applications(id))")
-    .eq("criteria_version_id", criteriaVersionId)
     .eq("status", "scored")
     .gte("score", minScore)
     .is("jobs.closed_at", null)

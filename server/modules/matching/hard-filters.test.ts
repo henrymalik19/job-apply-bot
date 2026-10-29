@@ -52,7 +52,7 @@ describe("seniorityFilter", () => {
 });
 
 describe("salaryFilter", () => {
-  const c = criteria({ min_salary: 150000 });
+  const c = criteria({ salary_min: 150000 });
   it("rules out ranges entirely below the floor", () => {
     expect(salaryFilter(job({ salary_min: 100000, salary_max: 130000 }), c)).toBe("salary: 130000 below 150000");
   });

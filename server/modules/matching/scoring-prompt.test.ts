@@ -16,7 +16,7 @@ const job: PromptJob = {
 const build = (lessons: { rule: string; scope: string; active: boolean }[]) =>
   buildScoringPrompt({
     facts: [{ category: "employment", fact: "Staff Engineer at Second Nature (current)" }],
-    criteria: matchCriteriaSchema.parse({ roles: ["Staff Software Engineer"], seniority: ["staff"], min_salary: 160000 }),
+    criteria: matchCriteriaSchema.parse({ roles: ["Staff Software Engineer"], seniority: ["staff"], salary_min: 160000 }),
     lessons,
     job,
   });
@@ -56,7 +56,7 @@ describe("buildScoringPrompt", () => {
     const a = build([]).system;
     const b = buildScoringPrompt({
       facts: [{ category: "employment", fact: "Staff Engineer at Second Nature (current)" }],
-      criteria: matchCriteriaSchema.parse({ roles: ["Staff Software Engineer"], seniority: ["staff"], min_salary: 160000 }),
+      criteria: matchCriteriaSchema.parse({ roles: ["Staff Software Engineer"], seniority: ["staff"], salary_min: 160000 }),
       lessons: [],
       job: { ...job, title: "Other", company_name: "Other Co" },
     }).system;

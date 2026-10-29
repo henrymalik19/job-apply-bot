@@ -11,7 +11,7 @@ import { TitleSuggestions } from "./title-suggestions";
 
 async function SearchCriteria() {
   const { db } = await ownerContext();
-  const [title, job, { criteria }, skipped] = await Promise.all([
+  const [title, job, criteria, skipped] = await Promise.all([
     getTitleFilter(db),
     getJobFilter(db),
     getMatchCriteria(db),
@@ -57,7 +57,7 @@ async function SearchCriteria() {
           <CardTitle>Matching criteria</CardTitle>
           <CardDescription>
             Jobs that pass discovery are checked against these rules, then scored 0–100 by Claude against your profile.
-            Saving a change creates a new version, and jobs are rescored on the next run.
+            Changes apply to jobs matched from now on; jobs already matched keep their score.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -65,7 +65,9 @@ async function SearchCriteria() {
             values={{
               roles: criteria.roles,
               seniority: criteria.seniority,
-              minSalary: criteria.min_salary,
+              salaryMin: criteria.salary_min,
+              salaryMax: criteria.salary_max,
+              relocate: criteria.willing_to_relocate,
               dealbreakers: criteria.dealbreakers,
               excludedCompanies: criteria.excluded_companies,
               threshold: criteria.threshold,

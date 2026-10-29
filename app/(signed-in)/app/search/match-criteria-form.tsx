@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormMessage, type FormMessageState } from "../../_components/form-message";
 import { saveMatchCriteriaAction } from "./actions";
@@ -12,7 +13,9 @@ import { saveMatchCriteriaAction } from "./actions";
 export type MatchCriteriaValues = {
   roles: string[];
   seniority: string[];
-  minSalary: number | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  relocate: boolean | null;
   dealbreakers: string[];
   excludedCompanies: string[];
   threshold: number;
@@ -32,7 +35,7 @@ const LEVELS = [
 
 const checkbox = "size-4 rounded border-input accent-primary";
 
-/** Matching criteria form: roles, seniority, salary floor, dealbreakers, excluded companies, threshold, notes. */
+/** Matching criteria form: roles, seniority, salary range, relocation, dealbreakers, excluded companies, threshold, notes. */
 export function MatchCriteriaForm({ values }: { values: MatchCriteriaValues }) {
   const [state, action, pending] = useActionState<FormMessageState, FormData>(saveMatchCriteriaAction, {});
   return (
@@ -73,8 +76,20 @@ export function MatchCriteriaForm({ values }: { values: MatchCriteriaValues }) {
 
       <div className="flex flex-wrap gap-5">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="minSalary">Salary floor (yearly, optional)</Label>
-          <Input id="minSalary" name="minSalary" inputMode="numeric" defaultValue={values.minSalary ?? ""} placeholder="160000" className="w-40" />
+          <Label htmlFor="salaryMin">Salary floor (yearly)</Label>
+          <Input id="salaryMin" name="salaryMin" inputMode="numeric" defaultValue={values.salaryMin ?? ""} placeholder="160000" className="w-40" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="salaryMax">Top of range (stated on forms)</Label>
+          <Input id="salaryMax" name="salaryMax" inputMode="numeric" defaultValue={values.salaryMax ?? ""} placeholder="190000" className="w-40" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="relocate">Willing to relocate</Label>
+          <NativeSelect id="relocate" name="relocate" defaultValue={values.relocate == null ? "" : values.relocate ? "yes" : "no"}>
+            <NativeSelectOption value="">Not set</NativeSelectOption>
+            <NativeSelectOption value="yes">Yes</NativeSelectOption>
+            <NativeSelectOption value="no">No</NativeSelectOption>
+          </NativeSelect>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="threshold">Match threshold (0–100)</Label>

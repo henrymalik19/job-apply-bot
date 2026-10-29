@@ -1,65 +1,66 @@
-// Deriving a form's answer from an answer topic: profile topics read their
-// value from the structured profile, and every value is fitted to the
-// question's field type and options by rule. Anything that doesn't fit cleanly
-// returns null and the question goes to the owner.
+// Reading a catalog question's answer from where it lives (profile, criteria,
+// skill years), and fitting any answer to the form's field type and options by
+// rule. Anything that doesn't fit cleanly returns null and the question goes to
+// the owner.
 import type { FormOption, FormQuestion } from "@/server/integrations/ats/forms";
+import type { MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { resolvePlace } from "@/server/modules/criteria/places";
-import { findUserSkill, skillYears, type ProfileData } from "@/server/modules/profile/profile.service";
+import { skillYears, type ProfileData } from "@/server/modules/profile/profile.service";
 import { normalize } from "@/shared/text";
 
-/** A topic's value: boolean, number, salary-style range, or text. */
-export type TopicValue = boolean | number | { min: number; max: number } | string;
+/** An answer's value: boolean, number, salary-style range, or text. */
+export type AnswerValue = boolean | number | { min: number; max: number } | string;
 
 /** The answer for one form field: display text plus the structured value the form takes. */
 export type ShapedAnswer = { answer: string; value: string | string[] | boolean };
 
-/** Normalizes a question's wording for the variants lookup ("Do you require sponsorship?" → "do you require sponsorship"). */
+/** Normalizes a question's wording for the alias lookup ("Do you require sponsorship?" → "do you require sponsorship"). */
 export function normalizeQuestion(label: string): string {
   return normalize(label);
 }
 
-/** Topic keys answered from the profile rather than a saved answer. */
-export const PROFILE_TOPICS = [
-  "first_name", "last_name", "full_name", "preferred_name", "email", "phone", "current_location", "city", "state",
-  "postal_code", "linkedin_url", "github_url", "website_url", "work_authorization", "requires_sponsorship",
-  "willing_to_relocate", "notice_period",
-] as const;
-
-/** Whether a topic's value comes from the profile: the keys above and "years:<skill>". */
-export function isProfileTopic(key: string): boolean {
-  return (PROFILE_TOPICS as readonly string[]).includes(key) || key.startsWith("years:");
-}
-
 /**
- * The value of a profile topic, or null when the profile doesn't state it.
+ * The value of a question answered from the profile (by its key), or null when
+ * the profile doesn't state it.
  *
  * @param country - The posting's country (ISO code), for work authorization.
  */
-export function profileValue(key: string, data: ProfileData, opts: { country: string; now: Date }): TopicValue | null {
+export function profileValue(key: string, data: ProfileData, opts: { country: string }): AnswerValue | null {
   const p = data.profile;
   const auth = data.workAuthorizations.find((a) => a.country === opts.country);
-  const full = [p.first_name, p.last_name].filter(Boolean).join(" ");
-  if (key.startsWith("years:")) {
-    // A listed skill (or alias) first, else a skill only named on a job.
-    const name = key.slice("years:".length);
-    const skill = findUserSkill(data, name);
-    return skillYears(data, opts.now).get(skill?.normalized ?? normalize(name)) ?? null;
-  }
   switch (key) {
     case "full_name":
-      return full || null;
+      return [p.first_name, p.last_name].filter(Boolean).join(" ") || null;
     case "current_location":
       return p.city && p.state ? `${p.city}, ${p.state}` : p.city ?? null;
     case "work_authorization":
       return auth ? auth.authorized : null;
     case "requires_sponsorship":
       return auth ? auth.requires_sponsorship : null;
-    case "first_name": case "last_name": case "preferred_name": case "email": case "phone": case "city": case "state":
-    case "postal_code": case "linkedin_url": case "github_url": case "website_url": case "willing_to_relocate": case "notice_period":
+    case "first_name": case "last_name": case "preferred_name": case "email": case "phone":
+    case "postal_code": case "linkedin_url": case "github_url": case "website_url": case "notice_period":
       return p[key] ?? null;
     default:
       return null;
   }
+}
+
+/** The value of a question answered from the matching criteria (by its key), or null when not set. */
+export function criteriaValue(key: string, criteria: MatchCriteria): AnswerValue | null {
+  switch (key) {
+    case "salary_expectation":
+      return criteria.salary_min == null ? null : { min: criteria.salary_min, max: criteria.salary_max ?? criteria.salary_min };
+    case "willing_to_relocate":
+      return criteria.willing_to_relocate;
+    default:
+      return null;
+  }
+}
+
+/** Years with a catalog skill (computed from job dates, or the override), or null when the owner doesn't have it. */
+export function skillYearsValue(skillId: string, data: ProfileData, now: Date): number | null {
+  const skill = data.skills.find((s) => s.skill_id === skillId);
+  return skill ? (skillYears(data, now).get(skill.normalized) ?? null) : null;
 }
 
 const yesNo = (b: boolean) => (b ? "Yes" : "No");
@@ -111,7 +112,7 @@ const money = (n: number) => `$${n.toLocaleString("en-US")}`;
  *
  * @param inverted - The wording asks the opposite of the topic (yes/no values flip).
  */
-export function shapeAnswer(question: Pick<FormQuestion, "fieldType" | "options">, value: TopicValue, inverted = false): ShapedAnswer | null {
+export function shapeAnswer(question: Pick<FormQuestion, "fieldType" | "options">, value: AnswerValue, inverted = false): ShapedAnswer | null {
   const { fieldType, options } = question;
   if (fieldType === "file" || fieldType === "hidden") return null;
   const choose = (o: FormOption | undefined): ShapedAnswer | null =>

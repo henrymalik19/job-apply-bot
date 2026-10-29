@@ -152,7 +152,6 @@ async function Profile() {
               <Field label="LinkedIn URL" name="linkedin_url"><Input id="linkedin_url" name="linkedin_url" defaultValue={p.linkedin_url ?? ""} /></Field>
               <Field label="GitHub URL" name="github_url"><Input id="github_url" name="github_url" defaultValue={p.github_url ?? ""} /></Field>
               <Field label="Website URL" name="website_url"><Input id="website_url" name="website_url" defaultValue={p.website_url ?? ""} /></Field>
-              <Field label="Willing to relocate" name="willing_to_relocate"><YesNoSelect name="willing_to_relocate" value={p.willing_to_relocate} /></Field>
               <Field label="Notice period" name="notice_period"><Input id="notice_period" name="notice_period" defaultValue={p.notice_period ?? ""} placeholder="2 weeks" /></Field>
               <Field label="Headline" name="headline"><Input id="headline" name="headline" defaultValue={p.headline ?? ""} placeholder="Staff Software Engineer" /></Field>
             </div>

@@ -42,6 +42,6 @@ export async function transition(
 export async function countByStatus(db: Db): Promise<Record<AppStatus, number>> {
   const rows = unwrap(await db.from("applications").select("status"), "count applications");
   const counts = Object.fromEntries(APP_STATUSES.map((s) => [s, 0])) as Record<AppStatus, number>;
-  for (const row of rows) counts[row.status]++;
+  for (const row of rows) counts[row.status as AppStatus]++;
   return counts;
 }

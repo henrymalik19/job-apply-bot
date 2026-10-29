@@ -1,5 +1,5 @@
 /**
- * Every application status, in pipeline order. Mirrors the `app_status` enum;
+ * Every application status, in pipeline order. Mirrors the `applications.status` check constraint;
  * allowed moves between them live in the `status_transitions` table.
  */
 export const APP_STATUSES = [

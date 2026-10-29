@@ -12,7 +12,7 @@ export type Employment = Row<"employments"> & {
 };
 
 /** A skill the owner has, with catalog fields. */
-export type UserSkill = Row<"user_skills"> & Pick<Row<"skills">, "name" | "normalized" | "aliases" | "category">;
+export type UserSkill = Row<"user_skills"> & Pick<Row<"skills">, "name" | "normalized" | "category">;
 
 /** Everything known about the owner. */
 export type ProfileData = {
@@ -84,11 +84,6 @@ export function skillYears(data: Pick<ProfileData, "employment" | "skills">, now
   return years;
 }
 
-/** Finds a skill the owner has by name or alias ("k8s" → Kubernetes). */
-export function findUserSkill(data: Pick<ProfileData, "skills">, name: string): UserSkill | undefined {
-  const key = normalize(name);
-  return data.skills.find((s) => s.normalized === key || s.aliases.some((a) => normalize(a) === key));
-}
 
 /**
  * The profile as prompt lines, in a stable order so prompts cache: summary,
@@ -136,7 +131,6 @@ export function profileLines(data: ProfileData, now: Date): ProfileLine[] {
   const place = [profile.city, profile.state].filter(Boolean).join(", ");
   const logistics = [
     place && `Based in ${place}`,
-    profile.willing_to_relocate != null && (profile.willing_to_relocate ? "willing to relocate" : "not willing to relocate"),
     profile.notice_period && `notice period: ${profile.notice_period}`,
   ].filter(Boolean);
   if (logistics.length) lines.push({ category: "logistics", fact: `${logistics.join("; ")}.` });

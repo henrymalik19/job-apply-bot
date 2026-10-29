@@ -20,6 +20,7 @@ import {
   insertEmployment,
   insertResponsibilities,
   loadProfileData,
+  resolveSkillId,
   setEmploymentSkills,
   updateEmployment,
   upsertProfile,
@@ -37,6 +38,9 @@ export const FACT_CATEGORIES = ["project", "award", "preference", "other"] as co
 export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "internship", "freelance"] as const;
 /** Skill proficiency levels. */
 export const PROFICIENCIES = ["expert", "advanced", "working", "familiar"] as const;
+
+/** The catalog skill a name refers to (aliases first; new names join the catalog). */
+export { resolveSkillId };
 
 /** The whole profile, for the Profile page and workers. */
 export const getProfile = loadProfileData;
@@ -61,7 +65,6 @@ const optionalUrl = z.preprocess(
   (v) => (typeof v === "string" && v.trim() === "" ? null : v),
   z.string().trim().url("Enter a full URL starting with https://").nullable().default(null),
 );
-const optionalBool = z.preprocess((v) => (v === "yes" ? true : v === "no" ? false : null), z.boolean().nullable());
 const yearOrNull = z.preprocess(
   (v) => (v === "" || v == null ? null : Number(v)),
   z.number().int().min(1950).max(2100).nullable(),
@@ -86,7 +89,6 @@ const profileInput = z.object({
   website_url: optionalUrl,
   headline: optionalText(200),
   summary: optionalText(3000),
-  willing_to_relocate: optionalBool,
   notice_period: optionalText(100),
 });
 

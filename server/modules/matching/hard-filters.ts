@@ -45,9 +45,9 @@ export function seniorityFilter(job: MatchableJob, criteria: MatchCriteria): str
 
 /** Fails when the job's whole salary range is below the floor. Unknown salaries pass. */
 export function salaryFilter(job: MatchableJob, criteria: MatchCriteria): string | null {
-  if (criteria.min_salary == null) return null;
+  if (criteria.salary_min == null) return null;
   const top = job.salary_max ?? job.salary_min;
-  return top != null && top < criteria.min_salary ? `salary: ${top} below ${criteria.min_salary}` : null;
+  return top != null && top < criteria.salary_min ? `salary: ${top} below ${criteria.salary_min}` : null;
 }
 
 /** Fails when the title or description contains a dealbreaker word or phrase (whole words). */

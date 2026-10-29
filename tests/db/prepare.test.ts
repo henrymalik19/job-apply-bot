@@ -1,5 +1,5 @@
 // M5 prepare against a local Supabase, with a fake form fetcher and fake LLM:
-//   - a known topic is answered from the profile (work authorization), by rule
+//   - a catalog question is answered from the profile (work authorization), by rule
 //   - an unknown required question lands in Needs you (needs_input)
 //   - a confident new wording is saved as a variant, so the next job skips the LLM
 //   - a posting that restricts AI routes its free-text questions to Needs you
@@ -45,14 +45,14 @@ const classifyCalls: string[] = [];
 const draftPrompts: string[] = [];
 const usage = { input_tokens: 500, output_tokens: 100 };
 
-// Fake classifier: sponsorship → existing topic, clearance → a new topic with no value, "why" → open-ended.
+// Fake classifier: sponsorship → a catalog question, clearance → a new question with no answer, "why" → open-ended.
 const call: StructuredCall = async ({ user }) => {
   classifyCalls.push(user);
   const questions = [...user.matchAll(/^\[(\d+)\] (.*?)(?: \(required\))?$/gm)].map(([, index, label]) => {
-    const base = { index: Number(index), topic_key: null, new_topic: null, polarity: "same", confidence: 0.95, qualification_answer: "unknown", supporting_facts: [], reason: "test" };
-    if (label.startsWith("Will you require visa sponsorship")) return { ...base, kind: "topic", topic_key: "requires_sponsorship" };
+    const base = { index: Number(index), question_key: null, new_question: null, skill: null, polarity: "same", confidence: 0.95, qualification_answer: "unknown", supporting_facts: [], reason: "test" };
+    if (label.startsWith("Will you require visa sponsorship")) return { ...base, kind: "catalog", question_key: "requires_sponsorship" };
     if (label.startsWith("Do you hold an active security clearance")) {
-      return { ...base, kind: "topic", new_topic: { key: `security_clearance_${tag}`, label: "Security clearance", category: "other", value_type: "boolean" } };
+      return { ...base, kind: "catalog", new_question: { key: `security_clearance_${tag}`, label: "Security clearance", category: "other", answer_type: "boolean" } };
     }
     return { ...base, kind: "open_ended" };
   });
@@ -93,7 +93,7 @@ beforeAll(async () => {
 
   const { data: company } = await db.from("companies").insert({ name: `PrepCo ${tag}`, ats: "greenhouse", board_token: `prep${tag}` }).select("id").single();
   companyId = company!.id;
-  const { versionId, criteria } = await getMatchCriteria(db);
+  const criteria = await getMatchCriteria(db);
   for (const key of Object.keys(forms)) {
     const { data: job } = await db
       .from("jobs")
@@ -101,7 +101,7 @@ beforeAll(async () => {
       .select("id")
       .single();
     jobIds[key] = job!.id;
-    await db.from("matches").insert({ job_id: job!.id, criteria_version_id: versionId, hard_filter_passed: true, score: criteria.threshold + 10, status: "scored" });
+    await db.from("matches").insert({ job_id: job!.id, hard_filter_passed: true, score: criteria.threshold + 10, status: "scored" });
   }
 });
 
@@ -111,8 +111,8 @@ afterAll(async () => {
   await db.from("companies").delete().eq("id", companyId);
   if (previousAuth) await db.from("work_authorizations").upsert(previousAuth as never, { onConflict: "country" });
   else await db.from("work_authorizations").delete().eq("country", "US");
-  await db.from("answer_topics").delete().eq("key", `security_clearance_${tag}`);
-  await db.from("answer_topic_variants").delete().like("normalized_text", `%${tag}%`);
+  await db.from("question_aliases").delete().like("normalized_text", `%${tag}%`);
+  await db.from("questions").delete().eq("key", `security_clearance_${tag}`);
   await db.from("settings").upsert({ key: "daily_cap", value: previousCap as number });
 });
 
@@ -124,7 +124,7 @@ describe("prepare", () => {
     expect(app.status).toBe("needs_input");
     const byField = new Map(app.application_questions.map((r) => [r.field_name, r]));
     expect(byField.get("resume")).toMatchObject({ bucket: "auto" });
-    expect(byField.get("q_sponsor")).toMatchObject({ bucket: "auto", answer: "No", answer_source: "fact", needs_check: true });
+    expect(byField.get("q_sponsor")).toMatchObject({ bucket: "auto", answer: "No", answer_source: "profile", needs_check: true });
     expect(byField.get("q_why")).toMatchObject({ bucket: "drafted", answer: "Because the work fits my experience." });
     expect(byField.get("q_clear")).toMatchObject({ bucket: "needs_user" });
     expect(byField.get("q_clear")?.reason).toMatch(/no saved answer/);
