@@ -3,8 +3,22 @@
 // Runs with the service-role client (RLS bypass) from the Railway worker.
 import type { Db } from "@/server/db/types";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
-import { getTitleFilter, passesTitleFilter, type TitleFilter } from "@/server/modules/criteria/criteria.service";
-import { insertDiscoveredJobs, listExternalIds, syncBoard } from "@/server/modules/jobs/jobs.service";
+import {
+  getJobFilter,
+  getTitleFilter,
+  passesJobFilter,
+  passesTitleFilter,
+  type JobFilter,
+  type TitleFilter,
+} from "@/server/modules/criteria/criteria.service";
+import {
+  deleteJobs,
+  insertDiscoveredJobs,
+  listExternalIds,
+  listJobIdsWithApplications,
+  listJobsForFiltering,
+  syncBoard,
+} from "@/server/modules/jobs/jobs.service";
 import {
   boardSource,
   failInterruptedRuns,
@@ -13,7 +27,7 @@ import {
   shouldSkipBoard,
   startRun,
 } from "@/server/modules/runs/runs.service";
-import { boardUrl, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
+import { boardUrl, locationsFromSaved, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
 import { defaultSleep, fetchJson } from "@/server/integrations/ats/http";
 import { dedupKey } from "@/shared/text";
 
@@ -53,11 +67,21 @@ export type DiscoverSummary = {
   counts: { boards: number; ok: number; failed: number; skipped: number } & BoardCounts;
 };
 
-async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filter: TitleFilter): Promise<BoardCounts> {
+// `locations` is only for filtering; the jobs table stores the primary location.
+function withoutLocations<T extends { locations: string[] }>(job: T): Omit<T, "locations"> {
+  const row: Partial<T> = { ...job };
+  delete row.locations;
+  return row as Omit<T, "locations">;
+}
+
+/** Both discovery filters, loaded once per run. */
+type Filters = { title: TitleFilter; job: JobFilter };
+
+async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filters: Filters, now: Date): Promise<BoardCounts> {
   const { db } = deps;
   const body = await fetchJson(boardUrl(company.ats, company.board_token), { fetchFn: deps.fetchFn, sleep: deps.sleep });
   const jobs = parseBoard(company.ats, body);
-  const kept = jobs.filter((j) => passesTitleFilter(j.title, filter));
+  const kept = jobs.filter((j) => passesTitleFilter(j.title, filters.title) && passesJobFilter(j, filters.job, now));
   const known = await listExternalIds(db, company.id, company.ats);
   const fresh = kept.filter((j) => !known.has(j.external_id));
 
@@ -67,7 +91,7 @@ async function syncOneBoard(deps: DiscoverDeps, company: BoardCompany, filter: T
     const result = await insertDiscoveredJobs(
       db,
       fresh.slice(i, i + INSERT_CHUNK).map((j) => ({
-        ...j,
+        ...withoutLocations(j),
         company_id: company.id,
         company_name: company.name,
         source: company.ats,
@@ -110,11 +134,13 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
   };
 
   try {
-    const [boards, filter, statuses] = await Promise.all([
+    const [boards, title, job, statuses] = await Promise.all([
       listActiveBoards(db, deps.onlyCompanyIds),
       getTitleFilter(db),
+      getJobFilter(db),
       listSourceStatus(db, WORKER),
     ]);
+    const filters: Filters = { title, job };
     const statusBySource = new Map(statuses.map((s) => [s.source, s]));
 
     const byHost = new Map<BoardAts, BoardCompany[]>();
@@ -135,7 +161,7 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
 
           const boardRunId = await startRun(db, WORKER, source);
           try {
-            const counts = await syncOneBoard(deps, company, filter);
+            const counts = await syncOneBoard(deps, company, filters, now());
             await finishRun(db, boardRunId, { ok: true, counts });
             totals.ok++;
             for (const k of Object.keys(counts) as (keyof BoardCounts)[]) totals[k] += counts[k];
@@ -157,4 +183,35 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
     await finishRun(db, runId, { ok: false, counts: totals, error: message }).catch(() => {});
     throw err;
   }
+}
+
+/** What a cleanup did. */
+export type PruneResult = { checked: number; removed: number; kept: number };
+
+/**
+ * Re-applies the current discovery filters (title, work type, location and
+ * posting age) to jobs already saved and deletes the ones that no longer
+ * match. Jobs with an application are always kept.
+ */
+export async function pruneSavedJobs(db: Db, now: Date): Promise<PruneResult> {
+  const [jobs, title, job, applied] = await Promise.all([
+    listJobsForFiltering(db),
+    getTitleFilter(db),
+    getJobFilter(db),
+    listJobIdsWithApplications(db),
+  ]);
+  const remove = jobs
+    .filter((j) => !applied.has(j.id))
+    .filter(
+      (j) =>
+        !passesTitleFilter(j.title, title) ||
+        !passesJobFilter(
+          { remote_type: j.remote_type ?? "unknown", locations: locationsFromSaved(j.location, j.raw), posted_at: j.posted_at },
+          job,
+          now,
+        ),
+    )
+    .map((j) => j.id);
+  await deleteJobs(db, remove);
+  return { checked: jobs.length, removed: remove.length, kept: jobs.length - remove.length };
 }

@@ -5,8 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { paginate, parsePage } from "@/shared/paginate";
-import { BoardStatus } from "../_components/board-status";
-import { Pager, scrollingTable } from "../_components/data-table";
+import { BoardStatus } from "../../_components/board-status";
+import { Pager, scrollingTable } from "../../_components/data-table";
 import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm } from "./forms";
 
@@ -78,7 +78,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                 ))}
               </TableBody>
             </Table>
-            <Pager page={page} basePath="/admin/companies" />
+            <Pager page={page} basePath="/app/companies" />
             </>
           )}
         </CardContent>

@@ -44,6 +44,7 @@ const failing = new Set<BoardKey>();
 const companyIds: Record<string, string> = {};
 const runIds: string[] = [];
 let previousFilter: unknown;
+let previousJobFilter: unknown;
 let strangerId: string | undefined;
 
 function routes() {
@@ -102,6 +103,10 @@ beforeAll(async () => {
   const { data } = await service.from("settings").select("value").eq("key", "discover_filter").single();
   previousFilter = data?.value;
   await service.from("settings").update({ value: { include: [], exclude: ["intern"] } }).eq("key", "discover_filter");
+  // Keep every work type and place so these tests don't depend on the local owner's filter.
+  const { data: jobFilter } = await service.from("settings").select("value").eq("key", "discover_job_filter").maybeSingle();
+  previousJobFilter = jobFilter?.value ?? null;
+  await service.from("settings").upsert({ key: "discover_job_filter", value: { work_types: [], locations: [], max_age_days: 90 } });
 });
 
 afterAll(async () => {
@@ -111,6 +116,8 @@ afterAll(async () => {
   await service.from("runs").delete().in("source", Object.values(boards).map((b) => `${b.ats}:${b.token}`));
   await service.from("runs").delete().in("id", runIds);
   await service.from("settings").update({ value: previousFilter }).eq("key", "discover_filter");
+  if (previousJobFilter) await service.from("settings").upsert({ key: "discover_job_filter", value: previousJobFilter });
+  else await service.from("settings").delete().eq("key", "discover_job_filter");
   if (strangerId) await service.auth.admin.deleteUser(strangerId);
 });
 

@@ -18,14 +18,29 @@ export const scrollingTable = {
 };
 
 /**
- * "1–50 of 304" with Previous/Next links. Links keep the path and change only
- * `?page=`, so reloads and the back button work.
+ * "1–50 of 304" with Previous/Next links. Links keep the path and any other
+ * search params (filters) and change only `?page=`, so reloads and the back
+ * button work.
  *
- * @param basePath - The page's path, e.g. `/admin/companies`.
+ * @param basePath - The page's path, e.g. `/app/companies`.
+ * @param params - Search params to keep on every link (e.g. active filters).
  */
-export function Pager({ page, basePath }: { page: Page<unknown>; basePath: string }) {
+export function Pager({
+  page,
+  basePath,
+  params = {},
+}: {
+  page: Page<unknown>;
+  basePath: string;
+  params?: Record<string, string>;
+}) {
   if (page.total === 0) return null;
-  const href = (n: number) => (n <= 1 ? basePath : `${basePath}?page=${n}`);
+  const href = (n: number) => {
+    const qs = new URLSearchParams(params);
+    if (n > 1) qs.set("page", String(n));
+    const s = qs.toString();
+    return s ? `${basePath}?${s}` : basePath;
+  };
   const link = buttonVariants({ variant: "outline", size: "sm" });
   const disabled = "pointer-events-none opacity-50";
 

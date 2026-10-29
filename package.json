@@ -17,7 +17,8 @@
     "setup:local": "tsx scripts/setup-local.ts",
     "worker:discover": "node --env-file-if-exists=.env.local --import tsx workers/discover.ts",
     "import:companies": "node --env-file-if-exists=.env.local --import tsx scripts/import-companies.ts",
-    "db:types": "supabase gen types typescript --local --schema public > server/db/database.types.ts"
+    "db:types": "supabase gen types typescript --local --schema public > server/db/database.types.ts",
+    "apply:filters": "node --env-file-if-exists=.env.local --import tsx scripts/apply-search-filters.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

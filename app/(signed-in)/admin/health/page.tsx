@@ -7,8 +7,8 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { formatMinutes, loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
-import { BoardStatus, RunCounts } from "../_components/board-status";
-import { Pager, scrollingTable } from "../_components/data-table";
+import { BoardStatus, RunCounts } from "../../_components/board-status";
+import { Pager, scrollingTable } from "../../_components/data-table";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 

@@ -23,6 +23,8 @@ export type DiscoveredJob = {
   apply_url: string | null;
   title: string;
   location: string | null;
+  /** Every location the posting lists (primary first). Used for filtering, not stored as a column. */
+  locations: string[];
   remote_type: RemoteType;
   salary_min: number | null;
   salary_max: number | null;
@@ -76,6 +78,9 @@ export function remoteType(...hints: (string | null | undefined)[]): RemoteType 
 // jobs.salary_* are integers; some boards send cents (92905.44).
 const whole = (n: number | null | undefined) => (n == null ? null : Math.round(n));
 
+const unique = (values: (string | null | undefined)[]) =>
+  [...new Set(values.map((v) => v?.trim()).filter((v): v is string => Boolean(v)))];
+
 function isoOrNull(value: string | number | null | undefined): string | null {
   if (value == null) return null;
   const d = new Date(value);
@@ -104,7 +109,7 @@ const leverBoard = z.array(
     applyUrl: z.string().nullish(),
     createdAt: z.number().nullish(),
     workplaceType: z.string().nullish(),
-    categories: z.object({ location: z.string().nullish() }).nullish(),
+    categories: z.object({ location: z.string().nullish(), allLocations: z.array(z.string()).nullish() }).nullish(),
     descriptionPlain: z.string().nullish(),
     lists: z.array(z.object({ text: z.string(), content: z.string() })).nullish(),
     additionalPlain: z.string().nullish(),
@@ -122,6 +127,7 @@ const ashbyBoard = z.object({
       jobUrl: z.string(),
       applyUrl: z.string().nullish(),
       location: z.string().nullish(),
+      secondaryLocations: z.array(z.object({ location: z.string().nullish() })).nullish(),
       isListed: z.boolean().nullish(),
       isRemote: z.boolean().nullish(),
       workplaceType: z.string().nullish(),
@@ -159,6 +165,7 @@ function parseGreenhouse(body: unknown): DiscoveredJob[] {
       apply_url: j.absolute_url,
       title: j.title.trim(),
       location,
+      locations: location ? [location] : [],
       remote_type: remoteType(location),
       salary_min: null,
       salary_max: null,
@@ -185,6 +192,7 @@ function parseLever(body: unknown): DiscoveredJob[] {
       apply_url: j.applyUrl ?? null,
       title: j.text.trim(),
       location,
+      locations: unique([location, ...(j.categories?.allLocations ?? [])]),
       remote_type: remoteType(j.workplaceType, location),
       salary_min: whole(yearly?.min),
       salary_max: whole(yearly?.max),
@@ -211,6 +219,7 @@ function parseAshby(body: unknown): DiscoveredJob[] {
         apply_url: j.applyUrl ?? null,
         title: j.title.trim(),
         location,
+        locations: unique([location, ...(j.secondaryLocations ?? []).map((l) => l.location)]),
         remote_type: remoteType(j.workplaceType, j.isRemote ? "remote" : null, location),
         salary_min: whole(salary?.minValue),
         salary_max: whole(salary?.maxValue),
@@ -220,6 +229,27 @@ function parseAshby(body: unknown): DiscoveredJob[] {
         raw: slim(j),
       };
     });
+}
+
+const rawLocations = z
+  .object({
+    categories: z.object({ allLocations: z.array(z.string()).nullish() }).nullish(),
+    secondaryLocations: z.array(z.object({ location: z.string().nullish() })).nullish(),
+  })
+  .catch({});
+
+/**
+ * Every location of a saved job, rebuilt from its stored primary location and
+ * slimmed raw posting (Lever `categories.allLocations`, Ashby
+ * `secondaryLocations`). Used to re-apply filters to jobs already saved.
+ */
+export function locationsFromSaved(location: string | null, raw: unknown): string[] {
+  const r = rawLocations.parse(raw ?? {});
+  return unique([
+    location,
+    ...(r.categories?.allLocations ?? []),
+    ...(r.secondaryLocations ?? []).map((l) => l.location),
+  ]);
 }
 
 /**

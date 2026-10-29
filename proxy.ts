@@ -24,15 +24,15 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const isLogin = path === "/admin/login";
+  const isLogin = path === "/login";
   const isOwner = isOwnerId(data.user?.id, env.OWNER_USER_ID);
 
   if (!isLogin && !isOwner) {
-    if (path.startsWith("/api/admin")) {
+    if (path.startsWith("/api/")) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
     const url = request.nextUrl.clone();
-    url.pathname = "/admin/login";
+    url.pathname = "/login";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -42,5 +42,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  // Signed-in areas plus /login (to refresh the session). The public page (/) is not matched.
+  matcher: ["/app/:path*", "/admin/:path*", "/login", "/api/app/:path*", "/api/admin/:path*"],
 };

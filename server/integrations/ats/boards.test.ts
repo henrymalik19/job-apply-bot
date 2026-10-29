@@ -13,14 +13,15 @@ describe("boardUrl", () => {
 
 describe("parseBoard", () => {
   it("parses Greenhouse, decoding its escaped HTML and slimming raw", () => {
-    const [job] = parseBoard("greenhouse", greenhouseBody([{ id: "123", title: "Engineer" }]));
+    const body = greenhouseBody([{ id: "123", title: "Engineer" }]);
+    const [job] = parseBoard("greenhouse", body);
     expect(job).toMatchObject({
       external_id: "123",
       title: "Engineer",
       location: "Remote - US",
       remote_type: "remote",
       url: "https://boards.greenhouse.io/acme/jobs/123",
-      posted_at: "2026-10-01T14:00:00.000Z",
+      posted_at: new Date(body.jobs[0].first_published).toISOString(),
       salary_min: null,
     });
     expect(job.description_md).toBe("## About\n\nBuild things & ship.\n\n- TypeScript");
@@ -55,6 +56,16 @@ describe("parseBoard", () => {
       salary_max: 250000,
       salary_currency: "USD",
     });
+  });
+
+  it("collects every listed location for filtering", () => {
+    const ashby = ashbyBody([{ id: "a", title: "Engineer", location: "New York (HQ)" }]);
+    (ashby.jobs[0] as Record<string, unknown>).secondaryLocations = [{ location: "Remote (US)" }, { location: "New York (HQ)" }];
+    expect(parseBoard("ashby", ashby)[0].locations).toEqual(["New York (HQ)", "Remote (US)"]);
+    const lever = leverBody([{ id: "l", title: "Engineer", location: "Toronto" }]);
+    (lever[0].categories as Record<string, unknown>).allLocations = ["Toronto", "Remote - Canada"];
+    expect(parseBoard("lever", lever)[0].locations).toEqual(["Toronto", "Remote - Canada"]);
+    expect(parseBoard("greenhouse", greenhouseBody([{ id: "9", title: "E", location: "Seattle, NYC" }]))[0].locations).toEqual(["Seattle, NYC"]);
   });
 
   it("rounds fractional salaries to whole numbers", () => {

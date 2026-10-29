@@ -63,3 +63,8 @@ export async function loadDiscoveryHealth(db: Db, now: Date): Promise<DiscoveryH
     intervalMinutes,
   };
 }
+
+/** The most recent finished discovery run, if any. */
+export async function latestDiscoveryRun(db: Db): Promise<WorkerRun | null> {
+  return latestWorkerRun(db, "discover");
+}

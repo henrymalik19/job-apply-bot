@@ -21,10 +21,10 @@ export type OwnerContext = { owner: Owner; db: Db };
 export async function ownerContext(): Promise<OwnerContext> {
   const db = await createUserClient();
   const { data, error } = await db.auth.getUser();
-  if (error || !data.user) redirect("/admin/login");
+  if (error || !data.user) redirect("/login");
   if (!isOwnerId(data.user.id, serverEnv().OWNER_USER_ID)) {
     await db.auth.signOut();
-    redirect("/admin/login?error=not_owner");
+    redirect("/login?error=not_owner");
   }
   return { owner: { id: data.user.id, email: data.user.email }, db };
 }

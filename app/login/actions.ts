@@ -22,11 +22,11 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
 
   const result = await signInOwner(parsed.data.email, parsed.data.password);
   if (!result.ok) return { error: result.error };
-  redirect("/admin");
+  redirect("/app");
 }
 
 /** Signs out and returns to the login page. */
 export async function signOut() {
   await signOutCurrentUser();
-  redirect("/admin/login");
+  redirect("/login");
 }

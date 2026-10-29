@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FormMessage, type FormMessageState } from "../_components/form-message";
+import { FormMessage, type FormMessageState } from "../../_components/form-message";
 import { saveTitleFilterAction } from "./actions";
 
 /** Title-filter form: keep/skip phrase lists for job titles. */

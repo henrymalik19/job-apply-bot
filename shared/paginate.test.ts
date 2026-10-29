@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paginate, parsePage } from "./paginate";
+import { pageOf, paginate, parsePage } from "./paginate";
 
 const rows = Array.from({ length: 120 }, (_, i) => i + 1);
 
@@ -35,5 +35,12 @@ describe("parsePage", () => {
     [["4", "5"], 4],
   ] as const)("%j → %i", (input, expected) => {
     expect(parsePage(input as string | string[] | undefined)).toBe(expected);
+  });
+});
+
+describe("pageOf", () => {
+  it("describes a database page from its rows and total", () => {
+    expect(pageOf(Array(50).fill(0), 304, 2)).toMatchObject({ page: 2, pageCount: 7, from: 51, to: 100, total: 304 });
+    expect(pageOf([], 0, 1)).toMatchObject({ pageCount: 1, from: 0, to: 0 });
   });
 });

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { FormMessage } from "../_components/form-message";
+import { FormMessage } from "../../_components/form-message";
 import { companyFormAction, type FormState } from "./actions";
 
 /** Add-company form with "Test board" (fetch once) and "Add company" buttons. */

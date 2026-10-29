@@ -43,3 +43,20 @@ export function paginate<T>(all: T[], page: number, pageSize = DEFAULT_PAGE_SIZE
     to: start + items.length,
   };
 }
+
+/**
+ * Builds a {@link Page} for rows already fetched one page at a time from the
+ * database (`total` from an exact count), so pagers work the same either way.
+ */
+export function pageOf<T>(items: T[], total: number, page: number, pageSize = DEFAULT_PAGE_SIZE): Page<T> {
+  const start = (page - 1) * pageSize;
+  return {
+    items,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    pageSize,
+    total,
+    from: items.length ? start + 1 : 0,
+    to: start + items.length,
+  };
+}

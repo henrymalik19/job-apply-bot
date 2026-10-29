@@ -1,6 +1,9 @@
 // Minimal board payloads shaped like the live APIs (checked 2026-10-29).
 // Used by unit tests and the DB acceptance tests; not imported by app code.
 
+/** ISO timestamp `days` ago, so fixtures stay inside the discovery age limit. */
+export const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+
 /** Minimal job for building fixture boards. */
 export type FixtureJob = { id: string; title: string; location?: string };
 
@@ -12,8 +15,8 @@ export function greenhouseBody(jobs: FixtureJob[]) {
       title: j.title,
       absolute_url: `https://boards.greenhouse.io/acme/jobs/${j.id}`,
       location: { name: j.location ?? "Remote - US" },
-      updated_at: "2026-10-20T10:00:00-04:00",
-      first_published: "2026-10-01T10:00:00-04:00",
+      updated_at: daysAgo(1),
+      first_published: daysAgo(5),
       content: "&lt;h2&gt;About&lt;/h2&gt;&lt;p&gt;Build things &amp;amp; ship.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;TypeScript&lt;/li&gt;&lt;/ul&gt;",
       offices: [{ id: 1, name: "US", child_ids: [2, 3] }],
       departments: [{ id: 9, name: "Engineering" }],
@@ -29,7 +32,7 @@ export function leverBody(jobs: FixtureJob[]) {
     text: j.title,
     hostedUrl: `https://jobs.lever.co/acme/${j.id}`,
     applyUrl: `https://jobs.lever.co/acme/${j.id}/apply`,
-    createdAt: 1_790_000_000_000,
+    createdAt: Date.now() - 3 * 86_400_000,
     workplaceType: "hybrid",
     categories: { location: j.location ?? "New York, NY", team: "Engineering", commitment: "Full-time" },
     descriptionPlain: "We build tools.",
@@ -53,7 +56,7 @@ export function ashbyBody(jobs: FixtureJob[], extra: Record<string, unknown>[] =
         workplaceType: "OnSite",
         jobUrl: `https://jobs.ashbyhq.com/acme/${j.id}`,
         applyUrl: `https://jobs.ashbyhq.com/acme/${j.id}/application`,
-        publishedAt: "2026-10-02T12:00:00.000+00:00",
+        publishedAt: daysAgo(4),
         descriptionPlain: "About the role.",
         compensation: {
           compensationTiers: [
