@@ -34,16 +34,16 @@ function buildImport(existingSummary: string | null): ProfileImport {
   if (!p) throw new Error("owner profile not found in data/old/profiles.json");
   const state = str(p.state).trim().toUpperCase();
 
-  // The old app's "current" job ended when the owner joined Second Nature (2026); its end month isn't known yet.
+  // The old app's "current" job ended when the owner joined Second Nature in August 2026.
   const work = read<Work[]>("work_experiences.json").filter((w) => w.career_profile_id === p.id);
   const employment: Record<string, unknown>[] = [
-    { employer: "Second Nature", title: "Staff Software Engineer", start_date: "2026-01", end_date: "", is_current: "true", responsibilities: "", skills: "" },
+    { employer: "Second Nature", title: "Staff Software Engineer", start_date: "2026-08", end_date: "", is_current: "true", responsibilities: "", skills: "" },
     ...work.map((w) => ({
       employer: w.company,
       title: w.title,
       location: w.location ?? (w.is_remote ? "Remote" : ""),
       start_date: month(w.start_date),
-      end_date: w.is_current ? "" : month(w.end_date),
+      end_date: w.is_current ? "2026-08" : month(w.end_date),
       is_current: "false",
       description: (w.description ?? "").slice(0, 500),
       responsibilities: (w.achievements ?? []).join("\n"),
