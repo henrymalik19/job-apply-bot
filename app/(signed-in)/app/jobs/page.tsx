@@ -64,7 +64,7 @@ const REMOTE_LABEL: Record<string, string> = { remote: "Remote", hybrid: "Hybrid
 /** Turns a hard-filter reason ("salary: 139000 below 150000") into a short label. */
 function reasonLabel(reason: string | null): string {
   if (!reason) return "ruled out";
-  const salary = /^salary: d+ below (d+)$/.exec(reason);
+  const salary = /^salary: \d+ below (\d+)$/.exec(reason);
   if (salary) return `salary under $${Math.round(Number(salary[1]) / 1000)}k`;
   return reason;
 }
