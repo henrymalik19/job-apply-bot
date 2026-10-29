@@ -59,16 +59,30 @@ export function findAiRestriction(text: string | null | undefined): string | nul
 // hidden, tiny or white.
 const HIDDEN_STYLE = /(display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*[0-2](\.\d+)?(px|pt)?\s*(;|"|')|opacity\s*:\s*0(\.0+)?\s*(;|"|')|color\s*:\s*(#fff(fff)?|white|rgba?\(\s*255\s*,\s*255\s*,\s*255))/i;
 
+const COMMENT = /<!--([\s\S]*?)-->/g;
+const ELEMENT = /<(\w+)\b([^>]*)>([\s\S]*?)<\/\1>/g;
+const isHiddenElement = (attrs: string) =>
+  /\bhidden\b|aria-hidden\s*=\s*["']true/i.test(attrs) || (/style\s*=/i.test(attrs) && HIDDEN_STYLE.test(attrs));
+const decoded = (html: string) => (/&lt;\/?[a-z!]/i.test(html) ? decodeEntities(html) : html);
+
 function hiddenParts(html: string): string[] {
   const parts: string[] = [];
-  for (const m of html.matchAll(/<!--([\s\S]*?)-->/g)) parts.push(m[1]);
-  for (const m of html.matchAll(/<(\w+)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
-    const attrs = m[2];
-    if (/\bhidden\b|aria-hidden\s*=\s*["']true/i.test(attrs) || (/style\s*=/i.test(attrs) && HIDDEN_STYLE.test(attrs))) {
-      parts.push(m[3]);
-    }
-  }
+  for (const m of html.matchAll(COMMENT)) parts.push(m[1]);
+  for (const m of html.matchAll(ELEMENT)) if (isHiddenElement(m[2])) parts.push(m[3]);
   return parts.map((p) => htmlToText(p)).filter(Boolean);
+}
+
+/**
+ * The posting text a human reader sees: comments and hidden elements removed.
+ * Prompts get this, so hidden AI-directed text can't steer drafts; the flag
+ * from {@link findAiDirectedText} still shows it to the owner.
+ */
+export function visibleText(html: string | null | undefined): string {
+  if (!html) return "";
+  const source = decoded(html)
+    .replace(COMMENT, "")
+    .replace(ELEMENT, (whole: string, _tag: string, attrs: string) => (isHiddenElement(attrs) ? "" : whole));
+  return htmlToText(source);
 }
 
 /**
@@ -78,7 +92,7 @@ function hiddenParts(html: string): string[] {
  */
 export function findAiDirectedText(html: string | null | undefined): { excerpt: string; hidden: boolean }[] {
   if (!html) return [];
-  const source = /&lt;\/?[a-z!]/i.test(html) ? decodeEntities(html) : html;
+  const source = decoded(html);
   const found: { excerpt: string; hidden: boolean }[] = [];
   for (const part of hiddenParts(source)) {
     const excerpt = firstMatch(part, AI_DIRECTED);
