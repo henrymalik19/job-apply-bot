@@ -17,14 +17,14 @@ Do not start the next milestone until the current one is deployed and verified.*
 
 ### Revisions
 
-- **2026-10-29** — Railway reads `railway.json` (Config as Code) only until **2026-12-01**. Its replacement
-  (`.railway/railway.ts`, IaC) has no documented cron field yet and `railway config migrate` dropped the schedule,
-  so we have not cut over. Before Dec 1: re-check IaC for cron support; otherwise set Cron Schedule `*/30 * * * *`,
-  Dockerfile path `Dockerfile.worker` and restart policy Never in the service settings, then delete `railway.json`.
-  Company import never changes `active`, so boards paused in the UI (e.g. aggregators like Jobgether) stay paused.
+- **2026-10-29** — Railway never applied `railway.json` to the new service (no cron was set), and Config as Code
+  is read only until 2026-12-01 anyway. The worker service is now configured directly on Railway (cron `*/30 * * * *`,
+  start `pnpm worker:discover`, Dockerfile `Dockerfile.worker`, restart Never) and `railway.json` is deleted.
+  Railway IaC (`.railway/railway.ts`) has no cron field yet, so we are not adopting it. Company import never changes
+  `active`, so boards paused in the UI (e.g. aggregators like Jobgether) stay paused.
 - **2026-10-29** — Workers run on **Railway cron services** instead of GitHub Actions: private logs (a public repo
   exposes Actions logs, which name target companies), on-time schedules, and room for Playwright/IMAP later.
-  One service per schedule, built from `Dockerfile.worker`; GitHub Actions keeps CI only.
+  One service per schedule, built from `Dockerfile.worker` with settings on the service; GitHub Actions keeps CI only.
 - **2026-10-29** — M2 implementation notes: one `runs` row per board (`source = ats:token`) plus one per run
   (`source = null`); a `run_source_status` view summarizes them for backoff and Health (PostgREST caps reads at 1,000
   rows, so history is never read raw). Board writes go through `insert_discovered_jobs` / `sync_board` (service role
