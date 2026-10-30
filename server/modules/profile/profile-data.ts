@@ -46,6 +46,39 @@ const monthIndex = (date: string) => {
   return y * 12 + (m - 1);
 };
 
+/** Merged length of some month ranges, in years rounded to a tenth (overlaps count once). */
+function mergedYears(ranges: [number, number][]): number {
+  if (ranges.length === 0) return 0;
+  const list = [...ranges].sort((a, b) => a[0] - b[0]);
+  let months = 0;
+  let [curStart, curEnd] = list[0];
+  for (const [s, e] of list.slice(1)) {
+    if (s <= curEnd) curEnd = Math.max(curEnd, e);
+    else {
+      months += curEnd - curStart;
+      [curStart, curEnd] = [s, e];
+    }
+  }
+  months += curEnd - curStart;
+  return Math.round((months / 12) * 10) / 10;
+}
+
+const jobRange = (job: Pick<Employment, "start_date" | "end_date" | "is_current">, nowMonth: number): [number, number] => {
+  const start = monthIndex(job.start_date);
+  return [start, job.is_current ? nowMonth : job.end_date ? monthIndex(job.end_date) : start];
+};
+
+/** Total years of professional experience: every job's dates merged, so overlapping jobs count once. */
+export function totalYears(data: Pick<ProfileData, "employment">, now: Date): number {
+  const nowMonth = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  return mergedYears(data.employment.map((j) => jobRange(j, nowMonth)));
+}
+
+/** The current job, or the most recent one when none is current. */
+export function currentJob(data: Pick<ProfileData, "employment">): Employment | undefined {
+  return data.employment.find((j) => j.is_current) ?? [...data.employment].sort((a, b) => (b.end_date ?? "").localeCompare(a.end_date ?? ""))[0];
+}
+
 /**
  * Years with each skill, keyed by normalized name: the merged date ranges of
  * the jobs that used it (overlapping jobs count once), rounded to a tenth,
@@ -56,28 +89,12 @@ export function skillYears(data: Pick<ProfileData, "employment" | "skills">, now
   const nowMonth = now.getUTCFullYear() * 12 + now.getUTCMonth();
   const ranges = new Map<string, [number, number][]>();
   for (const job of data.employment) {
-    const start = monthIndex(job.start_date);
-    const end = job.is_current ? nowMonth : job.end_date ? monthIndex(job.end_date) : start;
     for (const skill of job.skills) {
       const key = normalize(skill);
-      ranges.set(key, [...(ranges.get(key) ?? []), [start, end]]);
+      ranges.set(key, [...(ranges.get(key) ?? []), jobRange(job, nowMonth)]);
     }
   }
-  const years = new Map<string, number>();
-  for (const [key, list] of ranges) {
-    list.sort((a, b) => a[0] - b[0]);
-    let months = 0;
-    let [curStart, curEnd] = list[0];
-    for (const [s, e] of list.slice(1)) {
-      if (s <= curEnd) curEnd = Math.max(curEnd, e);
-      else {
-        months += curEnd - curStart;
-        [curStart, curEnd] = [s, e];
-      }
-    }
-    months += curEnd - curStart;
-    years.set(key, Math.round((months / 12) * 10) / 10);
-  }
+  const years = new Map([...ranges].map(([key, list]) => [key, mergedYears(list)] as const));
   for (const s of data.skills) if (s.years_override != null) years.set(s.normalized, Number(s.years_override));
   return years;
 }

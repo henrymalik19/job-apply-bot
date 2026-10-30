@@ -157,7 +157,7 @@ function baseRow(q: FormQuestion, index: number): Draft {
 function questionValue(question: Question, mapping: Mapping, ctx: RunContext): AnswerValue | null {
   switch (question.answer_source) {
     case "profile":
-      return profileValue(question.key, ctx.profile, { country: ctx.country });
+      return profileValue(question.key, ctx.profile, { country: ctx.country, now: ctx.now });
     case "criteria":
       return criteriaValue(question.key, ctx.criteria);
     case "skill_years":

@@ -25,7 +25,7 @@ const data: ProfileData = {
   ],
   certifications: [],
 };
-const opts = { country: "US" };
+const opts = { country: "US", now };
 
 const select = (...labels: string[]) => ({
   fieldType: "select" as const,
@@ -38,6 +38,12 @@ describe("profileValue", () => {
     expect(profileValue("current_location", data, opts)).toBe("Houston, TX");
     expect(profileValue("linkedin_url", data, opts)).toBe("https://www.linkedin.com/in/someone");
     expect(profileValue("github_url", data, opts)).toBeNull();
+  });
+
+  it("reads the current job and total years from employment", () => {
+    expect(profileValue("current_company_name", data, opts)).toBe("B");
+    expect(profileValue("current_job_title", data, opts)).toBe("Engineer");
+    expect(profileValue("years_experience_total", data, opts)).toBe(7.8); // Jan 2019 – Oct 2026, overlap counted once
   });
 
   it("answers work authorization for the posting's country only", () => {

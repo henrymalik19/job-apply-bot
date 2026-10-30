@@ -5,7 +5,7 @@
 import type { FormOption, FormQuestion } from "@/server/integrations/ats/forms";
 import type { MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { resolvePlace } from "@/server/modules/criteria/places";
-import { skillYears, type ProfileData } from "@/server/modules/profile/profile.service";
+import { currentJob, skillYears, totalYears, type ProfileData } from "@/server/modules/profile/profile.service";
 import { normalize } from "@/shared/text";
 
 /** An answer's value: boolean, number, salary-style range, or text. */
@@ -25,7 +25,7 @@ export function normalizeQuestion(label: string): string {
  *
  * @param country - The posting's country (ISO code), for work authorization.
  */
-export function profileValue(key: string, data: ProfileData, opts: { country: string }): AnswerValue | null {
+export function profileValue(key: string, data: ProfileData, opts: { country: string; now: Date }): AnswerValue | null {
   const p = data.profile;
   const auth = data.workAuthorizations.find((a) => a.country === opts.country);
   switch (key) {
@@ -37,6 +37,12 @@ export function profileValue(key: string, data: ProfileData, opts: { country: st
       return auth ? auth.authorized : null;
     case "requires_sponsorship":
       return auth ? auth.requires_sponsorship : null;
+    case "current_company_name":
+      return currentJob(data)?.employer ?? null;
+    case "current_job_title":
+      return currentJob(data)?.title ?? null;
+    case "years_experience_total":
+      return data.employment.length ? totalYears(data, opts.now) : null;
     case "first_name": case "last_name": case "preferred_name": case "email": case "phone":
     case "postal_code": case "linkedin_url": case "github_url": case "website_url": case "notice_period":
       return p[key] ?? null;
