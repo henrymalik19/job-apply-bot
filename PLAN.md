@@ -620,15 +620,14 @@ choices must not block it (see "Keep open" below).
 
 - **D1 Public page**: **built, toggle off by default**.
 - **D2 Apply method**: **self-submit (Option A) first**; assisted apply via the browser extension after the MVP.
-- **D3 Email access**: **IMAP with a Gmail app password** on a dedicated job-search inbox (requires 2-step
-  verification on that account). Avoids the Gmail API OAuth setup and the short-lived refresh tokens that
-  unverified "testing" OAuth apps get. Alternative: Gmail API with OAuth. IMAP also supports the label + archive
-  needed for rejections.
+- **D3 Email access**: **IMAP on a dedicated Purelymail mailbox**, `jobs@malikhenry.com` (a real user, not an
+  alias, so the app never logs into my personal mail): `imap.purelymail.com:993`, the mailbox address as the
+  user, its password in `JOB_INBOX_PASSWORD`. IMAP also supports the label + archive needed for rejections.
 - **D4 Daily cap / threshold**: **20 per day, score ≥ 75**, both editable in settings.
 - **D5 Domain**: **Vercel default domain** until a custom one is chosen.
-- **D6 Notifications**: **email to my personal address**, sent through the job inbox's SMTP with the same app
-  password (no new service). Alternative: web push from the admin app (needs a service worker and an installed
-  PWA on the phone).
+- **D6 Notifications**: **a digest email from the job inbox to itself** over SMTP (`smtp.purelymail.com:465`,
+  same password), subject prefixed `[Autopilot]` and marked with an `X-Autopilot` header so the inbox reader
+  skips it. Address, servers, quiet hours and app URL live in `settings` (`job_inbox`, `notifications`, `app_url`).
 
 ## 9. Inputs I will provide (never commit these)
 
@@ -636,6 +635,6 @@ choices must not block it (see "Keep open" below).
 - Target companies list with ATS + board tokens.
 - My own ATS accounts (e.g. Workday), created by me; passwords stay in my password manager.
 - Env vars set in Vercel and the Railway worker services: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, `ANTHROPIC_API_KEY`, `IMAP_HOST`, `IMAP_USER`,
-  `IMAP_APP_PASSWORD`, and (D6) `NOTIFY_TO`, `SMTP_HOST`.
+  `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, `ANTHROPIC_API_KEY`, and
+  `JOB_INBOX_PASSWORD` (D3/D6).
 - `.env.example` lists every variable with a comment; never real values.
