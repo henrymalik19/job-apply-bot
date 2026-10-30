@@ -24,7 +24,6 @@ const data: ProfileData = {
     { skill_id: "s-k8s", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 2, created_at: "", updated_at: "" },
   ],
   certifications: [],
-  facts: [],
 };
 const opts = { country: "US" };
 

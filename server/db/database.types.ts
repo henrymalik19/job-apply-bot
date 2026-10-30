@@ -357,20 +357,6 @@ isOneToOne: true
       referencedColumns: ["id"]
     }
                   ]
-                },"profile_facts": {
-                  Row: {
-                    "active": boolean,"category": string,"confirmed_at": string,"created_at": string,"fact": string,"id": string,"sort_order": number,"source": string | null,"structured": Json | null,"updated_at": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "active"?: boolean,"category": string,"confirmed_at"?: string,"created_at"?: string,"fact": string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
-                  }
-                  Update: {
-                    "active"?: boolean,"category"?: string,"confirmed_at"?: string,"created_at"?: string,"fact"?: string,"id"?: string,"sort_order"?: number,"source"?: string | null,"structured"?: Json | null,"updated_at"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 },"profile_skills": {
                   Row: {
                     "created_at": string,"last_used_year": number | null,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"years_override": number | null

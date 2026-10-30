@@ -7,15 +7,12 @@ import type { Db } from "@/server/db/types";
 import {
   addCertification,
   addEducation,
-  addFact,
   addSkills,
-  editFact,
   removeProfileItem,
   removeSkill,
   saveEmployment,
   saveProfile,
   saveWorkAuthorization,
-  setFactActive,
   updateSkill,
 } from "@/server/modules/profile/profile.service";
 import type { FormMessageState } from "../../_components/form-message";
@@ -72,17 +69,7 @@ export async function updateSkillAction(_prev: FormMessageState, formData: FormD
   return run("Saved.", (db) => updateSkill(db, skill_id, rest));
 }
 
-/** Adds a free-form fact. */
-export async function addFactAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Added.", (db) => addFact(db, { category: formData.get("category"), fact: formData.get("fact") }));
-}
-
-/** Saves an edited fact. */
-export async function editFactAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Saved.", (db) => editFact(db, String(formData.get("id")), String(formData.get("fact") ?? "")));
-}
-
-const REMOVABLE = ["work_authorizations", "employments", "educations", "certifications", "profile_facts"] as const;
+const REMOVABLE = ["work_authorizations", "employments", "educations", "certifications"] as const;
 
 /** Deletes one profile item (`kind` + `id`). */
 export async function removeItemAction(formData: FormData) {
@@ -97,12 +84,5 @@ export async function removeItemAction(formData: FormData) {
 export async function removeSkillAction(formData: FormData) {
   const { db } = await ownerContext();
   await removeSkill(db, String(formData.get("skill_id")));
-  refresh();
-}
-
-/** Turns a fact on or off. */
-export async function toggleFactAction(formData: FormData) {
-  const { db } = await ownerContext();
-  await setFactActive(db, String(formData.get("id")), formData.get("active") === "true");
   refresh();
 }

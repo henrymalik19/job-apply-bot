@@ -1,5 +1,4 @@
 import { Suspense, type ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,28 +9,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { ownerContext } from "@/server/auth/require-owner";
 import {
   EMPLOYMENT_TYPES,
-  FACT_CATEGORIES,
   PROFICIENCIES,
   employmentRange,
   getProfile,
-  listProfileFacts,
   skillYears,
   type Employment,
-  type Fact,
 } from "@/server/modules/profile/profile.service";
 import { ActionForm } from "../../_components/action-form";
 import {
   addCertificationAction,
   addEducationAction,
-  addFactAction,
   addSkillsAction,
-  editFactAction,
   removeItemAction,
   removeSkillAction,
   saveAuthorizationAction,
   saveEmploymentAction,
   saveProfileAction,
-  toggleFactAction,
   updateSkillAction,
 } from "./actions";
 
@@ -102,30 +95,9 @@ function EmploymentForm({ job }: { job?: Employment }) {
   );
 }
 
-function FactRow({ fact }: { fact: Fact }) {
-  return (
-    <li className={`flex flex-col gap-2 py-3 ${fact.active ? "" : "opacity-60"}`}>
-      <ActionForm
-        action={editFactAction}
-        submitLabel="Save"
-        extraButtons={
-          <>
-            <input type="hidden" name="active" value={String(!fact.active)} />
-            <Button type="submit" variant="ghost" size="xs" formAction={toggleFactAction}>{fact.active ? "Turn off" : "Turn on"}</Button>
-            <Badge variant="outline" className="capitalize">{fact.category}</Badge>
-          </>
-        }
-      >
-        <input type="hidden" name="id" value={fact.id} />
-        <Textarea name="fact" defaultValue={fact.fact} rows={Math.min(4, Math.ceil(fact.fact.length / 110))} aria-label="Fact" />
-      </ActionForm>
-    </li>
-  );
-}
-
 async function Profile() {
   const { db } = await ownerContext();
-  const [data, facts] = await Promise.all([getProfile(db), listProfileFacts(db)]);
+  const data = await getProfile(db);
   const { profile: p } = data;
   const years = skillYears(data, new Date());
   const missingEnd = data.employment.filter((j) => !j.is_current && !j.end_date);
@@ -322,23 +294,6 @@ async function Profile() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Other facts</CardTitle>
-          <CardDescription>Anything true that fits nowhere above: a side project, an award, a preference.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <ActionForm action={addFactAction} submitLabel="Add fact">
-            <div className="flex flex-wrap items-start gap-3">
-              <NativeSelect name="category" defaultValue="project" aria-label="Category">
-                {FACT_CATEGORIES.map((c) => <NativeSelectOption key={c} value={c}>{c}</NativeSelectOption>)}
-              </NativeSelect>
-              <Textarea name="fact" rows={2} className="min-w-72 flex-1" placeholder="Built an open-source CLI with 2k GitHub stars" aria-label="Fact" />
-            </div>
-          </ActionForm>
-          {facts.length > 0 && <ul className="divide-y">{facts.map((f) => <FactRow key={f.id} fact={f} />)}</ul>}
-        </CardContent>
-      </Card>
     </>
   );
 }

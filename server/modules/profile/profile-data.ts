@@ -22,8 +22,6 @@ export type ProfileData = {
   education: Row<"educations">[];
   skills: UserSkill[];
   certifications: Row<"certifications">[];
-  /** Active free-form facts. */
-  facts: Row<"profile_facts">[];
 };
 
 /** A line of profile text for prompts. */
@@ -88,7 +86,7 @@ export function skillYears(data: Pick<ProfileData, "employment" | "skills">, now
 /**
  * The profile as prompt lines, in a stable order so prompts cache: summary,
  * jobs (newest first) with responsibilities and skills, education, skills with
- * years, certifications, work authorization, location, then free-form facts.
+ * years, certifications, work authorization, then location.
  */
 export function profileLines(data: ProfileData, now: Date): ProfileLine[] {
   const lines: ProfileLine[] = [];
@@ -135,6 +133,5 @@ export function profileLines(data: ProfileData, now: Date): ProfileLine[] {
   ].filter(Boolean);
   if (logistics.length) lines.push({ category: "logistics", fact: `${logistics.join("; ")}.` });
 
-  for (const f of data.facts) lines.push({ category: f.category, fact: f.fact });
   return lines;
 }

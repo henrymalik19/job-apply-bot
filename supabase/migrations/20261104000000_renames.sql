@@ -1,11 +1,14 @@
 -- Table and view names grouped by what they belong to: application_* for an
 -- application's children, profile_* for the owner's profile, question_* for
--- the question catalog, worker_* for worker bookkeeping.
+-- the question catalog, worker_* for worker bookkeeping. Also drops the unused
+-- free-form facts table.
 
 alter table events rename to application_events;
 alter table status_transitions rename to application_status_transitions;
 alter table evidence_items rename to application_evidence_items;
-alter table confirmed_facts rename to profile_facts;
+-- Free-form facts had no clear role (preferences live in match_criteria; projects
+-- can get their own table) and held no rows.
+drop table confirmed_facts;
 alter table user_skills rename to profile_skills;
 alter table answers rename to question_answers;
 alter table resume_versions rename to resumes;

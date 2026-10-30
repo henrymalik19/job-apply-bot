@@ -1,13 +1,11 @@
 // The owner's profile: contact details, work authorization, employment
-// history (responsibilities and skills used), education, skills,
-// certifications, and free-form facts. Prompts read it through
-// getProfileLines; everything in it counts as true and nothing beyond it may
-// be claimed.
+// history (responsibilities and skills used), education, skills and
+// certifications. Prompts read it through getProfileLines; everything in it
+// counts as true and nothing beyond it may be claimed.
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
 import { ValidationError } from "@/server/core/errors";
 import { normalize } from "@/shared/text";
-import { insertFacts, listFacts, updateFact } from "./facts.repository";
 import { profileLines, type ProfileLine } from "./profile-data";
 import {
   deleteResponsibilities,
@@ -29,11 +27,8 @@ import {
 } from "./profile.repository";
 import { hasMasterResume, insertMasterResume } from "./resumes.repository";
 
-export type { Fact } from "./facts.repository";
 export * from "./profile-data";
 
-/** Categories of free-form facts, in display order. */
-export const FACT_CATEGORIES = ["project", "award", "preference", "other"] as const;
 /** Kinds of employment. */
 export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "internship", "freelance"] as const;
 /** Skill proficiency levels. */
@@ -49,9 +44,6 @@ export const getProfile = loadProfileData;
 export async function getProfileLines(db: Db, now: Date = new Date()): Promise<ProfileLine[]> {
   return profileLines(await loadProfileData(db), now);
 }
-
-/** Every free-form fact, including turned-off ones. */
-export const listProfileFacts = listFacts;
 
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const parsed = schema.safeParse(input);
@@ -196,30 +188,10 @@ export async function removeSkill(db: Db, skillId: string): Promise<void> {
 /** Deletes one row from a profile list. */
 export async function removeProfileItem(
   db: Db,
-  kind: "work_authorizations" | "employments" | "educations" | "certifications" | "profile_facts",
+  kind: "work_authorizations" | "employments" | "educations" | "certifications",
   id: string,
 ): Promise<void> {
   await deleteRow(db, kind, z.string().uuid().parse(id));
-}
-
-const factInput = z.object({
-  category: z.enum(FACT_CATEGORIES, { message: "Pick a category." }),
-  fact: z.string().trim().min(3, "Write the fact.").max(1000),
-});
-
-/** Adds a free-form fact. @throws {@link ValidationError} */
-export async function addFact(db: Db, input: { category: unknown; fact: unknown }): Promise<void> {
-  await insertFacts(db, [{ ...parse(factInput, input), source: "typed", sort_order: 0 }]);
-}
-
-/** Turns a fact on or off without deleting it. */
-export async function setFactActive(db: Db, id: string, active: boolean): Promise<void> {
-  await updateFact(db, z.string().uuid().parse(id), { active });
-}
-
-/** Rewrites a fact's text. */
-export async function editFact(db: Db, id: string, fact: string): Promise<void> {
-  await updateFact(db, z.string().uuid().parse(id), { fact: parse(z.string().trim().min(3).max(1000), fact) });
 }
 
 /** A profile to import (from the old app's export). */

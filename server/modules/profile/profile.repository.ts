@@ -5,7 +5,7 @@ import type { Employment, ProfileData, UserSkill } from "./profile-data";
 
 /** Loads the whole profile in parallel queries. */
 export async function loadProfileData(db: Db): Promise<ProfileData> {
-  const [profile, auths, jobs, education, skills, certifications, facts] = await Promise.all([
+  const [profile, auths, jobs, education, skills, certifications] = await Promise.all([
     db.from("profiles").select("*").limit(1).maybeSingle(),
     db.from("work_authorizations").select("*").order("country"),
     db
@@ -16,7 +16,6 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
     db.from("educations").select("*").order("sort_order").order("end_year", { ascending: false, nullsFirst: true }),
     db.from("profile_skills").select("*, skills(name, normalized, category)").order("sort_order").order("created_at"),
     db.from("certifications").select("*").order("sort_order").order("issued_on", { ascending: false }),
-    db.from("profile_facts").select("*").eq("active", true).order("category").order("sort_order"),
   ]);
   type JobRow = Row<"employments"> & {
     employment_responsibilities: Row<"employment_responsibilities">[];
@@ -39,7 +38,6 @@ export async function loadProfileData(db: Db): Promise<ProfileData> {
     education: unwrap(education, "load education"),
     skills: userSkills,
     certifications: unwrap(certifications, "load certifications"),
-    facts: unwrap(facts, "load facts"),
   };
 }
 
@@ -64,7 +62,7 @@ export async function upsertWorkAuthorization(db: Db, row: Insert<"work_authoriz
 /** Generic delete by id for the profile's list tables. */
 export async function deleteRow(
   db: Db,
-  table: "work_authorizations" | "employments" | "educations" | "certifications" | "profile_facts",
+  table: "work_authorizations" | "employments" | "educations" | "certifications",
   id: string,
 ): Promise<void> {
   check(await db.from(table).delete().eq("id", id), `delete from ${table}`);
