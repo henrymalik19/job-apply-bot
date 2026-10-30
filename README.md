@@ -67,8 +67,9 @@ UTC, restart policy Never); their settings live on Railway, not in a repo file:
 
 When changing the pipeline cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
 "late" means: it flags a source after two missed runs plus 30 minutes. Both services need `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching and prepare and `JOB_INBOX_PASSWORD` for
-notify (a stage whose variable is missing is skipped).
+`SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching and prepare and `RESEND_API_KEY` for
+notify (Railway blocks SMTP, so it sends through Resend; locally `JOB_INBOX_PASSWORD` over SMTP also works).
+A stage whose variable is missing is skipped.
 Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 

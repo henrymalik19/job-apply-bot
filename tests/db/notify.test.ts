@@ -83,6 +83,7 @@ describe("notify", () => {
     expect(sent).toHaveLength(1);
     const { config, email } = sent[0];
     expect(config).toMatchObject({ host: "smtp.example.test", port: 465, user: "jobs@example.test", password: "test-password" });
+    expect(email.from).toBe("Job Search Autopilot <jobs@example.test>");
     expect(email.to).toBe("jobs@example.test");
     expect(email.subject).toBe("[Autopilot] 1 needs you");
     expect(email.text).toContain(`Question: Clearance ${tag}?`);

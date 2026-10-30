@@ -18,8 +18,12 @@ const inboxSchema = z.object({
   smtp_port: z.number().int().positive(),
 });
 
-/** `user_settings.notifications`. `to: null` sends to the job inbox itself. */
+/**
+ * `user_settings.notifications`. `to: null` sends to the job inbox itself; `from: null`
+ * sends from it. Resend needs `from` on a domain verified there (e.g. send.jobrx.ai).
+ */
 const notifySchema = z.object({
+  from: z.string().min(1).nullable().default(null),
   to: z.string().email().nullable().default(null),
   quiet_start: z.string().regex(/^\d{2}:\d{2}$/).default("22:00"),
   quiet_end: z.string().regex(/^\d{2}:\d{2}$/).default("07:00"),
@@ -32,9 +36,9 @@ export type NotifyDeps = {
   db: Db;
   /** Whose applications to email about. */
   userId: string;
-  /** The job inbox's password (JOB_INBOX_PASSWORD). */
+  /** The job inbox's password (JOB_INBOX_PASSWORD); unused when `createSender` doesn't need it. */
   password: string;
-  /** Builds the sender; tests pass a fake. */
+  /** Builds the sender (default SMTP); workers pass Resend, tests a fake. */
   createSender?: (config: SmtpConfig) => SendEmail;
   now?: Date;
   log?: (line: string) => void;
@@ -106,7 +110,7 @@ export async function runNotify(deps: NotifyDeps): Promise<{ counts: Record<stri
 
     const digest = buildDigest(items, appUrl);
     const send = createSender({ host: inbox.smtp_host, port: inbox.smtp_port, user: inbox.address, password: deps.password });
-    await send({ from: `Job Search Autopilot <${inbox.address}>`, to: settings.to ?? inbox.address, ...digest, headers: { [NOTIFY_HEADER]: "notify" } });
+    await send({ from: settings.from ?? `Job Search Autopilot <${inbox.address}>`, to: settings.to ?? inbox.address, ...digest, headers: { [NOTIFY_HEADER]: "notify" } });
     await markNotified(db, items);
     counts.sent = 1;
     counts.applications = items.length;
