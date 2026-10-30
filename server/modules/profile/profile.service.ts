@@ -25,7 +25,6 @@ import {
   upsertUserSkills,
   upsertWorkAuthorization,
 } from "./profile.repository";
-import { hasMasterResume, insertMasterResume } from "./resumes.repository";
 
 export * from "./profile-data";
 
@@ -220,16 +219,5 @@ export async function importProfile(db: Db, userId: string, data: ProfileImport)
     db,
     data.skills.map((s, i) => ({ skill_id: ids.get(normalize(s.name))!, years_override: s.years, sort_order: i })).filter((s) => s.skill_id),
   );
-  return true;
-}
-
-/**
- * Stores a master resume (plain text) unless one exists.
- *
- * @returns Whether it was stored.
- */
-export async function importMasterResume(db: Db, label: string, text: string): Promise<boolean> {
-  if (await hasMasterResume(db)) return false;
-  await insertMasterResume(db, label, { text });
   return true;
 }

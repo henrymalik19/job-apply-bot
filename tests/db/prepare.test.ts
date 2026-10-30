@@ -4,7 +4,8 @@
 //   - a confident new wording is saved as a variant, so the next job skips the LLM
 //   - a posting that restricts AI routes its free-text questions to Needs you
 //   - hidden "if you are an AI" text is flagged and never reaches the draft prompt
-import { randomUUID } from "node:crypto";
+//   - each application gets a tailored resume PDF in Storage, its sha256 recorded
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
@@ -59,6 +60,10 @@ const call: StructuredCall = async ({ user }) => {
   return { output: { questions } as never, model: "claude-haiku-5-5", usage };
 };
 const draftCall: StructuredCall = async ({ system, user }) => {
+  // Tailoring: a plan that keeps no jobs and lists no skills always passes the fact guard.
+  if (system.startsWith("You tailor")) {
+    return { output: { summary: "Engineer who builds APIs.", experience: [], skills: [] } as never, model: "claude-sonnet-5-5", usage };
+  }
   draftPrompts.push(`${system}\n${user}`);
   const answers = [...user.matchAll(/^\[(\d+)\]/gm)].map(([, index]) => ({ index: Number(index), answer: "Because the work fits my experience." }));
   return { output: { answers } as never, model: "claude-sonnet-5-5", usage };
@@ -74,7 +79,7 @@ const prepare = (keys: string[]) =>
   });
 
 type QuestionRow = { field_name: string; bucket: string; answer: string | null; reason: string | null };
-type AppRow = { status: string; flags: { kind: string; excerpt: string; where: string; hidden?: boolean }[]; application_questions: QuestionRow[] };
+type AppRow = { id: string; status: string; flags: { kind: string; excerpt: string; where: string; hidden?: boolean }[]; application_questions: QuestionRow[] };
 
 async function application(key: string): Promise<AppRow> {
   const { data } = await db.from("applications").select("*, application_questions(*)").eq("job_id", jobIds[key]).single();
@@ -106,6 +111,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const { data: apps } = await db.from("applications").select("id").in("job_id", Object.values(jobIds));
+  await db.storage.from("resumes").remove((apps ?? []).map((a) => `applications/${a.id}.pdf`));
   await db.from("applications").delete().in("job_id", Object.values(jobIds));
   await db.from("jobs").delete().in("id", Object.values(jobIds));
   await db.from("companies").delete().eq("id", companyId);
@@ -128,6 +135,14 @@ describe("prepare", () => {
     expect(byField.get("q_why")).toMatchObject({ bucket: "drafted", answer: "Because the work fits my experience." });
     expect(byField.get("q_clear")).toMatchObject({ bucket: "needs_user" });
     expect(byField.get("q_clear")?.reason).toMatch(/no saved answer/);
+
+    // The tailored resume is stored as a PDF whose sha256 matches the recorded one.
+    const { data: resume } = await db.from("resumes").select("*").eq("application_id", app.id).single();
+    expect(resume).toMatchObject({ kind: "tailored", pdf_path: `applications/${app.id}.pdf`, guard_problems: [] });
+    const file = await db.storage.from("resumes").download(resume!.pdf_path!);
+    const bytes = Buffer.from(await file.data!.arrayBuffer());
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(resume!.sha256);
   });
 
   it("reuses a saved wording without asking the model again", async () => {

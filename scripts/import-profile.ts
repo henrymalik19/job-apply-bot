@@ -7,7 +7,8 @@
 import { readFileSync } from "node:fs";
 import { createServiceClient } from "@/server/db/service-client";
 import { getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/criteria.service";
-import { getProfile, importMasterResume, importProfile, type ProfileImport } from "@/server/modules/profile/profile.service";
+import { getProfile, importProfile, type ProfileImport } from "@/server/modules/profile/profile.service";
+import { importResumeText } from "@/server/modules/resumes/resumes.service";
 import { parseWorkerEnv } from "@/shared/env";
 
 const OWNER = "user_3EFlbJRuJcCvNFjdzJaa3dkeoNP"; // the real account in the old app
@@ -93,7 +94,7 @@ async function main() {
   const profile = await importProfile(db, owner.data.id, buildImport(existing.profile.summary));
 
   const resume = read<{ user_id: string; content: string; name: string }[]>("master_resumes.json").find((r) => r.user_id === OWNER);
-  const resumeStored = resume ? await importMasterResume(db, `Imported: ${resume.name}`, resume.content) : false;
+  const resumeStored = resume ? await importResumeText(db, `Imported: ${resume.name}`, resume.content) : false;
 
   // Initial matching criteria from the old "Remote Development" search, only if still the defaults.
   let criteria = false;

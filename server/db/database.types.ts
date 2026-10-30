@@ -111,14 +111,14 @@ isOneToOne: false
                   ]
                 },"applications": {
                   Row: {
-                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"prepare_error": string | null,"prepared_at": string | null,"resume_content": Json | null,"resume_pdf_path": string | null,"status": string,"submitted_at": string | null,"updated_at": string
+                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"prepare_error": string | null,"prepared_at": string | null,"status": string,"submitted_at": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"resume_content"?: Json | null,"resume_pdf_path"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string
+                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -459,17 +459,29 @@ isOneToOne: true
                   ]
                 },"resumes": {
                   Row: {
-                    "content": NonNullable<Json>,"created_at": string,"id": string,"is_master": boolean,"label": string,"updated_at": string
+                    "application_id": string | null,"content": NonNullable<Json>,"created_at": string,"guard_problems": NonNullable<Json>,"id": string,"kind": string,"label": string,"pdf_path": string | null,"sha256": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "content": NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label": string,"updated_at"?: string
+                    "application_id"?: string | null,"content": NonNullable<Json>,"created_at"?: string,"guard_problems"?: NonNullable<Json>,"id"?: string,"kind": string,"label": string,"pdf_path"?: string | null,"sha256"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "content"?: NonNullable<Json>,"created_at"?: string,"id"?: string,"is_master"?: boolean,"label"?: string,"updated_at"?: string
+                    "application_id"?: string | null,"content"?: NonNullable<Json>,"created_at"?: string,"guard_problems"?: NonNullable<Json>,"id"?: string,"kind"?: string,"label"?: string,"pdf_path"?: string | null,"sha256"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "resumes_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: true
+      referencedRelation: "applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "resumes_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: true
+      referencedRelation: "public_applications"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"settings": {
                   Row: {
@@ -606,8 +618,6 @@ isOneToOne: false
 "match_id": string | null,
 "prepare_error": string | null,
 "prepared_at": string | null,
-"resume_content": Json | null,
-"resume_pdf_path": string | null,
 "status": string,
 "submitted_at": string | null,
 "updated_at": string

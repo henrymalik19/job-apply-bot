@@ -23,6 +23,7 @@ import {
 } from "@/server/modules/questions/questions.service";
 import { failInterruptedRuns, finishRun, startRun } from "@/server/modules/runs/runs.service";
 import { getSetting } from "@/server/modules/settings/settings.service";
+import { saveApplicationResume, tailorResume } from "@/server/modules/resumes/resumes.service";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { findAiRestriction, postingFlags, visibleText, type ApplicationFlag } from "./ai-rules";
 import {
@@ -47,6 +48,7 @@ import {
   asJson,
   countApplicationsSince,
   insertApplication,
+  setPrepareError,
   listPrepareCandidates,
   type NewQuestion,
   type PrepareCandidate,
@@ -82,6 +84,9 @@ export type PrepareCounts = {
   failed: number;
   /** Left for later: over the daily cap or the monthly LLM budget. */
   deferred: number;
+  /** Resumes tailored, and resumes that fell back to the untailored version (fact guard). */
+  tailored: number;
+  untailored: number;
   cost_usd: number;
 };
 
@@ -114,6 +119,7 @@ type RunContext = {
   country: string;
   now: Date;
   answerLessons: { rule: string; scope: string; active: boolean }[];
+  tailoringLessons: { rule: string; scope: string; active: boolean }[];
   spend: { cost: number };
 };
 
@@ -212,14 +218,25 @@ export async function prepareJob(
   deps: PrepareDeps,
   candidate: PrepareCandidate,
   runCtx: RunContext,
-): Promise<{ status: AppStatus; flags: ApplicationFlag[]; questions: NewQuestion[]; error?: string }> {
+): Promise<{
+  status: AppStatus;
+  flags: ApplicationFlag[];
+  questions: NewQuestion[];
+  /** The posting text the resume is tailored to; absent when preparing failed. */
+  posting?: PromptPosting;
+  error?: string;
+}> {
   const { job } = candidate;
   // Work-authorization questions are about the posting's country; US unless its location names exactly one other.
   const countries = resolvePlace(job.location ?? "").countries;
   const ctx: RunContext = { ...runCtx, country: countries.size === 1 ? [...countries][0] : "US" };
   const fetchForm = deps.fetchForm ?? ((ats, token, id) => fetchApplicationForm(ats, token, id));
   const form = await fetchForm(job.source, job.board_token, job.external_id);
-  if (!form) return { status: "manual", flags: [], questions: [], error: `no application form available from ${job.source}` };
+  if (!form) {
+    // Still tailor a resume: a manual application needs one too.
+    const posting = { title: job.title, company_name: job.company_name, text: job.description_md ?? "" };
+    return { status: "manual", flags: [], questions: [], posting, error: `no application form available from ${job.source}` };
+  }
 
   const flags = postingFlags(form.descriptionHtml);
   const postingRestricted = flags.some((f) => f.kind === "ai_restriction");
@@ -319,7 +336,7 @@ export async function prepareJob(
     : blocking.some((q) => q.bucket === "needs_user")
       ? "needs_input"
       : "queued";
-  return { status, flags, questions };
+  return { status, flags, questions, posting };
 }
 
 async function ensureQuestionCached(
@@ -394,13 +411,14 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
   const { db, now = () => new Date(), log = () => {} } = deps;
   await failInterruptedRuns(db, WORKER, new Date(now().getTime() - INTERRUPTED_AFTER_MS));
   const runId = await startRun(db, WORKER, null);
-  const counts: PrepareCounts = { candidates: 0, queued: 0, needs_input: 0, manual: 0, failed: 0, deferred: 0, cost_usd: 0 };
+  const counts: PrepareCounts = { candidates: 0, queued: 0, needs_input: 0, manual: 0, failed: 0, deferred: 0, tailored: 0, untailored: 0, cost_usd: 0 };
 
   try {
-    const [criteria, profile, answerLessons, questions, aliases, answers, budget, cap, today] = await Promise.all([
+    const [criteria, profile, answerLessons, tailoringLessons, questions, aliases, answers, budget, cap, today] = await Promise.all([
       getMatchCriteria(db),
       getProfile(db),
       lessonsFor(db, "answers"),
+      lessonsFor(db, "tailoring"),
       listQuestions(db),
       listAliases(db),
       listAnswers(db),
@@ -427,6 +445,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       country: "US",
       now: now(),
       answerLessons: answerLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+      tailoringLessons: tailoringLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
       spend: { cost: 0 },
     };
 
@@ -442,7 +461,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       } catch (err) {
         result = { status: "failed", flags: [], questions: [], error: err instanceof Error ? err.message : String(err) };
       }
-      await insertApplication(
+      const applicationId = await insertApplication(
         db,
         {
           job_id: candidate.job.id,
@@ -456,6 +475,21 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
         result.questions,
       );
       made++;
+      if (result.posting) {
+        try {
+          const resume = await tailorResume({
+            db, call: deps.draftCall, data: profile, lessons: ctx.tailoringLessons, posting: result.posting,
+            jobId: candidate.job.id, now: now(), spend: ctx.spend,
+          });
+          await saveApplicationResume(db, applicationId, resume, `${candidate.job.title} at ${candidate.job.company_name}`);
+          counts[resume.kind === "tailored" ? "tailored" : "untailored"]++;
+          if (resume.problems.length) log(`${candidate.job.id}: untailored resume (${resume.problems.join("; ")})`);
+        } catch (err) {
+          const message = `resume: ${err instanceof Error ? err.message : String(err)}`;
+          await setPrepareError(db, applicationId, [result.error, message].filter(Boolean).join("; "));
+          log(`${candidate.job.id}: ${message}`);
+        }
+      }
       counts[result.status === "queued" || result.status === "needs_input" || result.status === "manual" ? result.status : "failed"]++;
       if (result.error) log(`${candidate.job.id}: ${result.error}`);
     }

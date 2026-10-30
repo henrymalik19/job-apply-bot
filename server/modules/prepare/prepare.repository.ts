@@ -1,5 +1,5 @@
 import type { Db, Insert, Json } from "@/server/db/types";
-import { unwrap } from "@/server/core/errors";
+import { check, unwrap } from "@/server/core/errors";
 
 /** A new `application_questions` row (application id added on insert). */
 export type NewQuestion = Omit<Insert<"application_questions">, "application_id">;
@@ -79,3 +79,8 @@ export async function insertApplication(
 
 /** JSON helper for jsonb columns. */
 export const asJson = (value: unknown) => value as Json;
+
+/** Records why part of preparing an application failed (e.g. the resume). */
+export async function setPrepareError(db: Db, applicationId: string, error: string): Promise<void> {
+  check(await db.from("applications").update({ prepare_error: error.slice(0, 500) }).eq("id", applicationId), "set prepare error");
+}
