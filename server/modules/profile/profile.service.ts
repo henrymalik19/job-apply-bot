@@ -221,3 +221,33 @@ export async function importProfile(db: Db, userId: string, data: ProfileImport)
   );
   return true;
 }
+
+/** Profile fields a form answer can be saved back to (by catalog question key). */
+export const PROFILE_ANSWER_KEYS = [
+  "first_name", "last_name", "full_name", "preferred_name", "email", "phone", "postal_code",
+  "linkedin_url", "github_url", "website_url", "notice_period", "current_location",
+] as const;
+
+/**
+ * Saves one answer back to the profile: a single column, or "full_name"
+ * (first + last) and "current_location" ("City, ST").
+ *
+ * @returns Whether the key is one the profile holds (otherwise nothing is saved).
+ * @throws {@link ValidationError} for an invalid email, URL or location.
+ */
+export async function saveProfileAnswer(db: Db, userId: string, key: string, value: string): Promise<boolean> {
+  if (!(PROFILE_ANSWER_KEYS as readonly string[]).includes(key)) return false;
+  const text = value.trim();
+  if (key === "full_name") {
+    const [first, ...rest] = text.split(/\s+/);
+    await upsertProfile(db, userId, { first_name: first || null, last_name: rest.join(" ") || null });
+  } else if (key === "current_location") {
+    const m = /^(.+?),\s*([A-Za-z]{2})$/.exec(text);
+    if (!m) throw new ValidationError('Write the location as "City, ST" to save it to your profile.');
+    await upsertProfile(db, userId, { city: m[1].trim(), state: m[2].toUpperCase() });
+  } else {
+    const field = profileInput.shape[key as keyof typeof profileInput.shape];
+    await upsertProfile(db, userId, { [key]: parse(field as z.ZodType<string | null>, text) });
+  }
+  return true;
+}

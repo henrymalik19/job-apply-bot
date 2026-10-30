@@ -8,6 +8,8 @@ import type { TokenUsage } from "./pricing";
 
 /** Model used for scoring and other cheap, high-volume calls. */
 export const SCORING_MODEL = "claude-haiku-5-5";
+/** Model used for writing: drafted answers and tailored resumes. */
+export const DRAFTING_MODEL = "claude-sonnet-5-5";
 
 /** One structured call's result: the parsed output (null when it didn't parse or was refused) plus usage. */
 export type StructuredResult<T> = {

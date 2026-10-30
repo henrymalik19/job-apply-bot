@@ -72,6 +72,8 @@ export type PrepareDeps = {
   now?: () => Date;
   /** Only consider these jobs (tests). */
   onlyJobIds?: string[];
+  /** Prepare at most this many (below the daily cap), e.g. for a trial run. */
+  limit?: number;
   log?: (line: string) => void;
 };
 
@@ -426,7 +428,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       getSetting(db, "daily_cap"),
       countApplicationsSince(db, utcDayStart(now())),
     ]);
-    const room = Math.max(0, Number(cap ?? 20) - today);
+    const room = Math.min(deps.limit ?? Infinity, Math.max(0, Number(cap ?? 20) - today));
     let candidates = await listPrepareCandidates(db, criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
     if (deps.onlyJobIds) {
       const only = new Set(deps.onlyJobIds);

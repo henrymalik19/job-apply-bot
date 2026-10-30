@@ -3,6 +3,7 @@
 // job, or always asked), and every wording seen for it. Each value is stored
 // once; questions and aliases only point at it.
 export {
+  confirmAlias,
   ensureQuestion,
   insertAlias,
   listAliases,

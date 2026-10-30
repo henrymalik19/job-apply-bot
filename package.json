@@ -20,6 +20,7 @@
     "db:types": "supabase gen types typescript --local --schema public > server/db/database.types.ts",
     "apply:filters": "node --env-file-if-exists=.env.local --import tsx scripts/apply-search-filters.ts",
     "worker:pipeline": "node --env-file-if-exists=.env.local --import tsx workers/pipeline.ts",
+    "worker:prepare": "node --env-file-if-exists=.env.local --import tsx workers/prepare.ts",
     "import:profile": "node --env-file-if-exists=.env.local --import tsx scripts/import-profile.ts"
   },
   "dependencies": {

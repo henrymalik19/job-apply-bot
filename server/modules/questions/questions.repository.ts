@@ -49,3 +49,8 @@ export async function insertAlias(db: Db, alias: Insert<"question_aliases">): Pr
 export async function saveAnswer(db: Db, questionId: string, value: NonNullable<Json>): Promise<void> {
   check(await db.from("question_answers").upsert({ question_id: questionId, value }), "save answer");
 }
+
+/** Marks a wording's mapping as confirmed by the owner (answers from it stop showing "please check"). */
+export async function confirmAlias(db: Db, normalizedText: string): Promise<void> {
+  check(await db.from("question_aliases").update({ confirmed: true }).eq("normalized_text", normalizedText), "confirm question alias");
+}
