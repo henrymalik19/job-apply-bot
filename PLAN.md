@@ -453,10 +453,11 @@ For each selected job:
 Each worker drains what's waiting in the database (the tables are the queue), so it can be woken by whatever
 creates its work and also by a short timer that catches anything else. A wake-up with nothing waiting costs a few
 queries. Workers loop over every user.
-- **Pipeline** service, every 6 hours: `discover → match → prepare → notify`, so new jobs are prepared and emailed
-  minutes after they're found.
-- **Sweep** service, every 15 minutes: `prepare → notify` (cap leftovers on a new day, retries, anything another
-  worker left waiting). `track_email` joins it in M6; `expire` runs once a day inside it in M7.
+- One Railway cron service per worker, each running its own entry point: **discover** every 6 hours; **match**,
+  **prepare** and **notify** every 15 minutes, staggered (:00, :05, :10) so one pass flows through in a single
+  window. A new job reaches the inbox within about 15 minutes of the discover run. `track_email` (M6) and
+  `expire` (M7) get their own services. Secrets are Railway shared variables that each service references.
+- `worker:pipeline` chains them all in one process, for running by hand.
 - Quick changes made in the web app happen there and then (e.g. a saved answer fills the same question on every
   waiting application); slow ones (apply) are left waiting for a worker.
 - Railway skips a tick while the previous run is still active, so runs never overlap; each run must exit.

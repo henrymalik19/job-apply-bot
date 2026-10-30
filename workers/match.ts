@@ -1,6 +1,6 @@
 // Match worker: for every user, scores open jobs from boards they follow that
-// they have no match for yet. Runs inside the pipeline; this entry point is for
-// running it by hand.
+// they have no match for yet. Railway runs it every 15 minutes (match
+// service); the pipeline also chains it.
 //   pnpm worker:match   (reads .env.local locally; Railway variables in production)
 import { createServiceClient } from "@/server/db/service-client";
 import { parseWorkerEnv } from "@/shared/env";

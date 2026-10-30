@@ -47,7 +47,6 @@ runs as the signed-in owner (RLS) in the web app and as the service role in work
 
 ```bash
 pnpm worker:pipeline          # discover, then per user match → prepare → notify (reads .env.local)
-pnpm worker:sweep             # per user prepare → notify
 pnpm worker:discover          # discovery only
 pnpm worker:match             # matching only
 pnpm worker:prepare           # prepare only [--limit N]
@@ -57,15 +56,20 @@ pnpm apply:filters            # re-apply discovery filters to saved jobs
 ```
 
 Each worker takes whatever is waiting in the database, for every user, so running one twice is
-harmless. In production two Railway cron services run the same image (`Dockerfile.worker`, schedule in
-UTC, restart policy Never); their settings live on Railway, not in a repo file:
+harmless. In production each worker is its own Railway cron service, all built from `Dockerfile.worker`
+(schedule in UTC, restart policy Never); their settings live on Railway, not in a repo file:
 
-| Service | Cron | Start command |
-|---|---|---|
-| `job-apply-bot` (pipeline) | `0 */6 * * *` | `pnpm worker:pipeline` |
-| `sweep` | `*/15 * * * *` | `pnpm worker:sweep` |
+| Service | Cron | Start command | Variables |
+|---|---|---|---|
+| `discover` | `0 */6 * * *` | `pnpm worker:discover` | Supabase |
+| `match` | `*/15 * * * *` | `pnpm worker:match` | Supabase, `ANTHROPIC_API_KEY` |
+| `prepare` | `5-59/15 * * * *` | `pnpm worker:prepare` | Supabase, `ANTHROPIC_API_KEY` |
+| `notify` | `10-59/15 * * * *` | `pnpm worker:notify` | Supabase, `RESEND_API_KEY` |
 
-When changing the pipeline cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
+The values are Railway shared variables; each service references the ones it needs (`${{shared.NAME}}`).
+Supabase means `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+
+When changing the discover cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
 "late" means: it flags a source after two missed runs plus 30 minutes. Both services need `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching and prepare and `RESEND_API_KEY` for
 notify (Railway blocks SMTP, so it sends through Resend; locally `JOB_INBOX_PASSWORD` over SMTP also works).

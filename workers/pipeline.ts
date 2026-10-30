@@ -1,8 +1,8 @@
-// Pipeline worker (Railway cron, every 6 hours): discover, then for every user
-// match → prepare → notify, in one process, so new jobs are prepared and
-// emailed minutes after they're found.
+// Pipeline worker, for running by hand: discover, then for every user
+// match → prepare → notify, in one process. In production each of these is
+// its own Railway service.
 //   pnpm worker:pipeline   (reads .env.local locally; Railway variables in production)
-// Matching and prepare need ANTHROPIC_API_KEY, notify needs JOB_INBOX_PASSWORD;
+// Matching and prepare need ANTHROPIC_API_KEY, notify needs RESEND_API_KEY (or JOB_INBOX_PASSWORD for SMTP);
 // a stage whose variable is missing is skipped with a log line. Exits non-zero
 // when discovery fails as a whole or any stage fails for a user; per-board and
 // per-job failures are recorded and shown on Health.

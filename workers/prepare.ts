@@ -1,6 +1,6 @@
 // Prepare worker: for every user, prepares applications for their best-scoring
-// jobs (forms, answers, tailored resumes), up to each user's daily cap. Runs
-// inside the pipeline and the sweep; this entry point is for running it by hand.
+// jobs (forms, answers, tailored resumes), up to each user's daily cap. Railway runs
+// it every 15 minutes (prepare service); the pipeline also chains it.
 //   pnpm worker:prepare [--limit N]   (reads .env.local locally; Railway variables in production)
 import { createServiceClient } from "@/server/db/service-client";
 import { parseWorkerEnv } from "@/shared/env";

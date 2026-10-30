@@ -1,7 +1,7 @@
 // Notify worker: for every user, emails a digest of applications that need
 // attention, from and to their job inbox (user settings `job_inbox` and
-// `notifications`). Runs inside the pipeline and the sweep; this entry point is
-// for running it by hand.
+// `notifications`). Railway runs it every 15 minutes (notify
+// service); the pipeline also chains it.
 //   pnpm worker:notify   (reads .env.local locally; Railway variables in production)
 import { createServiceClient } from "@/server/db/service-client";
 import { parseWorkerEnv } from "@/shared/env";
