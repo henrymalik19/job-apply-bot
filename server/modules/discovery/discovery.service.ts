@@ -1,13 +1,14 @@
-// Discovery: fetch every active board, insert new jobs, refresh last_seen_at /
-// closed_at, and write a runs row per board plus one for the whole run.
-// Runs with the service-role client (RLS bypass) from the Railway worker.
+// Discovery: fetch every active board someone follows, insert new jobs that
+// pass any user's search filters (each user's own filters are applied again at
+// matching), refresh last_seen_at / closed_at, and write a runs row per board
+// plus one for the whole run. Runs with the service-role client (RLS bypass)
+// from the Railway worker.
 import type { Db } from "@/server/db/types";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
 import {
   getJobFilter,
   getTitleFilter,
   jobFilterReason,
-  passesJobFilter,
   passesTitleFilter,
   type JobFilter,
   type TitleFilter,
@@ -31,6 +32,7 @@ import {
 } from "@/server/modules/runs/runs.service";
 import { boardUrl, locationsFromSaved, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
 import { defaultSleep, fetchJson } from "@/server/integrations/ats/http";
+import { listUsers } from "@/server/modules/users/users.service";
 import { dedupKey } from "@/shared/text";
 
 const WORKER = "discover";
@@ -78,13 +80,32 @@ function withoutLocations<T extends { locations: string[] }>(job: T): Omit<T, "l
   return row as Omit<T, "locations">;
 }
 
-/** Both discovery filters, loaded once per run. */
+/** One user's two discovery filters. */
 type Filters = { title: TitleFilter; job: JobFilter };
+
+/** Each user's discovery filters. */
+async function loadFilters(db: Db, userIds: string[]): Promise<Filters[]> {
+  return Promise.all(userIds.map(async (id) => ({ title: await getTitleFilter(db, id), job: await getJobFilter(db, id) })));
+}
+
+/**
+ * Why no user wants a job (the first user's reason), or null when someone's
+ * filters pass it.
+ */
+function skipReason(job: Parameters<typeof jobFilterReason>[0] & { title: string }, filters: Filters[], now: Date): string | null {
+  let first: string | null = null;
+  for (const f of filters) {
+    const reason = passesTitleFilter(job.title, f.title) ? jobFilterReason(job, f.job, now) : "title";
+    if (reason === null) return null;
+    first ??= reason;
+  }
+  return first ?? "no users";
+}
 
 async function syncOneBoard(
   deps: DiscoverDeps,
   company: BoardCompany,
-  filters: Filters,
+  filters: Filters[],
   now: Date,
 ): Promise<{ counts: BoardCounts; samples: FilteredSample[] }> {
   const { db } = deps;
@@ -92,7 +113,7 @@ async function syncOneBoard(
   const jobs = parseBoard(company.ats, body);
   const samples: FilteredSample[] = [];
   const kept = jobs.filter((j) => {
-    const reason = passesTitleFilter(j.title, filters.title) ? jobFilterReason(j, filters.job, now) : "title";
+    const reason = skipReason(j, filters, now);
     if (reason && samples.length < SAMPLES_PER_BOARD) samples.push({ title: j.title, company: company.name, reason });
     return reason === null;
   });
@@ -149,13 +170,12 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
   };
 
   try {
-    const [boards, title, job, statuses] = await Promise.all([
+    const [boards, users, statuses] = await Promise.all([
       listActiveBoards(db, deps.onlyCompanyIds),
-      getTitleFilter(db),
-      getJobFilter(db),
+      listUsers(db),
       listSourceStatus(db, WORKER),
     ]);
-    const filters: Filters = { title, job };
+    const filters = await loadFilters(db, users.map((u) => u.id));
     const statusBySource = new Map(statuses.map((s) => [s.source, s]));
 
     const byHost = new Map<BoardAts, BoardCompany[]>();
@@ -204,27 +224,28 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
 export type PruneResult = { checked: number; removed: number; kept: number };
 
 /**
- * Re-applies the current discovery filters (title, work type, location and
- * posting age) to jobs already saved and deletes the ones that no longer
- * match. Jobs with an application are always kept.
+ * Re-applies the discovery filters (title, work type, location and posting
+ * age) of the given users to jobs already saved and deletes the ones none of
+ * them wants. Jobs with an application are always kept; with no users nothing
+ * is deleted. Pass every user (the web app can only read its own filters, so
+ * from there it is right only while one user exists).
  */
-export async function pruneSavedJobs(db: Db, now: Date): Promise<PruneResult> {
-  const [jobs, title, job, applied] = await Promise.all([
+export async function pruneSavedJobs(db: Db, userIds: string[], now: Date): Promise<PruneResult> {
+  const [jobs, filters, applied] = await Promise.all([
     listJobsForFiltering(db),
-    getTitleFilter(db),
-    getJobFilter(db),
+    loadFilters(db, userIds),
     listJobIdsWithApplications(db),
   ]);
+  if (filters.length === 0) return { checked: jobs.length, removed: 0, kept: jobs.length };
   const remove = jobs
     .filter((j) => !applied.has(j.id))
     .filter(
       (j) =>
-        !passesTitleFilter(j.title, title) ||
-        !passesJobFilter(
-          { remote_type: j.remote_type ?? "unknown", locations: locationsFromSaved(j.location, j.raw), posted_at: j.posted_at },
-          job,
+        skipReason(
+          { title: j.title, remote_type: j.remote_type ?? "unknown", locations: locationsFromSaved(j.location, j.raw), posted_at: j.posted_at },
+          filters,
           now,
-        ),
+        ) !== null,
     )
     .map((j) => j.id);
   await deleteJobs(db, remove);

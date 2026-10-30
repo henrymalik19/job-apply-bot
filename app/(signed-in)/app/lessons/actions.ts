@@ -8,9 +8,9 @@ import type { FormMessageState } from "../../_components/form-message";
 
 /** Add-lesson form action. */
 export async function addLessonAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   try {
-    await addLesson(db, { rule: formData.get("rule"), scope: formData.get("scope") });
+    await addLesson(db, owner.id, { rule: formData.get("rule"), scope: formData.get("scope") });
   } catch (err) {
     if (err instanceof ValidationError) return { error: err.message };
     throw err;
@@ -21,7 +21,7 @@ export async function addLessonAction(_prev: FormMessageState, formData: FormDat
 
 /** Turns a lesson on or off. */
 export async function toggleLessonAction(formData: FormData) {
-  const { db } = await ownerContext();
-  await setLessonActive(db, String(formData.get("id")), formData.get("active") === "true");
+  const { db, owner } = await ownerContext();
+  await setLessonActive(db, owner.id, String(formData.get("id")), formData.get("active") === "true");
   refresh();
 }

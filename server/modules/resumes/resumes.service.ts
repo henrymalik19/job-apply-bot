@@ -28,6 +28,7 @@ export type TailoredResume = { doc: ResumeDoc; kind: "tailored" | "fallback"; pr
  */
 export async function tailorResume(input: {
   db: Db;
+  userId: string;
   call: StructuredCall;
   data: ProfileData;
   lessons: PromptLesson[];
@@ -40,7 +41,7 @@ export async function tailorResume(input: {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const prompt = buildTailorPrompt({ data: input.data, lessons: input.lessons, posting: input.posting, now: input.now, problems });
     const res = await input.call({ ...prompt, schema: tailorPlanSchema, maxTokens: 8000, effort: "medium" });
-    input.spend.cost += await recordUsage(input.db, { purpose: "tailor", model: res.model, usage: res.usage, jobId: input.jobId });
+    input.spend.cost += await recordUsage(input.db, input.userId, { purpose: "tailor", model: res.model, usage: res.usage, jobId: input.jobId });
     if (!res.output) {
       problems = [res.error ?? "no output"];
       continue;
@@ -55,11 +56,12 @@ export async function tailorResume(input: {
  * Renders an application's resume to PDF, uploads it to
  * `applications/<id>.pdf` and records it with its sha256.
  */
-export async function saveApplicationResume(db: Db, applicationId: string, resume: TailoredResume, label: string): Promise<void> {
+export async function saveApplicationResume(db: Db, userId: string, applicationId: string, resume: TailoredResume, label: string): Promise<void> {
   const pdf = await renderResumePdf(resume.doc);
   const path = `applications/${applicationId}.pdf`;
   await uploadPdf(db, path, pdf);
   await upsertApplicationResume(db, {
+    user_id: userId,
     application_id: applicationId,
     kind: resume.kind,
     label,
@@ -76,8 +78,8 @@ export async function saveApplicationResume(db: Db, applicationId: string, resum
  *
  * @returns Whether it was stored.
  */
-export async function importResumeText(db: Db, label: string, text: string): Promise<boolean> {
-  if (await hasImportedResume(db)) return false;
-  await insertImportedResume(db, label, { text });
+export async function importResumeText(db: Db, userId: string, label: string, text: string): Promise<boolean> {
+  if (await hasImportedResume(db, userId)) return false;
+  await insertImportedResume(db, userId, label, { text });
   return true;
 }

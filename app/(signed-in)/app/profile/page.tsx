@@ -96,8 +96,8 @@ function EmploymentForm({ job }: { job?: Employment }) {
 }
 
 async function Profile() {
-  const { db } = await ownerContext();
-  const data = await getProfile(db);
+  const { db, owner } = await ownerContext();
+  const data = await getProfile(db, owner.id);
   const { profile: p } = data;
   const years = skillYears(data, new Date());
   const missingEnd = data.employment.filter((j) => !j.is_current && !j.end_date);

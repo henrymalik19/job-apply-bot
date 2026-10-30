@@ -10,11 +10,11 @@ import { TitleFilterForm } from "./title-filter-form";
 import { TitleSuggestions } from "./title-suggestions";
 
 async function SearchCriteria() {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const [title, job, criteria, skipped] = await Promise.all([
-    getTitleFilter(db),
-    getJobFilter(db),
-    getMatchCriteria(db),
+    getTitleFilter(db, owner.id),
+    getJobFilter(db, owner.id),
+    getMatchCriteria(db, owner.id),
     recentSamples(db, "discover", 30),
   ]);
 

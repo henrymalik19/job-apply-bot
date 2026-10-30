@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isOwnerId } from "@/server/auth/owner";
 import { createServiceClient } from "@/server/db/service-client";
-import { isPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
+import { isOwnerPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
 import { serverEnv } from "@/shared/env";
 
 /**
@@ -11,7 +11,7 @@ import { serverEnv } from "@/shared/env";
  * notFound() a 200 status would already be sent.
  */
 async function publicPage(): Promise<NextResponse> {
-  const enabled = await isPublicPageEnabled(createServiceClient(serverEnv()));
+  const enabled = await isOwnerPublicPageEnabled(createServiceClient(serverEnv()));
   const response = enabled ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;

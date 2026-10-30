@@ -90,15 +90,15 @@ async function main() {
 
   const owner = await db.from("users").select("id").eq("role", "owner").single();
   if (owner.error) throw new Error("no owner set (pnpm owner:set)");
-  const existing = await getProfile(db);
+  const existing = await getProfile(db, owner.data.id);
   const profile = await importProfile(db, owner.data.id, buildImport(existing.profile.summary));
 
   const resume = read<{ user_id: string; content: string; name: string }[]>("master_resumes.json").find((r) => r.user_id === OWNER);
-  const resumeStored = resume ? await importResumeText(db, `Imported: ${resume.name}`, resume.content) : false;
+  const resumeStored = resume ? await importResumeText(db, owner.data.id, `Imported: ${resume.name}`, resume.content) : false;
 
   // Initial matching criteria from the old "Remote Development" search, only if still the defaults.
   let criteria = false;
-  const current = await getMatchCriteria(db);
+  const current = await getMatchCriteria(db, owner.data.id);
   if (current.roles.length === 0) {
     const search = read<{ user_id: string; name: string; target_roles: string[]; target_salary_min: number | null }[]>("job_searches.json")
       .find((s) => s.user_id === OWNER);

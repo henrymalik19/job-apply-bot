@@ -20,8 +20,8 @@ function questionSummary(app: ApplicationWithDetails): string {
 }
 
 async function ReviewList() {
-  const { db } = await ownerContext();
-  const apps = await listApplications(db, REVIEW_STATUSES);
+  const { db, owner } = await ownerContext();
+  const apps = await listApplications(db, owner.id, REVIEW_STATUSES);
   const now = new Date();
   return (
     <Card className={scrollingTable.card}>

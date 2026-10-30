@@ -4,9 +4,9 @@ import { check, unwrap } from "@/server/core/errors";
 /** A `match_criteria` row. */
 export type MatchCriteriaRow = Row<"match_criteria">;
 
-/** The matching criteria row (one per user; only the owner's during the MVP), or null when none is saved. */
-export async function getCriteriaRow(db: Db): Promise<MatchCriteriaRow | null> {
-  const res = await db.from("match_criteria").select("*").limit(1).maybeSingle();
+/** A user's matching criteria row, or null when none is saved. */
+export async function getCriteriaRow(db: Db, userId: string): Promise<MatchCriteriaRow | null> {
+  const res = await db.from("match_criteria").select("*").eq("user_id", userId).maybeSingle();
   if (res.error) unwrap(res, "get match criteria");
   return res.data;
 }

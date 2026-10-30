@@ -9,6 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { ashbyBody, fakeFetch, greenhouseBody, leverBody, type FixtureJob } from "@/server/integrations/ats/test-fixtures";
 import { runDiscover } from "@/server/modules/discovery/discovery.service";
 import type {} from "./setup";
+import { setUserSettings, testUser } from "./users";
 
 const { url: URL, anonKey: ANON, serviceRoleKey: SERVICE } = inject("supabase");
 const opts = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -43,8 +44,9 @@ const failing = new Set<BoardKey>();
 
 const companyIds: Record<string, string> = {};
 const runIds: string[] = [];
-let previousFilter: unknown;
-let previousJobFilter: unknown;
+let userId = "";
+let cleanupUser = async () => {};
+let restoreSettings = async () => {};
 let strangerId: string | undefined;
 
 function routes() {
@@ -100,13 +102,14 @@ beforeAll(async () => {
     if (error) throw error;
     companyIds[key] = data.id;
   }
-  const { data } = await service.from("settings").select("value").eq("key", "discover_filter").single();
-  previousFilter = data?.value;
-  await service.from("settings").update({ value: { include: [], exclude: ["intern"] } }).eq("key", "discover_filter");
+  // Discovery checks boards someone follows, with every user's filters (only this user locally).
+  ({ id: userId, cleanup: cleanupUser } = await testUser(service));
+  await service.from("user_companies").insert(Object.values(companyIds).map((company_id) => ({ user_id: userId, company_id })));
   // Keep every work type and place so these tests don't depend on the local owner's filter.
-  const { data: jobFilter } = await service.from("settings").select("value").eq("key", "discover_job_filter").maybeSingle();
-  previousJobFilter = jobFilter?.value ?? null;
-  await service.from("settings").upsert({ key: "discover_job_filter", value: { work_types: [], locations: [], max_age_days: 90 } });
+  restoreSettings = await setUserSettings(service, userId, {
+    discover_filter: { include: [], exclude: ["intern"] },
+    discover_job_filter: { work_types: [], locations: [], max_age_days: 90 },
+  });
 });
 
 afterAll(async () => {
@@ -115,9 +118,8 @@ afterAll(async () => {
   await service.from("companies").delete().in("id", ids);
   await service.from("worker_runs").delete().in("source", Object.values(boards).map((b) => `${b.ats}:${b.token}`));
   await service.from("worker_runs").delete().in("id", runIds);
-  await service.from("settings").update({ value: previousFilter }).eq("key", "discover_filter");
-  if (previousJobFilter) await service.from("settings").upsert({ key: "discover_job_filter", value: previousJobFilter });
-  else await service.from("settings").delete().eq("key", "discover_job_filter");
+  await restoreSettings();
+  await cleanupUser();
   if (strangerId) await service.auth.admin.deleteUser(strangerId);
 });
 

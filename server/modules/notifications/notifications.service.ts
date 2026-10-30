@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createSmtpSender, type SendEmail, type SmtpConfig } from "@/server/integrations/email/smtp";
 import { blockingQuestions, listApplications } from "@/server/modules/applications/applications.service";
 import { finishRun, startRun } from "@/server/modules/runs/runs.service";
-import { getSetting } from "@/server/modules/settings/settings.service";
+import { getSetting, getUserSetting } from "@/server/modules/settings/settings.service";
 import { buildDigest, inQuietHours, isDue, NOTIFY_HEADER, NOTIFY_STATUSES, type NotifyItem } from "./digest";
 import { lastSentAt, markNotified } from "./notifications.repository";
 
@@ -11,14 +11,14 @@ export * from "./digest";
 
 const WORKER = "notify";
 
-/** `settings.job_inbox`: the job-search mailbox (the password is the JOB_INBOX_PASSWORD variable). */
+/** `user_settings.job_inbox`: the user's job-search mailbox (the password is the JOB_INBOX_PASSWORD variable). */
 const inboxSchema = z.object({
   address: z.string().email(),
   smtp_host: z.string().min(1),
   smtp_port: z.number().int().positive(),
 });
 
-/** `settings.notifications`. `to: null` sends to the job inbox itself. */
+/** `user_settings.notifications`. `to: null` sends to the job inbox itself. */
 const notifySchema = z.object({
   to: z.string().email().nullable().default(null),
   quiet_start: z.string().regex(/^\d{2}:\d{2}$/).default("22:00"),
@@ -30,6 +30,8 @@ const notifySchema = z.object({
 /** What the notify worker needs. */
 export type NotifyDeps = {
   db: Db;
+  /** Whose applications to email about. */
+  userId: string;
   /** The job inbox's password (JOB_INBOX_PASSWORD). */
   password: string;
   /** Builds the sender; tests pass a fake. */
@@ -43,9 +45,9 @@ type Flag = { kind: string; excerpt: string };
 const flagText = (f: Flag) =>
   f.kind === "ai_restriction" ? `the employer restricts AI use ("${f.excerpt}")` : `text aimed at AI tools ("${f.excerpt}")`;
 
-/** Applications due a notification, as digest items. */
-async function dueItems(db: Db): Promise<NotifyItem[]> {
-  const apps = await listApplications(db, NOTIFY_STATUSES);
+/** A user's applications due a notification, as digest items. */
+async function dueItems(db: Db, userId: string): Promise<NotifyItem[]> {
+  const apps = await listApplications(db, userId, NOTIFY_STATUSES);
   return apps
     .filter((a) => isDue(a.status, a.notified_status))
     .map((a) => ({
@@ -61,27 +63,27 @@ async function dueItems(db: Db): Promise<NotifyItem[]> {
 }
 
 /**
- * Notify worker: emails one digest of applications that need attention (Needs
+ * Notify worker, per user: emails one digest of their applications that need attention (Needs
  * you, apply yourself, ready to review, interviews, offers), from the job
  * inbox to `notifications.to` (default: the inbox itself). Sends at most once
  * per `min_interval_minutes` and never in quiet hours; anything held back goes
  * in the next digest. Each run is a `worker_runs` row (worker `notify`).
  */
 export async function runNotify(deps: NotifyDeps): Promise<{ counts: Record<string, number> }> {
-  const { db, now = new Date(), log = () => {}, createSender = createSmtpSender } = deps;
-  const runId = await startRun(db, WORKER, null);
+  const { db, userId, now = new Date(), log = () => {}, createSender = createSmtpSender } = deps;
+  const runId = await startRun(db, WORKER, null, userId);
   const counts: Record<string, number> = { due: 0, sent: 0 };
   try {
     const [inboxRaw, notifyRaw, appUrlRaw] = await Promise.all([
-      getSetting(db, "job_inbox"),
-      getSetting(db, "notifications"),
+      getUserSetting(db, userId, "job_inbox"),
+      getUserSetting(db, userId, "notifications"),
       getSetting(db, "app_url"),
     ]);
     const inbox = inboxSchema.parse(inboxRaw);
     const settings = notifySchema.parse(notifyRaw ?? {});
     const appUrl = z.string().url().parse(appUrlRaw);
 
-    const items = await dueItems(db);
+    const items = await dueItems(db, userId);
     counts.due = items.length;
     if (items.length === 0) {
       await finishRun(db, runId, { ok: true, counts });
@@ -94,7 +96,7 @@ export async function runNotify(deps: NotifyDeps): Promise<{ counts: Record<stri
       await finishRun(db, runId, { ok: true, counts });
       return { counts };
     }
-    const last = await lastSentAt(db);
+    const last = await lastSentAt(db, userId);
     if (last && now.getTime() - last.getTime() < settings.min_interval_minutes * 60_000) {
       log(`notify: ${items.length} waiting, last email was under ${settings.min_interval_minutes} minutes ago`);
       counts.held_interval = 1;

@@ -8,15 +8,15 @@ export type Match = Row<"matches">;
 /** Fields for recording one match outcome. */
 export type NewMatch = Pick<
   Insert<"matches">,
-  "job_id" | "hard_filter_passed" | "hard_filter_reason" | "score" | "reasons" | "model" | "status" | "error"
+  "user_id" | "job_id" | "hard_filter_passed" | "hard_filter_reason" | "score" | "reasons" | "model" | "status" | "error"
 >;
 
-/** Ids of jobs that already have a match. */
-export async function listMatchedJobIds(db: Db): Promise<Set<string>> {
+/** Ids of jobs that already have a match for a user. */
+export async function listMatchedJobIds(db: Db, userId: string): Promise<Set<string>> {
   const ids = new Set<string>();
   for (let from = 0; ; from += 1000) {
     const rows = unwrap(
-      await db.from("matches").select("job_id").order("id").range(from, from + 999),
+      await db.from("matches").select("job_id").eq("user_id", userId).order("id").range(from, from + 999),
       "list matched job ids",
     );
     for (const r of rows) ids.add(r.job_id);
@@ -25,34 +25,34 @@ export async function listMatchedJobIds(db: Db): Promise<Set<string>> {
 }
 
 /**
- * Records a match. A second result for the same job is ignored, so re-running
- * never duplicates rows (and a job, once matched, keeps its score).
+ * Records a match. A second result for the same user and job is ignored, so
+ * re-running never duplicates rows (and a job, once matched, keeps its score).
  */
 export async function insertMatch(db: Db, match: NewMatch): Promise<void> {
   check(
-    await db.from("matches").upsert(match, { onConflict: "job_id", ignoreDuplicates: true }),
+    await db.from("matches").upsert(match, { onConflict: "user_id,job_id", ignoreDuplicates: true }),
     "insert match",
   );
 }
 
-/** Matches for some jobs, keyed by job id. */
-export async function matchesForJobs(db: Db, jobIds: string[]): Promise<Map<string, Match>> {
+/** A user's matches for some jobs, keyed by job id. */
+export async function matchesForJobs(db: Db, userId: string, jobIds: string[]): Promise<Map<string, Match>> {
   if (jobIds.length === 0) return new Map();
   const rows = unwrap(
-    await db.from("matches").select("*").in("job_id", jobIds),
+    await db.from("matches").select("*").eq("user_id", userId).in("job_id", jobIds),
     "matches for jobs",
   );
   return new Map(rows.map((m) => [m.job_id, m]));
 }
 
-/** Counts of match outcomes. */
-export async function matchCounts(db: Db, threshold: number) {
+/** Counts of a user's match outcomes. */
+export async function matchCounts(db: Db, userId: string, threshold: number) {
   const count = async (build: (q: ReturnType<typeof base>) => ReturnType<typeof base>, what: string) => {
     const res = await build(base());
     if (res.error) unwrap(res, what);
     return res.count ?? 0;
   };
-  const base = () => db.from("matches").select("id", { count: "exact", head: true });
+  const base = () => db.from("matches").select("id", { count: "exact", head: true }).eq("user_id", userId);
   const [scored, aboveThreshold, filtered, failed] = await Promise.all([
     count((q) => q.eq("status", "scored"), "count scored"),
     count((q) => q.eq("status", "scored").gte("score", threshold), "count matched"),
@@ -66,7 +66,7 @@ export async function matchCounts(db: Db, threshold: number) {
 export type MatchedJobRow = JobListItem & { score: number | null; matchStatus: string; filterReason: string | null };
 
 /**
- * One page of jobs that have a match in the given statuses, with the Jobs-page filters applied to the joined job and sorted by
+ * One page of jobs that have a match for the user in the given statuses, with the Jobs-page filters applied to the joined job and sorted by
  * score, posting date or found date. Starts from `matches` so it can filter and
  * sort on match fields in the database.
  *
@@ -75,6 +75,7 @@ export type MatchedJobRow = JobListItem & { score: number | null; matchStatus: s
  */
 export async function searchMatchedJobs(
   db: Db,
+  userId: string,
   options: { statuses: string[]; minScore: number | null },
   filters: JobFilters,
   page: number,
@@ -85,6 +86,7 @@ export async function searchMatchedJobs(
   let query = db
     .from("matches")
     .select(`score, status, hard_filter_reason, jobs!inner(${LIST_COLUMNS})`, { count: "exact" })
+    .eq("user_id", userId)
     .in("status", options.statuses);
   if (options.minScore != null) query = query.gte("score", options.minScore);
   if (c.text) query = query.or(c.text, { referencedTable: "jobs" });

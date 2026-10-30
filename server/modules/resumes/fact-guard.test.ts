@@ -4,7 +4,7 @@ import { guardResume, numbersIn } from "./fact-guard";
 import { assembleResume, masterResume } from "./resume-doc";
 
 const job = (id: string, employer: string, start: string, end: string | null, bullets: string[], skills: string[], current = false) => ({
-  id, employer, title: "Staff Engineer", location: "Remote", employment_type: null, start_date: start, end_date: end,
+  id, user_id: "u", employer, title: "Staff Engineer", location: "Remote", employment_type: null, start_date: start, end_date: end,
   is_current: current, description: null, sort_order: 0, created_at: "", updated_at: "", skills,
   responsibilities: bullets.map((text, i) => ({ id: `${id}-${i}`, employment_id: id, text, sort_order: i, created_at: "", updated_at: "" })),
 });
@@ -21,7 +21,7 @@ const data: ProfileData = {
     job("kin", "Kingsmen Software", "2020-03-01", "2021-02-01", ["Built a Node.js billing service handling $2M a month"], ["Node.js"]),
   ],
   education: [],
-  skills: [{ skill_id: "s1", name: "Postgres", normalized: "postgres", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" }],
+  skills: [{ skill_id: "s1", user_id: "u", name: "Postgres", normalized: "postgres", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" }],
   certifications: [],
 };
 

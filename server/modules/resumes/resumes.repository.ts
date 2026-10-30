@@ -7,16 +7,16 @@ export type Resume = Row<"resumes">;
 /** The private Storage bucket that holds resume PDFs. */
 export const RESUME_BUCKET = "resumes";
 
-/** Whether the resume text imported from the old app is stored. */
-export async function hasImportedResume(db: Db): Promise<boolean> {
-  const res = await db.from("resumes").select("id", { count: "exact", head: true }).eq("kind", "imported");
+/** Whether a user's resume text imported from the old app is stored. */
+export async function hasImportedResume(db: Db, userId: string): Promise<boolean> {
+  const res = await db.from("resumes").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "imported");
   if (res.error) unwrap(res, "check imported resume");
   return (res.count ?? 0) > 0;
 }
 
 /** Stores the resume text imported from the old app (reference only). */
-export async function insertImportedResume(db: Db, label: string, content: NonNullable<Json>): Promise<void> {
-  check(await db.from("resumes").insert({ label, content, kind: "imported" }), "insert imported resume");
+export async function insertImportedResume(db: Db, userId: string, label: string, content: NonNullable<Json>): Promise<void> {
+  check(await db.from("resumes").insert({ user_id: userId, label, content, kind: "imported" }), "insert imported resume");
 }
 
 /** Uploads (or replaces) a PDF in the resumes bucket. */
@@ -28,7 +28,7 @@ export async function uploadPdf(db: Db, path: string, pdf: Uint8Array): Promise<
 /** Creates or replaces an application's resume row. */
 export async function upsertApplicationResume(
   db: Db,
-  row: Pick<Insert<"resumes">, "application_id" | "kind" | "label" | "content" | "pdf_path" | "sha256" | "guard_problems">,
+  row: Pick<Insert<"resumes">, "user_id" | "application_id" | "kind" | "label" | "content" | "pdf_path" | "sha256" | "guard_problems">,
 ): Promise<void> {
   check(await db.from("resumes").upsert(row, { onConflict: "application_id" }), "save application resume");
 }

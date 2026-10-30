@@ -23,9 +23,9 @@ function Tiles({ tiles }: { tiles: Tile[] }) {
 }
 
 async function Overview() {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const now = new Date();
-  const o = await getOverview(db, now);
+  const o = await getOverview(db, owner.id, now);
 
   return (
     <>

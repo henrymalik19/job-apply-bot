@@ -12,42 +12,63 @@ export type BoardCompany = { id: string; name: string; ats: BoardAts; board_toke
 /** Fields for adding a company. */
 export type NewCompany = Pick<Insert<"companies">, "name" | "ats" | "board_token">;
 
-/** All companies: active first, then by name. */
-export async function listCompanies(db: Db): Promise<Company[]> {
-  return unwrap(
+/** The companies a user follows: active first, then by name. */
+export async function listCompanies(db: Db, userId: string): Promise<Company[]> {
+  const rows = unwrap(
     await db
       .from("companies")
-      .select("*")
+      .select("*, user_companies!inner(user_id)")
+      .eq("user_companies.user_id", userId)
       .order("active", { ascending: false })
       .order("name"),
     "list companies",
   );
+  return rows.map(({ user_companies: _follows, ...c }) => c);
 }
 
 /**
- * Active companies on a supported ATS with a board token, by name.
+ * Active companies someone follows, on a supported ATS with a board token, by name.
  *
  * @param onlyIds - Restrict to these company ids (used by tests).
  */
 export async function listActiveBoards(db: Db, onlyIds?: string[]): Promise<BoardCompany[]> {
   let query = db
     .from("companies")
-    .select("id, name, ats, board_token")
+    .select("id, name, ats, board_token, user_companies!inner(user_id)")
     .eq("active", true)
     .in("ats", [...BOARD_ATS])
     .not("board_token", "is", null)
     .order("name");
   if (onlyIds) query = query.in("id", onlyIds);
-  return unwrap(await query, "list active boards") as BoardCompany[];
+  const rows = unwrap(await query, "list active boards");
+  // One row per company (the follow embed can repeat it).
+  return [...new Map(rows.map(({ user_companies: _follows, ...c }) => [c.id, c as BoardCompany])).values()];
+}
+
+/** Adds a company unless its board exists, and returns its id either way. */
+export async function ensureCompany(db: Db, company: NewCompany): Promise<string> {
+  check(await db.from("companies").upsert(company, { onConflict: "ats,board_token", ignoreDuplicates: true }), "add company");
+  return unwrap(
+    await db.from("companies").select("id").eq("ats", company.ats).eq("board_token", company.board_token ?? "").single(),
+    "read company",
+  ).id;
 }
 
 /**
- * Adds one company.
+ * Makes a user follow companies.
  *
- * @throws {@link RepositoryError} with `isDuplicate` when the board already exists.
+ * @returns How many follows were new.
  */
-export async function insertCompany(db: Db, company: NewCompany): Promise<void> {
-  check(await db.from("companies").insert(company), "insert company");
+export async function followCompanies(db: Db, userId: string, companyIds: string[]): Promise<number> {
+  if (companyIds.length === 0) return 0;
+  const rows = unwrap(
+    await db
+      .from("user_companies")
+      .upsert(companyIds.map((company_id) => ({ user_id: userId, company_id })), { onConflict: "user_id,company_id", ignoreDuplicates: true })
+      .select("company_id"),
+    "follow companies",
+  );
+  return rows.length;
 }
 
 /** Pauses (`false`) or resumes (`true`) a company's board. */
@@ -59,6 +80,6 @@ export async function setCompanyActive(db: Db, id: string, active: boolean): Pro
  * Inserts companies or updates the name of existing ones, matched on
  * `(ats, board_token)`. Leaves `active` untouched so paused boards stay paused.
  */
-export async function upsertCompanies(db: Db, companies: NewCompany[]): Promise<void> {
-  check(await db.from("companies").upsert(companies, { onConflict: "ats,board_token" }), "upsert companies");
+export async function upsertCompanies(db: Db, companies: NewCompany[]): Promise<string[]> {
+  return unwrap(await db.from("companies").upsert(companies, { onConflict: "ats,board_token" }).select("id"), "upsert companies").map((c) => c.id);
 }

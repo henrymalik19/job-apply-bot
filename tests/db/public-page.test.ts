@@ -7,13 +7,17 @@ import { transition } from "@/server/modules/applications/applications.service";
 import { getPublicPage, PUBLIC_PAGE_KEY } from "@/server/modules/public-page/public-page.service";
 import type { Db } from "@/server/db/types";
 import type {} from "./setup";
+import { setUserSettings, testUser } from "./users";
 
 const { url: URL, serviceRoleKey: SERVICE } = inject("supabase");
 const service = createClient(URL, SERVICE, { auth: { persistSession: false } }) as unknown as Db;
 
 const tag = randomUUID().slice(0, 8);
 const jobIds: string[] = [];
-let previous: unknown;
+let userId = "";
+let cleanupUser = async () => {};
+let restoreSettings = async () => {};
+const setPublic = (value: boolean) => service.from("user_settings").upsert({ user_id: userId, key: PUBLIC_PAGE_KEY, value });
 
 async function application(title: string) {
   const key = `${tag}-${title}`;
@@ -24,14 +28,15 @@ async function application(title: string) {
     .single();
   if (error) throw error;
   jobIds.push(job.id);
-  const { data: app, error: appErr } = await service.from("applications").insert({ job_id: job.id, cover_letter: "SECRET LETTER" }).select("id").single();
+  const { data: app, error: appErr } = await service.from("applications").insert({ user_id: userId, job_id: job.id, cover_letter: "SECRET LETTER" }).select("id").single();
   if (appErr) throw appErr;
   return app.id;
 }
 
 beforeAll(async () => {
-  const { data } = await service.from("settings").select("value").eq("key", PUBLIC_PAGE_KEY).maybeSingle();
-  previous = data?.value ?? false;
+  // The public page shows the owner's applications.
+  ({ id: userId, cleanup: cleanupUser } = await testUser(service));
+  restoreSettings = await setUserSettings(service, userId, { [PUBLIC_PAGE_KEY]: false });
   const sent = await application("Sent Role");
   await transition(service, sent, "approved", "user:approve");
   await transition(service, sent, "submitted", "user:submit");
@@ -41,17 +46,18 @@ beforeAll(async () => {
 afterAll(async () => {
   await service.from("applications").delete().in("job_id", jobIds);
   await service.from("jobs").delete().in("id", jobIds);
-  await service.from("settings").upsert({ key: PUBLIC_PAGE_KEY, value: previous as boolean });
+  await restoreSettings();
+  await cleanupUser();
 });
 
 describe("public page", () => {
   it("is off (null → 404) when the setting is false", async () => {
-    await service.from("settings").upsert({ key: PUBLIC_PAGE_KEY, value: false });
+    await setPublic(false);
     expect(await getPublicPage(service, new Date())).toBeNull();
   });
 
   it("shows submitted applications with only public fields, and hides queued ones", async () => {
-    await service.from("settings").upsert({ key: PUBLIC_PAGE_KEY, value: true });
+    await setPublic(true);
     const page = await getPublicPage(service, new Date());
     expect(page).not.toBeNull();
     const mine = page!.applications.filter((a) => a.company_name === `PubCo ${tag}`);

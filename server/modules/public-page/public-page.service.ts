@@ -1,10 +1,11 @@
-// The optional public status page: a read-only summary of the search that the
-// owner can switch on in Settings. Off by default. Reads only the
+// The optional public status page: a read-only summary of the owner's search
+// that they can switch on in Settings. Off by default. Reads only the
 // public_applications view (title, company, status, dates) with the service role,
 // server-side, and only while the setting is on.
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
 import * as settings from "@/server/modules/settings/settings.service";
+import { ownerId } from "@/server/modules/users/users.service";
 import { countScannedJobs, listPublicApplications, type PublicApplication } from "./public-page.repository";
 
 /** Settings key for the public page switch. */
@@ -20,14 +21,20 @@ export type PublicPage = {
   applications: PublicApplication[];
 };
 
-/** Whether the public page is switched on. */
-export async function isPublicPageEnabled(db: Db): Promise<boolean> {
-  return z.boolean().catch(false).parse(await settings.getSetting(db, PUBLIC_PAGE_KEY));
+/** Whether a user's public page is switched on. */
+export async function isPublicPageEnabled(db: Db, userId: string): Promise<boolean> {
+  return z.boolean().catch(false).parse(await settings.getUserSetting(db, userId, PUBLIC_PAGE_KEY));
 }
 
-/** Switches the public page on or off. */
-export async function setPublicPageEnabled(db: Db, enabled: boolean): Promise<void> {
-  await settings.putSetting(db, PUBLIC_PAGE_KEY, enabled);
+/** Switches a user's public page on or off. */
+export async function setPublicPageEnabled(db: Db, userId: string, enabled: boolean): Promise<void> {
+  await settings.putUserSetting(db, userId, PUBLIC_PAGE_KEY, enabled);
+}
+
+/** Whether the owner's public page is on. Service role (it reads the owner's settings). */
+export async function isOwnerPublicPageEnabled(db: Db): Promise<boolean> {
+  const owner = await ownerId(db);
+  return owner ? isPublicPageEnabled(db, owner) : false;
 }
 
 const day = (iso: string) => iso.slice(0, 10);
@@ -39,8 +46,9 @@ const day = (iso: string) => iso.slice(0, 10);
  * @param db - Service-role client (the view is not granted to signed-in users).
  */
 export async function getPublicPage(db: Db, now: Date): Promise<PublicPage | null> {
-  if (!(await isPublicPageEnabled(db))) return null;
-  const [applications, scanned] = await Promise.all([listPublicApplications(db), countScannedJobs(db)]);
+  const owner = await ownerId(db);
+  if (!owner || !(await isPublicPageEnabled(db, owner))) return null;
+  const [applications, scanned] = await Promise.all([listPublicApplications(db, owner), countScannedJobs(db)]);
 
   const count = (statuses: string[]) => applications.filter((a) => statuses.includes(a.status)).length;
   const counts = [

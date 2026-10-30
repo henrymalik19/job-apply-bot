@@ -10,6 +10,7 @@ import type { Db } from "@/server/db/types";
 import type { OutgoingEmail, SmtpConfig } from "@/server/integrations/email/smtp";
 import { runNotify } from "@/server/modules/notifications/notifications.service";
 import type {} from "./setup";
+import { setUserSettings, testUser } from "./users";
 
 const { url: URL, serviceRoleKey: SERVICE } = inject("supabase");
 const db = createClient(URL, SERVICE, { auth: { persistSession: false } }) as unknown as Db;
@@ -18,7 +19,9 @@ const tag = randomUUID().slice(0, 8);
 let companyId = "";
 const jobIds: string[] = [];
 const appIds: string[] = [];
-let previousSettings: unknown;
+let userId = "";
+let cleanupUser = async () => {};
+let restoreSettings = async () => {};
 
 const sent: { config: SmtpConfig; email: OutgoingEmail }[] = [];
 const createSender = (config: SmtpConfig) => async (email: OutgoingEmail) => {
@@ -28,7 +31,7 @@ const createSender = (config: SmtpConfig) => async (email: OutgoingEmail) => {
 
 // Noon in New York: outside the default quiet hours.
 const noon = new Date("2026-10-30T16:00:00Z");
-const notify = (now: Date) => runNotify({ db, password: "test-password", createSender, now });
+const notify = (now: Date) => runNotify({ db, userId, password: "test-password", createSender, now });
 
 async function addApplication(key: string, status: string): Promise<string> {
   const { data: job } = await db
@@ -37,23 +40,25 @@ async function addApplication(key: string, status: string): Promise<string> {
     .select("id")
     .single();
   jobIds.push(job!.id);
-  const { data: app, error } = await db.from("applications").insert({ job_id: job!.id, status }).select("id").single();
+  const { data: app, error } = await db.from("applications").insert({ user_id: userId, job_id: job!.id, status }).select("id").single();
   if (error) throw new Error(error.message);
   appIds.push(app!.id);
   return app!.id;
 }
 
-/** Marks every other application notified, so only this file's rows are due. */
+/** Marks the user's other applications notified, so only this file's rows are due. */
 async function quietOthers() {
-  const { data } = await db.from("applications").select("id, status").not("id", "in", `(${appIds.join(",") || randomUUID()})`);
+  const { data } = await db.from("applications").select("id, status").eq("user_id", userId).not("id", "in", `(${appIds.join(",") || randomUUID()})`);
   for (const row of data ?? []) await db.from("applications").update({ notified_status: row.status }).eq("id", row.id);
 }
 
 beforeAll(async () => {
-  const { data } = await db.from("settings").select("value").eq("key", "notifications").single();
-  previousSettings = data!.value;
-  await db.from("settings").upsert({ key: "notifications", value: { to: null, quiet_start: "22:00", quiet_end: "07:00", timezone: "America/New_York", min_interval_minutes: 15 } });
-  await db.from("worker_runs").delete().eq("worker", "notify");
+  ({ id: userId, cleanup: cleanupUser } = await testUser(db));
+  restoreSettings = await setUserSettings(db, userId, {
+    job_inbox: { address: "jobs@example.test", smtp_host: "smtp.example.test", smtp_port: 465 },
+    notifications: { to: null, quiet_start: "22:00", quiet_end: "07:00", timezone: "America/New_York", min_interval_minutes: 15 },
+  });
+  await db.from("worker_runs").delete().eq("worker", "notify").eq("user_id", userId);
   const { data: company } = await db.from("companies").insert({ name: `NotifyCo ${tag}`, ats: "greenhouse", board_token: `notify${tag}` }).select("id").single();
   companyId = company!.id;
 
@@ -66,8 +71,9 @@ afterAll(async () => {
   await db.from("applications").delete().in("id", appIds);
   await db.from("jobs").delete().in("id", jobIds);
   await db.from("companies").delete().eq("id", companyId);
-  await db.from("worker_runs").delete().eq("worker", "notify");
-  await db.from("settings").upsert({ key: "notifications", value: previousSettings as never });
+  await db.from("worker_runs").delete().eq("worker", "notify").eq("user_id", userId);
+  await restoreSettings();
+  await cleanupUser();
 });
 
 describe("notify", () => {
@@ -76,8 +82,8 @@ describe("notify", () => {
     expect(counts).toMatchObject({ due: 1, sent: 1, applications: 1 });
     expect(sent).toHaveLength(1);
     const { config, email } = sent[0];
-    expect(config).toMatchObject({ host: "smtp.purelymail.com", port: 465, user: "jobs@malikhenry.com", password: "test-password" });
-    expect(email.to).toBe("jobs@malikhenry.com");
+    expect(config).toMatchObject({ host: "smtp.example.test", port: 465, user: "jobs@example.test", password: "test-password" });
+    expect(email.to).toBe("jobs@example.test");
     expect(email.subject).toBe("[Autopilot] 1 needs you");
     expect(email.text).toContain(`Question: Clearance ${tag}?`);
     expect(email.text).toContain(`/app/applications/${appIds[0]}`);

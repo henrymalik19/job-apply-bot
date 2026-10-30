@@ -9,8 +9,8 @@ import { blockingQuestions, listApplications } from "@/server/modules/applicatio
 import { QuestionForm } from "../applications/question-form";
 
 async function NeedsYou() {
-  const { db } = await ownerContext();
-  const [blocked, manual] = await Promise.all([listApplications(db, ["needs_input"]), listApplications(db, ["manual"])]);
+  const { db, owner } = await ownerContext();
+  const [blocked, manual] = await Promise.all([listApplications(db, owner.id, ["needs_input"]), listApplications(db, owner.id, ["manual"])]);
   const questionCount = blocked.reduce((n, a) => n + blockingQuestions(a).length, 0);
 
   return (

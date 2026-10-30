@@ -13,12 +13,13 @@ export type PublicApplication = {
   last_status_at: string;
 };
 
-/** Applications visible on the public page, most recent activity first. Service role only. */
-export async function listPublicApplications(db: Db, limit = 500): Promise<PublicApplication[]> {
+/** A user's applications visible on the public page, most recent activity first. Service role only. */
+export async function listPublicApplications(db: Db, userId: string, limit = 500): Promise<PublicApplication[]> {
   return unwrap(
     await db
       .from("public_applications")
       .select("job_title, company_name, status, submitted_at, last_status_at")
+      .eq("user_id", userId)
       .order("last_status_at", { ascending: false })
       .limit(limit),
     "list public applications",

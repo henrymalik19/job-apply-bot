@@ -46,18 +46,29 @@ runs as the signed-in owner (RLS) in the web app and as the service role in work
 ## Workers
 
 ```bash
-pnpm worker:pipeline          # discover → match (what Railway runs; reads .env.local)
+pnpm worker:pipeline          # discover, then per user match → prepare → notify (reads .env.local)
+pnpm worker:sweep             # per user prepare → notify
 pnpm worker:discover          # discovery only
+pnpm worker:match             # matching only
+pnpm worker:prepare           # prepare only [--limit N]
+pnpm worker:notify            # notification email only
 pnpm import:profile           # one-time: facts, master resume and criteria from data/old
 pnpm apply:filters            # re-apply discovery filters to saved jobs
 ```
 
-In production a Railway cron service runs it every 4 hours (image from `Dockerfile.worker`,
-schedule in UTC). Its settings live on the Railway service, not in a repo file: cron `0 */4 * * *`,
-start command `pnpm worker:pipeline`, Dockerfile path `Dockerfile.worker`, restart policy Never.
-When changing the cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
-"late" means: it flags a source after two missed runs plus 30 minutes. The service needs two variables: `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching (without it, matching is skipped).
+Each worker takes whatever is waiting in the database, for every user, so running one twice is
+harmless. In production two Railway cron services run the same image (`Dockerfile.worker`, schedule in
+UTC, restart policy Never); their settings live on Railway, not in a repo file:
+
+| Service | Cron | Start command |
+|---|---|---|
+| `job-apply-bot` (pipeline) | `0 */6 * * *` | `pnpm worker:pipeline` |
+| `sweep` | `*/15 * * * *` | `pnpm worker:sweep` |
+
+When changing the pipeline cron, also set `settings.discover_interval_minutes` (default 240) so Health knows what
+"late" means: it flags a source after two missed runs plus 30 minutes. Both services need `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching and prepare and `JOB_INBOX_PASSWORD` for
+notify (a stage whose variable is missing is skipped).
 Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 

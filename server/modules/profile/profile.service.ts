@@ -1,4 +1,4 @@
-// The owner's profile: contact details, work authorization, employment
+// A user's profile: contact details, work authorization, employment
 // history (responsibilities and skills used), education, skills and
 // certifications. Prompts read it through getProfileLines; everything in it
 // counts as true and nothing beyond it may be claimed.
@@ -39,9 +39,9 @@ export { resolveSkillId };
 /** The whole profile, for the Profile page and workers. */
 export const getProfile = loadProfileData;
 
-/** The profile as prompt lines (what scoring, drafting and suggestions see). */
-export async function getProfileLines(db: Db, now: Date = new Date()): Promise<ProfileLine[]> {
-  return profileLines(await loadProfileData(db), now);
+/** A user's profile as prompt lines (what scoring, drafting and suggestions see). */
+export async function getProfileLines(db: Db, userId: string, now: Date = new Date()): Promise<ProfileLine[]> {
+  return profileLines(await loadProfileData(db, userId), now);
 }
 
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
@@ -96,8 +96,8 @@ const authorizationInput = z.object({
 });
 
 /** Adds or replaces the work authorization for one country. @throws {@link ValidationError} */
-export async function saveWorkAuthorization(db: Db, input: Record<string, unknown>): Promise<void> {
-  await upsertWorkAuthorization(db, parse(authorizationInput, input));
+export async function saveWorkAuthorization(db: Db, userId: string, input: Record<string, unknown>): Promise<void> {
+  await upsertWorkAuthorization(db, userId, parse(authorizationInput, input));
 }
 
 const employmentInput = z
@@ -121,16 +121,22 @@ const employmentInput = z
  * (one per line) and the skills used (comma-separated; new ones join the
  * catalog and your skills).
  *
- * @throws {@link ValidationError}
+ * @throws {@link ValidationError} for bad input, or a job that isn't the user's.
  */
-export async function saveEmployment(db: Db, input: Record<string, unknown>, id?: string): Promise<void> {
+export async function saveEmployment(db: Db, userId: string, input: Record<string, unknown>, id?: string): Promise<void> {
   const { responsibilities, skills, ...job } = parse(employmentInput, input);
-  const employmentId = id ? (await updateEmployment(db, z.string().uuid().parse(id), job), id) : await insertEmployment(db, job);
-  if (id) await deleteResponsibilities(db, employmentId);
+  let employmentId: string;
+  if (id) {
+    employmentId = z.string().uuid().parse(id);
+    if (!(await updateEmployment(db, userId, employmentId, job))) throw new ValidationError("That job is gone; reload the page.");
+    await deleteResponsibilities(db, employmentId);
+  } else {
+    employmentId = await insertEmployment(db, userId, job);
+  }
   await insertResponsibilities(db, responsibilities.map((text, i) => ({ employment_id: employmentId, text, sort_order: i })));
   const skillIds = await ensureSkills(db, skills);
   await setEmploymentSkills(db, employmentId, [...skillIds.values()]);
-  await upsertUserSkills(db, [...skillIds.values()].map((skill_id) => ({ skill_id })), true);
+  await upsertUserSkills(db, userId, [...skillIds.values()].map((skill_id) => ({ skill_id })), true);
 }
 
 const educationInput = z.object({
@@ -143,8 +149,8 @@ const educationInput = z.object({
 });
 
 /** Adds an education entry. @throws {@link ValidationError} */
-export async function addEducation(db: Db, input: Record<string, unknown>): Promise<void> {
-  await insertEducation(db, parse(educationInput, input));
+export async function addEducation(db: Db, userId: string, input: Record<string, unknown>): Promise<void> {
+  await insertEducation(db, userId, parse(educationInput, input));
 }
 
 const certificationInput = z.object({
@@ -156,16 +162,16 @@ const certificationInput = z.object({
 });
 
 /** Adds a certification. @throws {@link ValidationError} */
-export async function addCertification(db: Db, input: Record<string, unknown>): Promise<void> {
-  await insertCertification(db, parse(certificationInput, input));
+export async function addCertification(db: Db, userId: string, input: Record<string, unknown>): Promise<void> {
+  await insertCertification(db, userId, parse(certificationInput, input));
 }
 
 /** Adds skills you have (comma-separated names). @throws {@link ValidationError} */
-export async function addSkills(db: Db, names: unknown): Promise<number> {
+export async function addSkills(db: Db, userId: string, names: unknown): Promise<number> {
   const skills = list(names);
   if (skills.length === 0) throw new ValidationError("Enter at least one skill.");
   const ids = await ensureSkills(db, skills);
-  await upsertUserSkills(db, [...ids.values()].map((skill_id) => ({ skill_id })), true);
+  await upsertUserSkills(db, userId, [...ids.values()].map((skill_id) => ({ skill_id })), true);
   return ids.size;
 }
 
@@ -175,22 +181,23 @@ const skillInput = z.object({
 });
 
 /** Sets a skill's years override and proficiency. @throws {@link ValidationError} */
-export async function updateSkill(db: Db, skillId: string, input: Record<string, unknown>): Promise<void> {
-  await upsertUserSkills(db, [{ skill_id: z.string().uuid().parse(skillId), ...parse(skillInput, input) }]);
+export async function updateSkill(db: Db, userId: string, skillId: string, input: Record<string, unknown>): Promise<void> {
+  await upsertUserSkills(db, userId, [{ skill_id: z.string().uuid().parse(skillId), ...parse(skillInput, input) }]);
 }
 
 /** Removes a skill from your list (it stays in the catalog and on jobs that used it). */
-export async function removeSkill(db: Db, skillId: string): Promise<void> {
-  await deleteUserSkill(db, z.string().uuid().parse(skillId));
+export async function removeSkill(db: Db, userId: string, skillId: string): Promise<void> {
+  await deleteUserSkill(db, userId, z.string().uuid().parse(skillId));
 }
 
-/** Deletes one row from a profile list. */
+/** Deletes one row from a user's profile list. */
 export async function removeProfileItem(
   db: Db,
+  userId: string,
   kind: "work_authorizations" | "employments" | "educations" | "certifications",
   id: string,
 ): Promise<void> {
-  await deleteRow(db, kind, z.string().uuid().parse(id));
+  await deleteRow(db, userId, kind, z.string().uuid().parse(id));
 }
 
 /** A profile to import (from the old app's export). */
@@ -209,14 +216,15 @@ export type ProfileImport = {
  * @returns Whether anything was imported.
  */
 export async function importProfile(db: Db, userId: string, data: ProfileImport): Promise<boolean> {
-  if (await hasEmployment(db)) return false;
+  if (await hasEmployment(db, userId)) return false;
   await saveProfile(db, userId, data.profile);
-  for (const a of data.workAuthorizations) await saveWorkAuthorization(db, a);
-  for (const job of data.employment) await saveEmployment(db, job);
-  for (const e of data.education) await addEducation(db, e);
+  for (const a of data.workAuthorizations) await saveWorkAuthorization(db, userId, a);
+  for (const job of data.employment) await saveEmployment(db, userId, job);
+  for (const e of data.education) await addEducation(db, userId, e);
   const ids = await ensureSkills(db, data.skills.map((s) => s.name));
   await upsertUserSkills(
     db,
+    userId,
     data.skills.map((s, i) => ({ skill_id: ids.get(normalize(s.name))!, years_override: s.years, sort_order: i })).filter((s) => s.skill_id),
   );
   return true;

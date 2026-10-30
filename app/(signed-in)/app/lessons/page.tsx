@@ -17,8 +17,8 @@ const SCOPE_LABEL: Record<string, string> = {
 };
 
 async function Lessons() {
-  const { db } = await ownerContext();
-  const lessons = await listLessons(db);
+  const { db, owner } = await ownerContext();
+  const lessons = await listLessons(db, owner.id);
 
   return (
     <>

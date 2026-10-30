@@ -16,11 +16,11 @@ type Params = Promise<{ id: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function JobDetail({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const job = await findJob(db, id);
   if (!job) notFound();
-  const match = await getJobMatch(db, job.id);
+  const match = await getJobMatch(db, owner.id, job.id);
 
   const now = new Date();
   // Back to the same filtered page of the list.

@@ -131,20 +131,21 @@ export type MatchableJobRow = Pick<
 >;
 
 /**
- * Open jobs from active companies (paused boards' jobs are left out), newest
- * first, paged past PostgREST's 1,000-row limit.
+ * Open jobs from active companies the user follows (paused boards' jobs are
+ * left out), newest first, paged past PostgREST's 1,000-row limit.
  */
-export async function listOpenJobsForMatching(db: Db): Promise<MatchableJobRow[]> {
+export async function listOpenJobsForMatching(db: Db, userId: string): Promise<MatchableJobRow[]> {
   const all: MatchableJobRow[] = [];
   for (let from = 0; ; from += PAGE) {
     const rows = unwrap(
       await db
         .from("jobs")
         .select(
-          "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, description_md, posted_at, first_seen_at, companies!inner(active)",
+          "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, description_md, posted_at, first_seen_at, companies!inner(active, user_companies!inner(user_id))",
         )
         .is("closed_at", null)
         .eq("companies.active", true)
+        .eq("companies.user_companies.user_id", userId)
         .order("first_seen_at", { ascending: false })
         .order("id")
         .range(from, from + PAGE - 1),
@@ -157,6 +158,20 @@ export async function listOpenJobsForMatching(db: Db): Promise<MatchableJobRow[]
 
 /** The fields needed to re-check a saved job against the discovery filters. */
 export type FilterableSavedJob = Pick<Row<"jobs">, "id" | "title" | "location" | "remote_type" | "posted_at" | "raw">;
+
+/** Some jobs' filter fields, fetched in batches. */
+export async function jobsForFiltering(db: Db, ids: string[]): Promise<FilterableSavedJob[]> {
+  const all: FilterableSavedJob[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    all.push(
+      ...unwrap(
+        await db.from("jobs").select("id, title, location, remote_type, posted_at, raw").in("id", ids.slice(i, i + 200)),
+        "jobs for filtering",
+      ),
+    );
+  }
+  return all;
+}
 
 /** Every saved job's filter fields, paged past PostgREST's 1,000-row limit. */
 export async function listJobsForFiltering(db: Db): Promise<FilterableSavedJob[]> {

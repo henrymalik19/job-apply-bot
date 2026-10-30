@@ -38,9 +38,9 @@ export async function transition(
   return data as Application;
 }
 
-/** Number of applications in each status (every status present, zero if none). */
-export async function countByStatus(db: Db): Promise<Record<AppStatus, number>> {
-  const rows = unwrap(await db.from("applications").select("status"), "count applications");
+/** Number of a user's applications in each status (every status present, zero if none). */
+export async function countByStatus(db: Db, userId: string): Promise<Record<AppStatus, number>> {
+  const rows = unwrap(await db.from("applications").select("status").eq("user_id", userId), "count applications");
   const counts = Object.fromEntries(APP_STATUSES.map((s) => [s, 0])) as Record<AppStatus, number>;
   for (const row of rows) counts[row.status as AppStatus]++;
   return counts;
@@ -78,12 +78,13 @@ const toDetails = ({ jobs, matches, application_questions, ...app }: Joined): Ap
   questions: [...application_questions].sort((a, b) => a.sort_order - b.sort_order),
 });
 
-/** Applications in some statuses, best score first, with their questions. */
-export async function listApplications(db: Db, statuses: readonly AppStatus[]): Promise<ApplicationWithDetails[]> {
+/** A user's applications in some statuses, best score first, with their questions. */
+export async function listApplications(db: Db, userId: string, statuses: readonly AppStatus[]): Promise<ApplicationWithDetails[]> {
   const rows = unwrap(
     await db
       .from("applications")
       .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*)`)
+      .eq("user_id", userId)
       .in("status", [...statuses])
       .order("created_at", { ascending: false }),
     "list applications",
@@ -91,11 +92,12 @@ export async function listApplications(db: Db, statuses: readonly AppStatus[]): 
   return (rows as unknown as Joined[]).map(toDetails).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
-/** One application with its job, score and questions, or null. */
-export async function getApplication(db: Db, id: string): Promise<ApplicationWithDetails | null> {
+/** One of a user's applications with its job, score and questions, or null. */
+export async function getApplication(db: Db, userId: string, id: string): Promise<ApplicationWithDetails | null> {
   const res = await db
     .from("applications")
     .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*)`)
+    .eq("user_id", userId)
     .eq("id", id)
     .maybeSingle();
   if (res.error) unwrap(res, "get application");
@@ -109,4 +111,21 @@ export async function updateQuestion(
   changes: Pick<Update<"application_questions">, "answer" | "answer_value" | "bucket" | "answer_source" | "user_approved" | "needs_check" | "reason" | "question_id">,
 ): Promise<void> {
   check(await db.from("application_questions").update(changes).eq("id", id), "update application question");
+}
+
+/** An unanswered question on one of a user's waiting applications, with its application. */
+export type OpenQuestion = ApplicationQuestion & { applications: { id: string; status: string } };
+
+/** Questions still waiting for an answer (`needs_user`) on a user's applications in some statuses. */
+export async function listOpenQuestions(db: Db, userId: string, statuses: readonly AppStatus[]): Promise<OpenQuestion[]> {
+  const rows = unwrap(
+    await db
+      .from("application_questions")
+      .select("*, applications!inner(id, status, user_id)")
+      .eq("applications.user_id", userId)
+      .in("applications.status", [...statuses])
+      .eq("bucket", "needs_user"),
+    "list open questions",
+  );
+  return rows as unknown as OpenQuestion[];
 }

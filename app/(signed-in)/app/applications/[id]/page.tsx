@@ -133,11 +133,11 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
 }
 
 async function ApplicationDetail({ params }: { params: Params }) {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const { id } = await params;
-  const app = await getApplication(db, id);
+  const app = await getApplication(db, owner.id, id);
   if (!app) notFound();
-  const [match, resume] = await Promise.all([getJobMatch(db, app.job.id), getApplicationResume(db, app.id)]);
+  const [match, resume] = await Promise.all([getJobMatch(db, owner.id, app.job.id), getApplicationResume(db, app.id)]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
   const now = new Date();
   const blockers = blockingQuestions(app);

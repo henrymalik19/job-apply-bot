@@ -18,9 +18,10 @@ export type FilteredSample = { title: string; company: string; reason: string };
  * Opens a `runs` row and returns its id.
  *
  * @param source - `null` for the worker-level row, or a source key like `greenhouse:stripe`.
+ * @param userId - The user a per-user run (match, prepare, notify) is for.
  */
-export async function startRun(db: Db, worker: string, source: string | null): Promise<string> {
-  return unwrap(await db.from("worker_runs").insert({ worker, source }).select("id").single(), "start run").id;
+export async function startRun(db: Db, worker: string, source: string | null, userId: string | null = null): Promise<string> {
+  return unwrap(await db.from("worker_runs").insert({ worker, source, user_id: userId }).select("id").single(), "start run").id;
 }
 
 /** Closes a `runs` row with its outcome. Errors are truncated to 500 characters. */

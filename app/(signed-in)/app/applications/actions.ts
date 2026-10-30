@@ -30,9 +30,9 @@ export async function answerQuestionAction(_prev: FormMessageState, formData: Fo
 
 /** Approves a queued application. */
 export async function approveAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   try {
-    await approveApplication(db, text(formData, "application_id"));
+    await approveApplication(db, owner.id, text(formData, "application_id"));
   } catch (err) {
     if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
     throw err;
@@ -42,9 +42,9 @@ export async function approveAction(_prev: FormMessageState, formData: FormData)
 
 /** Skips an application, with an optional reason and lesson. */
 export async function skipAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   try {
-    await skipApplication(db, text(formData, "application_id"), {
+    await skipApplication(db, owner.id, text(formData, "application_id"), {
       reason: text(formData, "reason"),
       lesson: text(formData, "lesson"),
       lessonScope: text(formData, "lesson_scope") || "scoring",

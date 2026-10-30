@@ -5,7 +5,7 @@ import { criteriaValue, declineOption, normalizeQuestion, profileValue, shapeAns
 
 const now = new Date("2026-10-01T00:00:00Z");
 const job = (employer: string, start: string, end: string | null, skills: string[], current = false) => ({
-  id: employer, employer, title: "Engineer", location: null, employment_type: null, start_date: start, end_date: end,
+  id: employer, user_id: "u", employer, title: "Engineer", location: null, employment_type: null, start_date: start, end_date: end,
   is_current: current, description: null, sort_order: 0, created_at: "", updated_at: "", responsibilities: [], skills,
 });
 const data: ProfileData = {
@@ -15,13 +15,13 @@ const data: ProfileData = {
     github_url: null, website_url: null, headline: null, summary: null, notice_period: null,
     created_at: "", updated_at: "",
   },
-  workAuthorizations: [{ id: "a", country: "US", authorized: true, requires_sponsorship: false, status: null, notes: null, created_at: "", updated_at: "" }],
+  workAuthorizations: [{ id: "a", user_id: "u", country: "US", authorized: true, requires_sponsorship: false, status: null, notes: null, created_at: "", updated_at: "" }],
   employment: [job("A", "2019-01-01", "2022-01-01", ["AWS"]), job("B", "2021-01-01", null, ["AWS", "TypeScript"], true)],
   education: [],
   skills: [
-    { skill_id: "s-aws", name: "AWS", normalized: "aws", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" },
-    { skill_id: "s-ts", name: "TypeScript", normalized: "typescript", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 1, created_at: "", updated_at: "" },
-    { skill_id: "s-k8s", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 2, created_at: "", updated_at: "" },
+    { skill_id: "s-aws", user_id: "u", name: "AWS", normalized: "aws", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" },
+    { skill_id: "s-ts", user_id: "u", name: "TypeScript", normalized: "typescript", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 1, created_at: "", updated_at: "" },
+    { skill_id: "s-k8s", user_id: "u", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 2, created_at: "", updated_at: "" },
   ],
   certifications: [],
 };

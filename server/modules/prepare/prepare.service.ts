@@ -22,7 +22,7 @@ import {
   type QuestionAlias,
 } from "@/server/modules/questions/questions.service";
 import { failInterruptedRuns, finishRun, startRun } from "@/server/modules/runs/runs.service";
-import { getSetting } from "@/server/modules/settings/settings.service";
+import { getUserSetting } from "@/server/modules/settings/settings.service";
 import { saveApplicationResume, tailorResume } from "@/server/modules/resumes/resumes.service";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { findAiRestriction, postingFlags, visibleText, type ApplicationFlag } from "./ai-rules";
@@ -63,6 +63,8 @@ export const ALIAS_CONFIDENCE = 0.8;
 export type PrepareDeps = {
   /** Service-role client. */
   db: Db;
+  /** Whose applications to prepare. */
+  userId: string;
   /** Cheap structured call (Haiku) for classifying questions. */
   call: StructuredCall;
   /** Structured call for drafting open-ended answers (Sonnet). */
@@ -206,7 +208,7 @@ async function callWithRetry<T>(
 ): Promise<T | null> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const res = await call<T>(request);
-    spend.cost += await recordUsage(deps.db, { purpose, model: res.model, usage: res.usage, jobId });
+    spend.cost += await recordUsage(deps.db, deps.userId, { purpose, model: res.model, usage: res.usage, jobId });
     if (res.output != null) return res.output;
   }
   return null;
@@ -404,32 +406,32 @@ function utcDayStart(now: Date): Date {
 }
 
 /**
- * Runs prepare once: up to the daily cap (`settings.daily_cap`, default 20)
- * of the best-scoring open jobs without an application, stopping early at the
+ * Runs prepare once for a user: up to their daily cap (`user_settings.daily_cap`,
+ * default 20) of their best-scoring open jobs without an application, stopping early at the
  * monthly LLM cap. Each job's failure is recorded on its application and
  * doesn't stop the run.
  */
 export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; counts: PrepareCounts }> {
-  const { db, now = () => new Date(), log = () => {} } = deps;
+  const { db, userId, now = () => new Date(), log = () => {} } = deps;
   await failInterruptedRuns(db, WORKER, new Date(now().getTime() - INTERRUPTED_AFTER_MS));
-  const runId = await startRun(db, WORKER, null);
+  const runId = await startRun(db, WORKER, null, userId);
   const counts: PrepareCounts = { candidates: 0, queued: 0, needs_input: 0, manual: 0, failed: 0, deferred: 0, tailored: 0, untailored: 0, cost_usd: 0 };
 
   try {
     const [criteria, profile, answerLessons, tailoringLessons, questions, aliases, answers, budget, cap, today] = await Promise.all([
-      getMatchCriteria(db),
-      getProfile(db),
-      lessonsFor(db, "answers"),
-      lessonsFor(db, "tailoring"),
+      getMatchCriteria(db, userId),
+      getProfile(db, userId),
+      lessonsFor(db, userId, "answers"),
+      lessonsFor(db, userId, "tailoring"),
       listQuestions(db),
       listAliases(db),
-      listAnswers(db),
-      getMonthlySpend(db, now()),
-      getSetting(db, "daily_cap"),
-      countApplicationsSince(db, utcDayStart(now())),
+      listAnswers(db, userId),
+      getMonthlySpend(db, userId, now()),
+      getUserSetting(db, userId, "daily_cap"),
+      countApplicationsSince(db, userId, utcDayStart(now())),
     ]);
     const room = Math.min(deps.limit ?? Infinity, Math.max(0, Number(cap ?? 20) - today));
-    let candidates = await listPrepareCandidates(db, criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
+    let candidates = await listPrepareCandidates(db, userId, criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
     if (deps.onlyJobIds) {
       const only = new Set(deps.onlyJobIds);
       candidates = candidates.filter((c) => only.has(c.job.id));
@@ -466,6 +468,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       const applicationId = await insertApplication(
         db,
         {
+          user_id: userId,
           job_id: candidate.job.id,
           match_id: candidate.matchId,
           status: result.status,
@@ -480,10 +483,10 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       if (result.posting) {
         try {
           const resume = await tailorResume({
-            db, call: deps.draftCall, data: profile, lessons: ctx.tailoringLessons, posting: result.posting,
+            db, userId, call: deps.draftCall, data: profile, lessons: ctx.tailoringLessons, posting: result.posting,
             jobId: candidate.job.id, now: now(), spend: ctx.spend,
           });
-          await saveApplicationResume(db, applicationId, resume, `${candidate.job.title} at ${candidate.job.company_name}`);
+          await saveApplicationResume(db, userId, applicationId, resume, `${candidate.job.title} at ${candidate.job.company_name}`);
           counts[resume.kind === "tailored" ? "tailored" : "untailored"]++;
           if (resume.problems.length) log(`${candidate.job.id}: untailored resume (${resume.problems.join("; ")})`);
         } catch (err) {

@@ -3,7 +3,7 @@ import type { Db } from "@/server/db/types";
 import { BOARD_ATS, BOARD_TOKEN, boardUrl, parseBoard } from "@/server/integrations/ats/boards";
 import { fetchJson } from "@/server/integrations/ats/http";
 import * as companies from "./companies.repository";
-import { RepositoryError, ValidationError } from "@/server/core/errors";
+import { ValidationError } from "@/server/core/errors";
 
 const boardInput = z.object({
   ats: z.enum(BOARD_ATS, { message: "Pick an ATS." }),
@@ -53,19 +53,16 @@ export async function testBoard(input: BoardInput): Promise<BoardCheck> {
 }
 
 /**
- * Adds a company board. Discovery picks it up on the next run.
+ * Follows a company board, adding it to the shared list if it's new.
+ * Discovery picks it up on the next run.
  *
  * @returns The trimmed company name.
- * @throws {@link ValidationError} for bad input or a board that already exists.
+ * @throws {@link ValidationError} for bad input or a board the user already follows.
  */
-export async function addCompany(db: Db, input: CompanyInput): Promise<string> {
+export async function addCompany(db: Db, userId: string, input: CompanyInput): Promise<string> {
   const company = validate(companyInput, input);
-  try {
-    await companies.insertCompany(db, company);
-  } catch (err) {
-    if (err instanceof RepositoryError && err.isDuplicate) throw new ValidationError("That board is already added.");
-    throw err;
-  }
+  const id = await companies.ensureCompany(db, company);
+  if ((await companies.followCompanies(db, userId, [id])) === 0) throw new ValidationError("That board is already added.");
   return company.name;
 }
 
@@ -92,6 +89,7 @@ export const exportedCompanySchema = z.object({
  */
 export async function importCompanies(
   db: Db,
+  userId: string,
   exported: z.infer<typeof exportedCompanySchema>[],
   excludeNames: string[],
 ): Promise<{ imported: number; invalidTokens: string[] }> {
@@ -101,6 +99,6 @@ export async function importCompanies(
   const rows = wanted
     .filter((c) => BOARD_TOKEN.test(c.board_token))
     .map((c) => ({ name: c.name, ats: c.ats, board_token: c.board_token }));
-  await companies.upsertCompanies(db, rows);
+  await companies.followCompanies(db, userId, await companies.upsertCompanies(db, rows));
   return { imported: rows.length, invalidTokens };
 }

@@ -14,11 +14,11 @@ import { Pager, scrollingTable } from "../../_components/data-table";
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function Health({ searchParams }: { searchParams: SearchParams }) {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const now = new Date();
   const [{ boards, worker, workerProblem, intervalMinutes }, matching, params] = await Promise.all([
-    loadDiscoveryHealth(db, now),
-    loadMatchingHealth(db, now),
+    loadDiscoveryHealth(db, owner.id, now),
+    loadMatchingHealth(db, owner.id, now),
     searchParams,
   ]);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");

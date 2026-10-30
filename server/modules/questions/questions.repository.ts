@@ -22,9 +22,9 @@ export async function listAliases(db: Db): Promise<Map<string, QuestionAlias>> {
   return new Map(rows.map((a) => [a.normalized_text, a]));
 }
 
-/** Stored answers, keyed by question id. */
-export async function listAnswers(db: Db): Promise<Map<string, Json>> {
-  const rows = unwrap(await db.from("question_answers").select("question_id, value"), "list answers");
+/** A user's stored answers, keyed by question id. */
+export async function listAnswers(db: Db, userId: string): Promise<Map<string, Json>> {
+  const rows = unwrap(await db.from("question_answers").select("question_id, value").eq("user_id", userId), "list answers");
   return new Map(rows.map((a) => [a.question_id, a.value]));
 }
 
@@ -45,12 +45,12 @@ export async function insertAlias(db: Db, alias: Insert<"question_aliases">): Pr
   check(await db.from("question_aliases").upsert(alias, { onConflict: "normalized_text", ignoreDuplicates: true }), "add question alias");
 }
 
-/** Saves the answer to a catalog question. */
-export async function saveAnswer(db: Db, questionId: string, value: NonNullable<Json>): Promise<void> {
-  check(await db.from("question_answers").upsert({ question_id: questionId, value }), "save answer");
+/** Saves a user's answer to a catalog question. */
+export async function saveAnswer(db: Db, userId: string, questionId: string, value: NonNullable<Json>): Promise<void> {
+  check(await db.from("question_answers").upsert({ user_id: userId, question_id: questionId, value }), "save answer");
 }
 
-/** Marks a wording's mapping as confirmed by the owner (answers from it stop showing "please check"). */
+/** Marks a wording's mapping as confirmed by a user (answers from it stop showing "please check"). */
 export async function confirmAlias(db: Db, normalizedText: string): Promise<void> {
   check(await db.from("question_aliases").update({ confirmed: true }).eq("normalized_text", normalizedText), "confirm question alias");
 }

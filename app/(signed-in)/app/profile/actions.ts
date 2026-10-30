@@ -39,34 +39,34 @@ export async function saveProfileAction(_prev: FormMessageState, formData: FormD
 
 /** Adds or replaces the work authorization for a country. */
 export async function saveAuthorizationAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Saved.", (db) => saveWorkAuthorization(db, values(formData)));
+  return run("Saved.", (db, userId) => saveWorkAuthorization(db, userId, values(formData)));
 }
 
 /** Adds a job, or saves an edited one (with `id`). */
 export async function saveEmploymentAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { id, ...rest } = values(formData);
-  return run(id ? "Saved." : "Added.", (db) => saveEmployment(db, rest, id || undefined));
+  return run(id ? "Saved." : "Added.", (db, userId) => saveEmployment(db, userId, rest, id || undefined));
 }
 
 /** Adds an education entry. */
 export async function addEducationAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Added.", (db) => addEducation(db, values(formData)));
+  return run("Added.", (db, userId) => addEducation(db, userId, values(formData)));
 }
 
 /** Adds a certification. */
 export async function addCertificationAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Added.", (db) => addCertification(db, values(formData)));
+  return run("Added.", (db, userId) => addCertification(db, userId, values(formData)));
 }
 
 /** Adds skills (comma-separated). */
 export async function addSkillsAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  return run("Added.", (db) => addSkills(db, formData.get("names")));
+  return run("Added.", (db, userId) => addSkills(db, userId, formData.get("names")));
 }
 
 /** Saves a skill's years override and proficiency. */
 export async function updateSkillAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { skill_id, ...rest } = values(formData);
-  return run("Saved.", (db) => updateSkill(db, skill_id, rest));
+  return run("Saved.", (db, userId) => updateSkill(db, userId, skill_id, rest));
 }
 
 const REMOVABLE = ["work_authorizations", "employments", "educations", "certifications"] as const;
@@ -75,14 +75,14 @@ const REMOVABLE = ["work_authorizations", "employments", "educations", "certific
 export async function removeItemAction(formData: FormData) {
   const kind = String(formData.get("kind"));
   if (!(REMOVABLE as readonly string[]).includes(kind)) throw new Error(`cannot remove ${kind}`);
-  const { db } = await ownerContext();
-  await removeProfileItem(db, kind as (typeof REMOVABLE)[number], String(formData.get("id")));
+  const { db, owner } = await ownerContext();
+  await removeProfileItem(db, owner.id, kind as (typeof REMOVABLE)[number], String(formData.get("id")));
   refresh();
 }
 
 /** Removes a skill from your list. */
 export async function removeSkillAction(formData: FormData) {
-  const { db } = await ownerContext();
-  await removeSkill(db, String(formData.get("skill_id")));
+  const { db, owner } = await ownerContext();
+  await removeSkill(db, owner.id, String(formData.get("skill_id")));
   refresh();
 }

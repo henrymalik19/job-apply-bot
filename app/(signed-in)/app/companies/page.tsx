@@ -13,9 +13,9 @@ import { AddCompanyForm } from "./forms";
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function Companies({ searchParams }: { searchParams: SearchParams }) {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const now = new Date();
-  const [{ boards }, params] = await Promise.all([loadDiscoveryHealth(db, now), searchParams]);
+  const [{ boards }, params] = await Promise.all([loadDiscoveryHealth(db, owner.id, now), searchParams]);
   const active = boards.filter((b) => b.active).length;
   const page = paginate(boards, parsePage(params.page));
 

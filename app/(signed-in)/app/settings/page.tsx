@@ -8,8 +8,8 @@ import { isPublicPageEnabled } from "@/server/modules/public-page/public-page.se
 import { setPublicPageAction } from "./actions";
 
 async function PublicPageSetting() {
-  const { db } = await ownerContext();
-  const enabled = await isPublicPageEnabled(db);
+  const { db, owner } = await ownerContext();
+  const enabled = await isPublicPageEnabled(db, owner.id);
 
   return (
     <Card>

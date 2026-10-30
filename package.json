@@ -22,6 +22,8 @@
     "worker:pipeline": "node --env-file-if-exists=.env.local --import tsx workers/pipeline.ts",
     "worker:prepare": "node --env-file-if-exists=.env.local --import tsx workers/prepare.ts",
     "worker:notify": "node --env-file-if-exists=.env.local --import tsx workers/notify.ts",
+    "worker:match": "node --env-file-if-exists=.env.local --import tsx workers/match.ts",
+    "worker:sweep": "node --env-file-if-exists=.env.local --import tsx workers/sweep.ts",
     "import:profile": "node --env-file-if-exists=.env.local --import tsx scripts/import-profile.ts"
   },
   "dependencies": {

@@ -27,7 +27,7 @@ function toFormError(err: unknown, values?: CompanyValues): FormState {
  * board once) or "add". Values are echoed back unless the add succeeded.
  */
 export async function companyFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const values: CompanyValues = {
     name: String(formData.get("name") ?? ""),
     ats: String(formData.get("ats") ?? ""),
@@ -43,7 +43,7 @@ export async function companyFormAction(_prev: FormState, formData: FormData): P
         values,
       };
     }
-    const name = await addCompany(db, input);
+    const name = await addCompany(db, owner.id, input);
     refresh();
     return { ok: `Added ${name}. It will be checked on the next discovery run.` };
   } catch (err) {

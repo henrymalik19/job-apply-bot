@@ -16,9 +16,9 @@ export type LessonScope = (typeof LESSON_SCOPES)[number];
 /** Every lesson, for the Lessons page. */
 export const listLessons = lessons.listLessons;
 
-/** Active lessons for a prompt of the given scope, plus global ones. */
-export async function lessonsFor(db: Db, scope: Exclude<LessonScope, "global">) {
-  return lessons.listActiveLessons(db, ["global", scope]);
+/** A user's active lessons for a prompt of the given scope, plus global ones. */
+export async function lessonsFor(db: Db, userId: string, scope: Exclude<LessonScope, "global">) {
+  return lessons.listActiveLessons(db, userId, ["global", scope]);
 }
 
 const lessonInput = z.object({
@@ -27,17 +27,17 @@ const lessonInput = z.object({
 });
 
 /**
- * Adds a lesson typed by the owner.
+ * Adds a lesson typed by a user.
  *
  * @throws {@link ValidationError} for an empty rule or unknown scope.
  */
-export async function addLesson(db: Db, input: { rule: unknown; scope: unknown }): Promise<void> {
+export async function addLesson(db: Db, userId: string, input: { rule: unknown; scope: unknown }): Promise<void> {
   const parsed = lessonInput.safeParse(input);
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "Invalid lesson.");
-  await lessons.insertLesson(db, { ...parsed.data, platform: null, source: "typed" });
+  await lessons.insertLesson(db, userId, { ...parsed.data, platform: null, source: "typed" });
 }
 
 /** Turns a lesson on or off. */
-export async function setLessonActive(db: Db, id: string, active: boolean): Promise<void> {
-  await lessons.setLessonActive(db, z.string().uuid().parse(id), active);
+export async function setLessonActive(db: Db, userId: string, id: string, active: boolean): Promise<void> {
+  await lessons.setLessonActive(db, userId, z.string().uuid().parse(id), active);
 }

@@ -17,16 +17,16 @@ import type { FormMessageState } from "../../_components/form-message";
 
 /** Title-filter form action. */
 export async function saveTitleFilterAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
-  await saveTitleFilter(db, String(formData.get("include") ?? ""), String(formData.get("exclude") ?? ""));
+  const { db, owner } = await ownerContext();
+  await saveTitleFilter(db, owner.id, String(formData.get("include") ?? ""), String(formData.get("exclude") ?? ""));
   refresh();
   return { ok: "Saved. Applies to jobs found from the next discovery run on." };
 }
 
 /** Work-type, location and age form action. */
 export async function saveJobFilterAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
-  const saved = await saveJobFilter(db, {
+  const { db, owner } = await ownerContext();
+  const saved = await saveJobFilter(db, owner.id, {
     workTypes: formData.getAll("workTypes").map(String),
     locations: String(formData.get("locations") ?? ""),
     keepUnknownWorkType: formData.get("keepUnknownWorkType") === "on",
@@ -39,8 +39,8 @@ export async function saveJobFilterAction(_prev: FormMessageState, formData: For
 
 /** Removes saved jobs that no longer match the filters (jobs with applications are kept). */
 export async function pruneSavedJobsAction(): Promise<FormMessageState> {
-  const { db } = await ownerContext();
-  const result = await pruneSavedJobs(db, new Date());
+  const { db, owner } = await ownerContext();
+  const result = await pruneSavedJobs(db, [owner.id], new Date());
   refresh();
   return {
     ok: `Checked ${result.checked.toLocaleString()} saved jobs: removed ${result.removed.toLocaleString()}, kept ${result.kept.toLocaleString()}.`,
@@ -77,12 +77,12 @@ export type SuggestState = FormMessageState & { keep?: TitleSuggestion[]; skip?:
 
 /** Asks Claude for title phrases based on the profile. */
 export async function suggestTitlesAction(): Promise<SuggestState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   if (!process.env.ANTHROPIC_API_KEY) {
     return { error: "Suggestions need ANTHROPIC_API_KEY in the app's environment (Vercel)." };
   }
   try {
-    const suggestions = await suggestTitleFilter(db, createClaudeCaller());
+    const suggestions = await suggestTitleFilter(db, owner.id, createClaudeCaller());
     if (!suggestions.keep.length && !suggestions.skip.length) return { ok: "No new phrases to suggest." };
     return suggestions;
   } catch (err) {
@@ -93,11 +93,11 @@ export async function suggestTitlesAction(): Promise<SuggestState> {
 
 /** Adds the ticked suggestions to the title filter. */
 export async function addSuggestionsAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const keep = formData.getAll("keep").map(String);
   const skip = formData.getAll("skip").map(String);
   if (!keep.length && !skip.length) return { error: "Tick at least one phrase." };
-  await addToTitleFilter(db, keep, skip);
+  await addToTitleFilter(db, owner.id, keep, skip);
   refresh();
   return { ok: `Added ${keep.length + skip.length} phrase(s) to the title filter.` };
 }

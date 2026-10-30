@@ -93,11 +93,11 @@ function SortHead({ sort, current, params, className, children }: {
 }
 
 async function Jobs({ searchParams }: { searchParams: SearchParams }) {
-  const { db } = await ownerContext();
+  const { db, owner } = await ownerContext();
   const params = await searchParams;
   const filters = parseJobFilters(params);
   const now = new Date();
-  const { page, threshold } = await browseJobs(db, filters, parsePage(params.page), now);
+  const { page, threshold } = await browseJobs(db, owner.id, filters, parsePage(params.page), now);
   const keep = filtersToParams(filters);
   const detailQuery = new URLSearchParams({ ...keep, ...(page.page > 1 ? { page: String(page.page) } : {}) }).toString();
 

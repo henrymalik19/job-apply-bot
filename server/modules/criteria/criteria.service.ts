@@ -1,7 +1,7 @@
-// Search criteria: what jobs the owner is looking for. Discovery pre-filters
-// (job titles; work type, location and posting age) live in settings; matching
+// Search criteria: what jobs a user is looking for. Discovery pre-filters
+// (job titles; work type, location and posting age) live in user_settings; matching
 // criteria (roles, seniority, salary range, dealbreakers, threshold,
-// relocation) are one editable match_criteria row.
+// relocation) are one match_criteria row per user.
 import { z } from "zod";
 import { ValidationError } from "@/server/core/errors";
 import type { Db } from "@/server/db/types";
@@ -34,24 +34,24 @@ export {
 } from "./job-filter";
 export { passesTitleFilter, type TitleFilter } from "./title-filter";
 
-/** The current title filter (empty lists when unset). */
-export async function getTitleFilter(db: Db): Promise<TitleFilter> {
-  return titleFilterSchema.parse((await settings.getSetting(db, TITLE_FILTER_KEY)) ?? {});
+/** A user's title filter (empty lists when unset). */
+export async function getTitleFilter(db: Db, userId: string): Promise<TitleFilter> {
+  return titleFilterSchema.parse((await settings.getUserSetting(db, userId, TITLE_FILTER_KEY)) ?? {});
 }
 
 /**
  * Saves the title filter from comma- or newline-separated phrase lists.
  * Applies to jobs found from the next discovery run on.
  */
-export async function saveTitleFilter(db: Db, include: string, exclude: string): Promise<TitleFilter> {
+export async function saveTitleFilter(db: Db, userId: string, include: string, exclude: string): Promise<TitleFilter> {
   const filter = { include: parseKeywords(include), exclude: parseKeywords(exclude) };
-  await settings.putSetting(db, TITLE_FILTER_KEY, filter);
+  await settings.putUserSetting(db, userId, TITLE_FILTER_KEY, filter);
   return filter;
 }
 
-/** The current work-type, location and age filter (defaults: all types and places, 30 days). */
-export async function getJobFilter(db: Db): Promise<JobFilter> {
-  return jobFilterSchema.parse((await settings.getSetting(db, JOB_FILTER_KEY)) ?? {});
+/** A user's work-type, location and age filter (defaults: all types and places, 30 days). */
+export async function getJobFilter(db: Db, userId: string): Promise<JobFilter> {
+  return jobFilterSchema.parse((await settings.getUserSetting(db, userId, JOB_FILTER_KEY)) ?? {});
 }
 
 /** Raw values from the Search page's work-type and location form. */
@@ -67,7 +67,7 @@ export type JobFilterInput = {
  * Saves the work-type, location and age filter. The age is clamped to 1–90
  * days. Applies to jobs found from the next discovery run on.
  */
-export async function saveJobFilter(db: Db, input: JobFilterInput): Promise<JobFilter> {
+export async function saveJobFilter(db: Db, userId: string, input: JobFilterInput): Promise<JobFilter> {
   const filter = jobFilterSchema.parse({
     work_types: input.workTypes.filter((t): t is WorkType => (WORK_TYPES as readonly string[]).includes(t)),
     locations: parseLocations(input.locations),
@@ -75,15 +75,15 @@ export async function saveJobFilter(db: Db, input: JobFilterInput): Promise<JobF
     keep_remote_without_location: input.keepRemoteWithoutLocation,
     max_age_days: Math.trunc(Number(input.maxAgeDays)),
   });
-  await settings.putSetting(db, JOB_FILTER_KEY, filter);
+  await settings.putUserSetting(db, userId, JOB_FILTER_KEY, filter);
   return filter;
 }
 
 /**
- * The current matching criteria, or the defaults when none are saved yet.
+ * A user's matching criteria, or the defaults when none are saved yet.
  */
-export async function getMatchCriteria(db: Db): Promise<MatchCriteria> {
-  const row = await getCriteriaRow(db);
+export async function getMatchCriteria(db: Db, userId: string): Promise<MatchCriteria> {
+  const row = await getCriteriaRow(db, userId);
   return matchCriteriaSchema.parse(row ?? {});
 }
 
@@ -128,7 +128,7 @@ export async function saveMatchCriteria(db: Db, userId: string, input: MatchCrit
   if (next.salary_min != null && next.salary_max != null && next.salary_max < next.salary_min) {
     throw new ValidationError("The top of the salary range is below the floor.");
   }
-  const current = await getMatchCriteria(db);
+  const current = await getMatchCriteria(db, userId);
   if (JSON.stringify(current) === JSON.stringify(next)) return { criteria: current, changed: false };
   await upsertCriteriaRow(db, userId, next);
   return { criteria: next, changed: true };
@@ -151,9 +151,10 @@ const suggestionsSchema = z.object({
  */
 export async function suggestTitleFilter(
   db: Db,
+  userId: string,
   call: StructuredCall,
 ): Promise<{ keep: TitleSuggestion[]; skip: TitleSuggestion[] }> {
-  const [facts, filter, criteria] = await Promise.all([getProfileLines(db), getTitleFilter(db), getMatchCriteria(db)]);
+  const [facts, filter, criteria] = await Promise.all([getProfileLines(db, userId), getTitleFilter(db, userId), getMatchCriteria(db, userId)]);
   const system = `You help a job seeker set up a job-title filter. Discovery keeps a posting only if its title contains at
 least one "keep" phrase and no "skip" phrase (whole words, case-insensitive).
 
@@ -171,7 +172,7 @@ Current skip phrases: ${filter.exclude.join(", ") || "(none)"}
 Suggest phrases that aren't already in the filter.`;
 
   const res = await call({ system, user, schema: suggestionsSchema, maxTokens: 4000, effort: "low" });
-  await recordUsage(db, { purpose: "suggest_titles", model: res.model, usage: res.usage });
+  await recordUsage(db, userId, { purpose: "suggest_titles", model: res.model, usage: res.usage });
   if (!res.output) throw new ValidationError(`No suggestions came back (${res.error ?? "unknown error"}). Try again.`);
 
   const known = new Set([...filter.include, ...filter.exclude].map((p) => p.toLowerCase().trim()));
@@ -184,7 +185,7 @@ Suggest phrases that aren't already in the filter.`;
 }
 
 /** Adds chosen phrases to the title filter (duplicates ignored). */
-export async function addToTitleFilter(db: Db, keep: string[], skip: string[]): Promise<TitleFilter> {
-  const current = await getTitleFilter(db);
-  return saveTitleFilter(db, [...current.include, ...keep].join(", "), [...current.exclude, ...skip].join(", "));
+export async function addToTitleFilter(db: Db, userId: string, keep: string[], skip: string[]): Promise<TitleFilter> {
+  const current = await getTitleFilter(db, userId);
+  return saveTitleFilter(db, userId, [...current.include, ...keep].join(", "), [...current.exclude, ...skip].join(", "));
 }

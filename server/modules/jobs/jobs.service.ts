@@ -13,6 +13,7 @@ export {
   listJobIdsWithApplications,
   listJobsForFiltering,
   jobFilterClauses,
+  jobsForFiltering,
   LIST_COLUMNS,
   listOpenJobsForMatching,
   syncBoard,

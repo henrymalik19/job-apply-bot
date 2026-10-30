@@ -1,7 +1,7 @@
 // Integration tests against a local Supabase (`pnpm db:start`).
-// Covers M1 acceptance: anon and non-owner users are denied on every table,
-// the owner can read/write, and status changes are forced through
-// transition_application() with an events row.
+// Covers M1 acceptance: anon and signed-in users not in `users` are denied on
+// every table, the owner can read/write, members see only their own rows, and
+// status changes are forced through transition_application() with an events row.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -21,8 +21,8 @@ const TABLES = [
   "applications", "certifications", "companies", "educations", "emails", "employment_responsibilities",
   "employment_skills", "employments", "jobs", "lessons", "llm_calls", "match_criteria", "matches", 
   "profile_skills", "profiles", "public_applications", "question_aliases", "question_answers", "questions",
-  "resumes", "settings", "skill_aliases", "skills", "users", "work_authorizations", "worker_runs",
-  "worker_source_statuses",
+  "resumes", "settings", "skill_aliases", "skills", "user_companies", "user_settings", "users", "work_authorizations",
+  "worker_runs", "worker_source_statuses",
 ];
 
 const opts = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -31,6 +31,7 @@ const anon = createClient(URL, ANON, opts);
 
 let owner: SupabaseClient;
 let stranger: SupabaseClient;
+let member: SupabaseClient;
 const userIds: string[] = [];
 const jobIds: string[] = [];
 let previousOwner: string | null = null;
@@ -60,7 +61,7 @@ async function insertJob(db: SupabaseClient) {
 
 async function insertApplication(db: SupabaseClient) {
   const job = await insertJob(db);
-  const { data, error } = await db.from("applications").insert({ job_id: job.id }).select().single();
+  const { data, error } = await db.from("applications").insert({ user_id: userIds[0], job_id: job.id }).select().single();
   if (error) throw error;
   return data;
 }
@@ -71,7 +72,9 @@ beforeAll(async () => {
 
   owner = await signedInUser();
   stranger = await signedInUser();
+  member = await signedInUser();
   await setOwner(service as unknown as Db, userIds[0]);
+  await service.from("users").insert({ id: userIds[2], role: "member" });
 });
 
 afterAll(async () => {
@@ -141,10 +144,10 @@ describe("authenticated non-owner", () => {
 });
 
 describe("owner", () => {
-  it("can read settings and sees defaults", async () => {
-    const { data, error } = await owner.from("settings").select("key, value").eq("key", "public_page_enabled").single();
+  it("can read global settings", async () => {
+    const { data, error } = await owner.from("settings").select("key, value").eq("key", "app_url").single();
     expect(error).toBeNull();
-    expect(data?.value).toBe(false);
+    expect(typeof data?.value).toBe("string");
   });
 
   it("can create jobs and applications, and creation is logged", async () => {
@@ -157,6 +160,33 @@ describe("owner", () => {
   it("cannot read the users table", async () => {
     const { data } = await owner.from("users").select("*");
     expect(data ?? []).toEqual([]);
+  });
+});
+
+describe("member", () => {
+  it("sees shared jobs but not another user's applications", async () => {
+    const app = await insertApplication(owner);
+    const { data: jobs } = await member.from("jobs").select("id").eq("id", app.job_id);
+    expect(jobs).toHaveLength(1);
+    const { data: apps } = await member.from("applications").select("id").eq("id", app.id);
+    expect(apps).toEqual([]);
+    const { data: events } = await member.from("application_events").select("id").eq("application_id", app.id);
+    expect(events).toEqual([]);
+  });
+
+  it("can only write rows of their own", async () => {
+    const { error: own } = await member.from("lessons").insert({ rule: "Mine", scope: "global" });
+    expect(own).toBeNull(); // user_id defaults to the member
+    const { error: other } = await member.from("lessons").insert({ user_id: userIds[0], rule: "Theirs", scope: "global" });
+    expect(other).not.toBeNull();
+    await service.from("lessons").delete().eq("user_id", userIds[2]);
+  });
+
+  it("cannot change shared jobs", async () => {
+    const app = await insertApplication(owner);
+    await member.from("jobs").update({ title: "Hacked" }).eq("id", app.job_id);
+    const { data } = await service.from("jobs").select("title").eq("id", app.job_id).single();
+    expect(data?.title).toBe("Engineer");
   });
 });
 

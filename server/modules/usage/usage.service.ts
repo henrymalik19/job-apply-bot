@@ -15,26 +15,28 @@ export function monthStart(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
-/** This month's spend and the cap, in dollars. */
-export async function getMonthlySpend(db: Db, now: Date): Promise<{ spent: number; cap: number }> {
+/** A user's spend this month and their cap, in dollars. */
+export async function getMonthlySpend(db: Db, userId: string, now: Date): Promise<{ spent: number; cap: number }> {
   const [spent, cap] = await Promise.all([
-    spendSince(db, monthStart(now)),
-    settings.getSetting(db, SPEND_CAP_KEY).then((v) => z.number().positive().catch(DEFAULT_CAP_USD).parse(v)),
+    spendSince(db, userId, monthStart(now)),
+    settings.getUserSetting(db, userId, SPEND_CAP_KEY).then((v) => z.number().positive().catch(DEFAULT_CAP_USD).parse(v)),
   ]);
   return { spent, cap };
 }
 
 /**
- * Records one LLM call and returns its cost in dollars.
+ * Records one LLM call made for a user and returns its cost in dollars.
  *
  * @param purpose - What the call was for, e.g. "score" or "suggest_titles".
  */
 export async function recordUsage(
   db: Db,
+  userId: string,
   call: { purpose: string; model: string; usage: TokenUsage; jobId?: string | null },
 ): Promise<number> {
   const cost = costUsd(call.model, call.usage);
   await insertUsage(db, {
+    user_id: userId,
     purpose: call.purpose,
     model: call.model,
     input_tokens: call.usage.input_tokens,

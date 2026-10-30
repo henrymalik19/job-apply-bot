@@ -14,7 +14,7 @@ export type Overview = {
   jobs: Tile[];
   /** Application funnel from queued to offer. */
   funnel: Tile[];
-  /** Applications waiting on the owner. */
+  /** Applications waiting on the user. */
   needsYou: number;
   /** Last finished discovery run, if any. */
   lastRun: WorkerRun | null;
@@ -22,14 +22,14 @@ export type Overview = {
   recent: JobListItem[];
 };
 
-/** Loads the overview: job numbers, the application funnel, the last discovery run and the newest jobs. */
-export async function getOverview(db: Db, now: Date): Promise<Overview> {
+/** Loads a user's overview: job numbers, their application funnel, the last discovery run and the newest jobs. */
+export async function getOverview(db: Db, userId: string, now: Date): Promise<Overview> {
   const [stats, byStatus, lastRun, recent, matching] = await Promise.all([
     getJobStats(db, now),
-    countByStatus(db),
+    countByStatus(db, userId),
     latestDiscoveryRun(db),
     getRecentJobs(db, 8),
-    getMatchSummary(db),
+    getMatchSummary(db, userId),
   ]);
   return {
     jobs: [

@@ -13,6 +13,7 @@ import { getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/c
 import { parseJobFilters } from "@/server/modules/jobs/jobs.service";
 import { browseJobs, runMatch } from "@/server/modules/matching/matching.service";
 import type {} from "./setup";
+import { OPEN_FILTERS, setUserSettings, testUser } from "./users";
 
 const { url: URL, serviceRoleKey: SERVICE } = inject("supabase");
 const db = createClient(URL, SERVICE, { auth: { persistSession: false } }) as unknown as Db;
@@ -22,9 +23,9 @@ let companyId = "";
 const jobIds: Record<string, string> = {};
 const lessonIds: string[] = [];
 let ownerId = "";
-let createdOwner = false;
+let cleanupUser = async () => {};
+let restoreSettings = async () => {};
 let previousCriteria: Record<string, unknown> | null = null;
-let previousCap: unknown;
 
 // Fake model: answers by job title. "Garbage" never validates; "Flaky" fails once.
 const prompts: string[] = [];
@@ -55,7 +56,7 @@ const criteriaInput = (excluded: string) => ({
 });
 
 const match = () =>
-  runMatch({ db, call: fakeCall, onlyJobIds: Object.values(jobIds), concurrency: 2 });
+  runMatch({ db, userId: ownerId, call: fakeCall, onlyJobIds: Object.values(jobIds), concurrency: 2 });
 
 async function matchRows() {
   const { data } = await db.from("matches").select("*").in("job_id", Object.values(jobIds));
@@ -63,22 +64,16 @@ async function matchRows() {
 }
 
 beforeAll(async () => {
-  // Criteria belong to the owner; use the local owner (or a temporary one) and restore its criteria after.
-  const { data: owner } = await db.from("users").select("id").eq("role", "owner").maybeSingle();
-  ownerId = owner?.id ?? randomUUID();
-  if (!owner) {
-    await db.from("users").insert({ id: ownerId, role: "owner" });
-    createdOwner = true;
-  }
+  // Criteria belong to a user; use the local owner (or a temporary one) and restore its criteria after.
+  ({ id: ownerId, cleanup: cleanupUser } = await testUser(db));
   const { data: criteriaRow } = await db.from("match_criteria").select("*").eq("user_id", ownerId).maybeSingle();
   previousCriteria = criteriaRow;
-  const { data: cap } = await db.from("settings").select("value").eq("key", "llm_monthly_cap_usd").maybeSingle();
-  previousCap = cap?.value ?? 5;
-  await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 1000 });
+  restoreSettings = await setUserSettings(db, ownerId, { llm_monthly_cap_usd: 1000, ...OPEN_FILTERS });
 
   const { data: company, error } = await db.from("companies").insert({ name: `MatchCo ${tag}`, ats: "greenhouse", board_token: `match${tag}` }).select("id").single();
   if (error) throw error;
   companyId = company.id;
+  await db.from("user_companies").insert({ user_id: ownerId, company_id: companyId });
   for (const [key, title, companyName] of [
     ["good", "Staff Engineer", `MatchCo ${tag}`],
     ["flaky", "Flaky Staff Engineer", `MatchCo ${tag}`],
@@ -96,7 +91,7 @@ beforeAll(async () => {
   await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}`));
 
   for (const [rule, active] of [[`Prefer platform teams ${tag}`, true], [`Ignore fintech ${tag}`, false]] as const) {
-    const { data, error: lessonErr } = await db.from("lessons").insert({ rule, scope: "scoring", active }).select("id").single();
+    const { data, error: lessonErr } = await db.from("lessons").insert({ user_id: ownerId, rule, scope: "scoring", active }).select("id").single();
     if (lessonErr) throw lessonErr;
     lessonIds.push(data.id);
   }
@@ -111,8 +106,8 @@ afterAll(async () => {
   await db.from("lessons").delete().in("id", lessonIds);
   if (previousCriteria) await db.from("match_criteria").upsert(previousCriteria as never);
   else await db.from("match_criteria").delete().eq("user_id", ownerId);
-  if (createdOwner) await db.from("users").delete().eq("id", ownerId);
-  await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: previousCap as number });
+  await restoreSettings();
+  await cleanupUser();
   await db.from("worker_runs").delete().eq("worker", "match").gt("started_at", new Date(Date.now() - 3600_000).toISOString());
 });
 
@@ -160,7 +155,7 @@ describe("matching", () => {
     expect(unchanged.changed).toBe(false);
     const changed = await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}, Someone Else ${tag}`));
     expect(changed.changed).toBe(true);
-    expect((await getMatchCriteria(db)).excluded_companies).toContain(`Someone Else ${tag}`);
+    expect((await getMatchCriteria(db, ownerId)).excluded_companies).toContain(`Someone Else ${tag}`);
     expect((await match()).counts.candidates).toBe(0);
     expect((await matchRows()).length).toBe(4);
   });
@@ -171,7 +166,7 @@ describe("matching", () => {
     await db.from("jobs").update({ posted_at: days(1) }).eq("id", jobIds.flaky);
     await db.from("jobs").update({ posted_at: days(2) }).eq("id", jobIds.garbage);
     const browse = async (match: string, sort = "found") =>
-      (await browseJobs(db, parseJobFilters({ q: tag, posted: "any", match, sort }), 1, new Date())).page.items;
+      (await browseJobs(db, ownerId, parseJobFilters({ q: tag, posted: "any", match, sort }), 1, new Date())).page.items;
 
     const relevant = await browse("relevant", "posted");
     expect(relevant.map((j) => j.id)).toEqual([jobIds.flaky, jobIds.garbage, jobIds.good]);
@@ -183,10 +178,10 @@ describe("matching", () => {
   });
 
   it("defers scoring once the monthly spend cap is reached", async () => {
-    await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 0.000001 });
+    await db.from("user_settings").upsert({ user_id: ownerId, key: "llm_monthly_cap_usd", value: 0.000001 });
     await db.from("matches").delete().in("job_id", Object.values(jobIds));
     const { counts } = await match();
     expect(counts).toMatchObject({ candidates: 4, filtered: 1, scored: 0, failed: 0, deferred: 3 });
-    await db.from("settings").upsert({ key: "llm_monthly_cap_usd", value: 1000 });
+    await db.from("user_settings").upsert({ user_id: ownerId, key: "llm_monthly_cap_usd", value: 1000 });
   });
 });

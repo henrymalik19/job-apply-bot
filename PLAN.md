@@ -450,8 +450,15 @@ For each selected job:
 - `needs_input`/`manual` older than `stale_days` (default 5) → nudge flag; older than 2× → `expired`.
 
 ### Schedules (Railway cron services)
-- Pipeline service: `discover → match → prepare → notify` chained in one process every 30 minutes (UTC cron).
-- Email service: `track_email → notify` every 30 minutes. Expire service: daily.
+Each worker drains what's waiting in the database (the tables are the queue), so it can be woken by whatever
+creates its work and also by a short timer that catches anything else. A wake-up with nothing waiting costs a few
+queries. Workers loop over every user.
+- **Pipeline** service, every 6 hours: `discover → match → prepare → notify`, so new jobs are prepared and emailed
+  minutes after they're found.
+- **Sweep** service, every 15 minutes: `prepare → notify` (cap leftovers on a new day, retries, anything another
+  worker left waiting). `track_email` joins it in M6; `expire` runs once a day inside it in M7.
+- Quick changes made in the web app happen there and then (e.g. a saved answer fills the same question on every
+  waiting application); slow ones (apply) are left waiting for a worker.
 - Railway skips a tick while the previous run is still active, so runs never overlap; each run must exit.
 - CI (GitHub Actions): typecheck, lint, unit tests, DB integration tests on every push.
 
@@ -575,9 +582,12 @@ Work that starts once M1–M7 are deployed and in daily use. Nothing here is bui
 choices must not block it (see "Keep open" below).
 
 **A. Multiple users (family and friends)**
-- Add `user_id` to every table and backfill it with mine; RLS becomes `user_id = auth.uid()` for an allowed user.
-  The `owner` singleton becomes an `allowed_users` list. Invite-only: I add people; public sign-up stays off.
-- Per-user settings (caps, threshold, schedules) and per-user Claude spend limits.
+- **Data model done in M5:** every per-user table has `user_id` (backfilled with mine); companies, jobs, skills
+  and the question catalog are shared, with `user_companies` for who follows which board; matches are per
+  (user, job); per-user settings live in `user_settings` (caps, filters, notifications, inbox), global ones in
+  `settings`. RLS is `user_id = auth.uid()` for anyone in `users`; workers loop over users.
+- Still to do: let members sign in (the web gate is owner-only), an invite flow (I add people; public sign-up
+  stays off), and per-user schedules.
 - **No mailbox passwords held.** Each user gets a unique forwarding address (e.g. `name.x7k2@jobs.<domain>`)
   via an inbound email service (Postmark inbound or Cloudflare Email Routing → webhook). Users forward
   job-alert and ATS emails there. Replaces IMAP (D3) for everyone, me included.
@@ -589,20 +599,23 @@ choices must not block it (see "Keep open" below).
 - Workers claim tasks with `FOR UPDATE SKIP LOCKED`, retry with backoff, and write `runs` rows as today.
   Replaces the fixed Railway cron schedules.
 
-**C. Browser extension (assisted apply; replaces the earlier Claude-in-Chrome submission idea)**
-- Runs in the user's own signed-in browser, so no logins or session cookies are stored server-side (principle 10).
-- **LinkedIn Easy Apply:** when I open Easy Apply on a job, the extension matches it to the approved application,
-  fills each step of the dialog (contact details, resume choice, screening questions) from the prepared package,
-  and highlights anything it couldn't answer or that the employer wants answered without AI. **I click Next and
-  Submit.** It never clicks Submit, never opens jobs on its own, never works through a list in the background, and
-  does nothing to hide itself. LinkedIn jobs come from alert emails and an "Add to pipeline" button on the job
-  I'm viewing; no scraping (principle 4). Accepted risk: LinkedIn's terms disallow automation tools; the
-  realistic consequence is an account restriction, kept low by acting only on my clicks, one job at a time.
-- **ATS forms** (Greenhouse, Lever, Ashby, Wellfound, Workday): same flow; I'm signed in, it fills, I submit.
-- After submit it captures the confirmation screen as evidence and calls `transition(..., 'submitted', 'user:submit')`.
-- Per-platform rollout via the `platforms` table: `supervised` fills one step at a time and waits for me; after
-  `required_streak` (default 3) clean applications I may switch a platform to `trusted`, which fills all steps
-  before handing over. Submit is always mine. Any correction resets the streak and becomes a lesson.
+**C. M9 — Apply runner (replaces the browser-extension idea)**
+- A small worker on my own computer (`pnpm worker:apply`) that takes **approved** applications and drives a real,
+  visible Chrome window with Playwright: my IP, my signed-in sessions (Workday works), and I can watch it.
+  Nothing runs server-side, so no logins or session cookies are stored (principle 10).
+- **Greenhouse and Ashby** (most matches): fill by the field names prepare already fetched from the form API
+  (`question_123`, resume upload, selects), not by guessing from the page. Deterministic and testable against
+  saved fixture pages.
+- **Other forms** (Lever, Workday, unknown): Claude reads the page, maps labels to the prepared answers and fills
+  them; these start supervised.
+- **Stops, never works around:** a CAPTCHA or bot check, a field it can't map, or an employer AI rule moves the
+  application to Apply yourself with a note. No CAPTCHA solving or detection evasion, ever.
+- **Evidence before every submit:** a screenshot of the filled form, the exact answers and the resume sha256; after
+  submit, the confirmation page, then `transition(..., 'submitted', 'worker:apply')`.
+- **Per-platform trust** (`platforms` table): `supervised` fills and waits for me to click Submit; after
+  `required_streak` (default 3) clean applications I may switch a platform to `auto`, which also submits. Any
+  correction or failure switches it back and becomes a lesson.
+- LinkedIn Easy Apply is out of scope (terms forbid automation; jobs come from alert emails only).
 
 **D. Principle wording**
 - Reword principles 4, 8, 9, 10 to lead with what the system does (find jobs through feeds and alert emails;
@@ -619,7 +632,8 @@ choices must not block it (see "Keep open" below).
 ## 8. Open decisions (defaults in bold — change before starting if needed)
 
 - **D1 Public page**: **built, toggle off by default**.
-- **D2 Apply method**: **self-submit (Option A) first**; assisted apply via the browser extension after the MVP.
+- **D2 Apply method**: **self-submit (Option A) first**; then the apply runner (M9, after-MVP C): a local worker
+  drives Chrome to fill and, per trusted platform, submit approved applications.
 - **D3 Email access**: **IMAP on a dedicated Purelymail mailbox**, `jobs@malikhenry.com` (a real user, not an
   alias, so the app never logs into my personal mail): `imap.purelymail.com:993`, the mailbox address as the
   user, its password in `JOB_INBOX_PASSWORD`. IMAP also supports the label + archive needed for rejections.

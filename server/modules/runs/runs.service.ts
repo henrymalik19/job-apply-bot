@@ -49,12 +49,12 @@ export async function getDiscoveryInterval(db: Db): Promise<number> {
 }
 
 /**
- * Loads every company with its board status and the worker's last run.
- * Paused companies never report a problem.
+ * Loads every company the user follows with its board status and the
+ * worker's last run. Paused companies never report a problem.
  */
-export async function loadDiscoveryHealth(db: Db, now: Date): Promise<DiscoveryHealth> {
+export async function loadDiscoveryHealth(db: Db, userId: string, now: Date): Promise<DiscoveryHealth> {
   const [companies, statuses, worker, intervalMinutes] = await Promise.all([
-    listCompanies(db),
+    listCompanies(db, userId),
     listSourceStatus(db, "discover"),
     latestWorkerRun(db, "discover"),
     getDiscoveryInterval(db),
