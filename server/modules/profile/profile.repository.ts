@@ -160,6 +160,59 @@ export async function deleteUserSkill(db: Db, userId: string, skillId: string): 
   check(await db.from("profile_skills").delete().eq("user_id", userId).eq("skill_id", skillId), "remove skill");
 }
 
+/** Unlinks a skill from every one of a user's jobs. */
+export async function detachSkillFromJobs(db: Db, userId: string, skillId: string): Promise<void> {
+  const jobs = unwrap(await db.from("employments").select("id").eq("user_id", userId), "read jobs");
+  if (jobs.length === 0) return;
+  check(await db.from("employment_skills").delete().eq("skill_id", skillId).in("employment_id", jobs.map((j) => j.id)), "unlink skill");
+}
+
+/**
+ * Folds one skill into another for a user: the merged name (and any aliases
+ * pointing at it) become aliases of the kept skill in the shared catalog, the
+ * user's jobs and skill list point at the kept skill, and the kept row inherits
+ * a years override or proficiency it didn't have. The merged catalog row stays
+ * (other users may use it) but every future lookup of its name finds the kept one.
+ */
+export async function mergeUserSkill(db: Db, userId: string, keepId: string, mergeId: string): Promise<void> {
+  const merged = unwrap(await db.from("skills").select("normalized").eq("id", mergeId).single(), "read merged skill");
+  check(await db.from("skill_aliases").update({ skill_id: keepId }).eq("skill_id", mergeId), "repoint aliases");
+  check(await db.from("skill_aliases").upsert({ alias: merged.normalized, skill_id: keepId }, { onConflict: "alias" }), "add alias");
+
+  const jobs = unwrap(await db.from("employments").select("id").eq("user_id", userId), "read jobs").map((j) => j.id);
+  if (jobs.length) {
+    const links = unwrap(await db.from("employment_skills").select("employment_id").eq("skill_id", mergeId).in("employment_id", jobs), "read job skills");
+    if (links.length) {
+      check(
+        await db.from("employment_skills").upsert(links.map((l) => ({ employment_id: l.employment_id, skill_id: keepId })), { onConflict: "employment_id,skill_id", ignoreDuplicates: true }),
+        "link kept skill",
+      );
+      check(await db.from("employment_skills").delete().eq("skill_id", mergeId).in("employment_id", jobs), "unlink merged skill");
+    }
+  }
+
+  const rows = unwrap(await db.from("profile_skills").select("*").eq("user_id", userId).in("skill_id", [keepId, mergeId]), "read skill rows");
+  const from = rows.find((r) => r.skill_id === mergeId);
+  if (from) {
+    const into = rows.find((r) => r.skill_id === keepId);
+    check(
+      await db.from("profile_skills").upsert(
+        {
+          user_id: userId,
+          skill_id: keepId,
+          years_override: into?.years_override ?? from.years_override,
+          proficiency: into?.proficiency ?? from.proficiency,
+          last_used_year: Math.max(into?.last_used_year ?? 0, from.last_used_year ?? 0) || null,
+          sort_order: into?.sort_order ?? from.sort_order,
+        },
+        { onConflict: "user_id,skill_id" },
+      ),
+      "keep skill row",
+    );
+    check(await db.from("profile_skills").delete().eq("user_id", userId).eq("skill_id", mergeId), "remove merged skill row");
+  }
+}
+
 /** Adds an education entry for a user. */
 export async function insertEducation(db: Db, userId: string, row: Omit<Insert<"educations">, "user_id">): Promise<void> {
   check(await db.from("educations").insert({ ...row, user_id: userId }), "add education");

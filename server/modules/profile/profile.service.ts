@@ -4,6 +4,8 @@
 // counts as true and nothing beyond it may be claimed.
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
+import type { StructuredCall } from "@/server/integrations/anthropic/claude";
+import { recordUsage } from "@/server/modules/usage/usage.service";
 import { ValidationError } from "@/server/core/errors";
 import { normalize } from "@/shared/text";
 import { profileLines, type ProfileLine } from "./profile-data";
@@ -11,6 +13,7 @@ import {
   deleteResponsibilities,
   deleteRow,
   deleteUserSkill,
+  detachSkillFromJobs,
   ensureSkills,
   hasEmployment,
   insertCertification,
@@ -18,6 +21,7 @@ import {
   insertEmployment,
   insertResponsibilities,
   loadProfileData,
+  mergeUserSkill,
   resolveSkillId,
   setEmploymentSkills,
   updateEmployment,
@@ -185,9 +189,81 @@ export async function updateSkill(db: Db, userId: string, skillId: string, input
   await upsertUserSkills(db, userId, [{ skill_id: z.string().uuid().parse(skillId), ...parse(skillInput, input) }]);
 }
 
-/** Removes a skill from your list (it stays in the catalog and on jobs that used it). */
-export async function removeSkill(db: Db, userId: string, skillId: string): Promise<void> {
-  await deleteUserSkill(db, userId, z.string().uuid().parse(skillId));
+/**
+ * Removes a skill from your list. It stays in the catalog and, unless
+ * `fromJobs`, on jobs that used it (so years still count).
+ */
+export async function removeSkill(db: Db, userId: string, skillId: string, opts: { fromJobs?: boolean } = {}): Promise<void> {
+  const id = z.string().uuid().parse(skillId);
+  await deleteUserSkill(db, userId, id);
+  if (opts.fromJobs) await detachSkillFromJobs(db, userId, id);
+}
+
+/**
+ * Merges skills into one you keep: their names become aliases of it (so
+ * resumes and postings using them match it from now on), and your jobs and
+ * skill list use only the kept one.
+ *
+ * @throws {@link ValidationError} when nothing valid is left to merge.
+ */
+export async function mergeSkills(db: Db, userId: string, keepId: string, mergeIds: string[]): Promise<number> {
+  const keep = z.string().uuid().parse(keepId);
+  const ids = [...new Set(mergeIds.map((m) => z.string().uuid().parse(m)))].filter((m) => m !== keep);
+  if (ids.length === 0) throw new ValidationError("Pick a different skill to merge into.");
+  for (const id of ids) await mergeUserSkill(db, userId, keep, id);
+  return ids.length;
+}
+
+/** A suggested merge: keep one skill, fold the others into it. */
+export type SkillMergeSuggestion = { keep: { id: string; name: string }; merge: { id: string; name: string }[]; reason: string };
+/** A listed "skill" that isn't one (a job title, a domain). */
+export type NotASkillSuggestion = { id: string; name: string; reason: string };
+
+const cleanupSchema = z.object({
+  merges: z.array(z.object({ keep: z.string(), merge: z.array(z.string()), reason: z.string() })),
+  not_skills: z.array(z.object({ name: z.string(), reason: z.string() })),
+});
+
+/**
+ * Asks Claude which of the user's skills are the same thing under different
+ * names, and which aren't skills at all. Only suggests; nothing changes until
+ * the user merges or removes.
+ */
+export async function suggestSkillCleanup(
+  db: Db,
+  userId: string,
+  call: StructuredCall,
+): Promise<{ merges: SkillMergeSuggestion[]; notSkills: NotASkillSuggestion[] }> {
+  const data = await loadProfileData(db, userId);
+  const byName = new Map(data.skills.map((s) => [s.name.toLowerCase(), { id: s.skill_id, name: s.name }]));
+  if (byName.size < 2) return { merges: [], notSkills: [] };
+  const system = `You tidy a job seeker's skill list. Find:
+1. Duplicates: names for the same skill or tool (abbreviations, vendor prefixes, "X" vs "X API" when they mean the
+   same thing to a recruiter). Keep the clearest, most common name. Don't merge a broad area into a specific tool
+   or merge related but different skills (React and Next.js are different; "Leadership" and "Technical Leadership"
+   overlap enough to merge).
+2. Entries that aren't skills: job titles, seniority levels, industries or company types belong elsewhere.
+Use the names exactly as listed. Give a short reason for each.`;
+  const user = `Skills:\n${data.skills.map((s) => `- ${s.name}`).join("\n")}`;
+  const res = await call({ system, user, schema: cleanupSchema, maxTokens: 3000, effort: "low" });
+  await recordUsage(db, userId, { purpose: "skill_cleanup", model: res.model, usage: res.usage });
+  if (!res.output) throw new ValidationError(`No suggestions came back (${res.error ?? "unknown error"}). Try again.`);
+
+  const find = (name: string) => byName.get(name.trim().toLowerCase());
+  const used = new Set<string>();
+  const merges: SkillMergeSuggestion[] = [];
+  for (const m of res.output.merges) {
+    const keep = find(m.keep);
+    const merge = m.merge.map(find).filter((x): x is { id: string; name: string } => !!x && x.id !== keep?.id && !used.has(x.id));
+    if (!keep || merge.length === 0 || used.has(keep.id)) continue;
+    [keep, ...merge].forEach((x) => used.add(x.id));
+    merges.push({ keep, merge, reason: m.reason.trim() });
+  }
+  const notSkills = res.output.not_skills
+    .map((n) => ({ hit: find(n.name), reason: n.reason.trim() }))
+    .filter((n): n is { hit: { id: string; name: string }; reason: string } => !!n.hit && !used.has(n.hit.id))
+    .map((n) => ({ ...n.hit, reason: n.reason }));
+  return { merges, notSkills };
 }
 
 /** Deletes one row from a user's profile list. */

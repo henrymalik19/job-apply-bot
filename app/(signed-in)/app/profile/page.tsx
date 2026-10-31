@@ -1,5 +1,7 @@
+import { ArrowDown, ArrowUp } from "lucide-react";
+import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,12 +16,18 @@ import {
   getProfile,
   skillYears,
   type Employment,
+  type ProfileData,
+  type UserSkill,
 } from "@/server/modules/profile/profile.service";
+import { cn } from "@/shared/cn";
+import { paginate, parsePage } from "@/shared/paginate";
 import { ActionForm } from "../../_components/action-form";
+import { Pager } from "../../_components/data-table";
 import {
   addCertificationAction,
   addEducationAction,
   addSkillsAction,
+  mergeSkillsAction,
   removeItemAction,
   removeSkillAction,
   saveAuthorizationAction,
@@ -27,6 +35,17 @@ import {
   saveProfileAction,
   updateSkillAction,
 } from "./actions";
+import { SkillCleanup } from "./skill-cleanup";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+
+const TABS = [
+  ["basics", "Basics"],
+  ["experience", "Experience"],
+  ["skills", "Skills"],
+] as const;
+type Tab = (typeof TABS)[number][0];
 
 /** A labelled input. */
 function Field({ label, name, children, className }: { label: string; name: string; children?: ReactNode; className?: string }) {
@@ -95,15 +114,186 @@ function EmploymentForm({ job }: { job?: Employment }) {
   );
 }
 
-async function Profile() {
-  const { db, owner } = await ownerContext();
-  const data = await getProfile(db, owner.id);
-  const { profile: p } = data;
+const SORTS = ["name", "years", "proficiency"] as const;
+type Sort = (typeof SORTS)[number];
+const PROFICIENCY_RANK: Record<string, number> = { expert: 4, advanced: 3, working: 2, familiar: 1 };
+
+/** Sortable column header: sorts by this column, flipping direction when it already does. */
+function SortHeader(props: { label: string; col: Sort; sort: Sort; dir: "asc" | "desc"; q: string; className?: string }) {
+  const { label, col, sort, dir, q, className } = props;
+  const active = sort === col;
+  const next = active && dir === "asc" ? "desc" : "asc";
+  const qs = new URLSearchParams({ tab: "skills", sort: col, dir: next, ...(q ? { q } : {}) });
+  return (
+    <TableHead className={className}>
+      <Link href={`/app/profile?${qs}`} className="inline-flex items-center gap-1 hover:text-foreground">
+        {label}
+        {active && (dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+      </Link>
+    </TableHead>
+  );
+}
+
+/** One skill row: name, years and proficiency, with edit, merge and remove behind "Edit". */
+function SkillRow({ s, years, others }: { s: UserSkill; years: number | undefined; others: UserSkill[] }) {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{s.name}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {s.years_override != null ? (
+          <span title={`From your jobs: ${years ?? "—"}`}>
+            {Number(s.years_override)} <span className="text-xs text-muted-foreground">(set)</span>
+          </span>
+        ) : (
+          (years ?? "—")
+        )}
+      </TableCell>
+      <TableCell className="capitalize text-muted-foreground">{s.proficiency ?? "—"}</TableCell>
+      <TableCell className="text-right">
+        <details className="inline-block text-left">
+          <summary className={cn(buttonVariants({ variant: "ghost", size: "xs" }), "list-none [&::-webkit-details-marker]:hidden")}>Edit</summary>
+          <div className="absolute right-6 z-20 mt-1 flex w-80 flex-col gap-4 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
+            <ActionForm action={updateSkillAction} submitLabel="Save" className="gap-2">
+              <input type="hidden" name="skill_id" value={s.skill_id} />
+              <div className="flex gap-2">
+                <Input name="years_override" type="number" step="0.5" min={0} className="w-24" defaultValue={s.years_override ?? ""} placeholder="years" aria-label="Years override" />
+                <NativeSelect name="proficiency" defaultValue={s.proficiency ?? ""} aria-label="Proficiency">
+                  <NativeSelectOption value="">Proficiency</NativeSelectOption>
+                  {PROFICIENCIES.map((x) => <NativeSelectOption key={x} value={x}>{x}</NativeSelectOption>)}
+                </NativeSelect>
+              </div>
+              <p className="text-xs text-muted-foreground">Years come from your jobs; set a number only if that&apos;s wrong.</p>
+            </ActionForm>
+            <ActionForm action={mergeSkillsAction} submitLabel="Merge" className="gap-2 border-t pt-3">
+              <input type="hidden" name="merge_id" value={s.skill_id} />
+              <NativeSelect name="keep_id" defaultValue="" aria-label="Merge into" required>
+                <NativeSelectOption value="">Merge into…</NativeSelectOption>
+                {others.map((o) => <NativeSelectOption key={o.skill_id} value={o.skill_id}>{o.name}</NativeSelectOption>)}
+              </NativeSelect>
+              <p className="text-xs text-muted-foreground">&ldquo;{s.name}&rdquo; becomes another name for the skill you pick.</p>
+            </ActionForm>
+            <form action={removeSkillAction} className="flex flex-col gap-2 border-t pt-3">
+              <input type="hidden" name="skill_id" value={s.skill_id} />
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" name="from_jobs" /> Also remove it from my jobs
+              </label>
+              <Button type="submit" variant="destructive" size="sm" className="self-start">Remove skill</Button>
+            </form>
+          </div>
+        </details>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** Skills tab: Claude cleanup, then a searchable, sortable, paged table. */
+function SkillsTab({ data, params }: { data: ProfileData; params: Record<string, string | string[] | undefined> }) {
   const years = skillYears(data, new Date());
+  const q = one(params.q).trim();
+  const sort: Sort = (SORTS as readonly string[]).includes(one(params.sort)) ? (one(params.sort) as Sort) : "name";
+  const dir = one(params.dir) === "desc" ? "desc" : "asc";
+  const matches = data.skills.filter((s) => !q || s.name.toLowerCase().includes(q.toLowerCase()));
+  const key = (s: UserSkill): number | string =>
+    sort === "years"
+      ? Number(s.years_override ?? years.get(s.normalized) ?? -1)
+      : sort === "proficiency"
+        ? (PROFICIENCY_RANK[s.proficiency ?? ""] ?? 0)
+        : s.name.toLowerCase();
+  const sorted = [...matches].sort((a, b) => {
+    const [x, y] = [key(a), key(b)];
+    const c = typeof x === "string" ? x.localeCompare(String(y)) : x - Number(y);
+    return (dir === "asc" ? c : -c) || a.name.localeCompare(b.name);
+  });
+  const page = paginate(sorted, parsePage(params.page), 25);
+  const keep: Record<string, string> = { tab: "skills", ...(q ? { q } : {}), ...(sort !== "name" ? { sort } : {}), ...(dir !== "asc" ? { dir } : {}) };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Tidy up</CardTitle>
+          <CardDescription>
+            The same skill under two names splits your years between them. Claude can spot duplicates and entries that
+            aren&apos;t skills (like job titles); you decide what changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SkillCleanup />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Skills ({data.skills.length})</CardTitle>
+          <CardDescription>Years come from the jobs that used each skill. Click a column to sort.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <form className="flex gap-2" action="/app/profile">
+              <input type="hidden" name="tab" value="skills" />
+              <Input name="q" defaultValue={q} placeholder="Search skills" className="w-56" aria-label="Search skills" />
+              <Button type="submit" variant="outline">Search</Button>
+            </form>
+            <ActionForm action={addSkillsAction} submitLabel="Add skills" className="flex-row items-start">
+              <Input name="names" placeholder="Go, Kubernetes, GraphQL" className="w-64" aria-label="Skills to add" />
+            </ActionForm>
+          </div>
+          {page.total === 0 ? (
+            <p className="text-sm text-muted-foreground">{q ? `No skills match “${q}”.` : "No skills yet."}</p>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortHeader label="Skill" col="name" sort={sort} dir={dir} q={q} />
+                    <SortHeader label="Years" col="years" sort={sort} dir={dir} q={q} className="text-right" />
+                    <SortHeader label="Proficiency" col="proficiency" sort={sort} dir={dir} q={q} />
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {page.items.map((s) => (
+                    <SkillRow key={s.skill_id} s={s} years={years.get(s.normalized)} others={data.skills.filter((o) => o.skill_id !== s.skill_id)} />
+                  ))}
+                </TableBody>
+              </Table>
+              <Pager page={page} basePath="/app/profile" params={keep} />
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+async function Profile({ searchParams }: { searchParams: SearchParams }) {
+  const { db, owner } = await ownerContext();
+  const [data, params] = await Promise.all([getProfile(db, owner.id), searchParams]);
+  const { profile: p } = data;
+  const tab: Tab = (TABS.map((t) => t[0]) as string[]).includes(one(params.tab)) ? (one(params.tab) as Tab) : "basics";
   const missingEnd = data.employment.filter((j) => !j.is_current && !j.end_date);
 
   return (
     <>
+      <nav className="flex w-fit gap-1 rounded-lg bg-muted p-1" aria-label="Profile sections">
+        {TABS.map(([id, label]) => (
+          <Link
+            key={id}
+            href={id === "basics" ? "/app/profile" : `/app/profile?tab=${id}`}
+            aria-current={tab === id ? "page" : undefined}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+              tab === id && "bg-background text-foreground shadow-sm",
+            )}
+          >
+            {label}
+            {id === "skills" && <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{data.skills.length}</span>}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === "basics" && (
+        <>
       <Card>
         <CardHeader>
           <CardTitle>Contact and summary</CardTitle>
@@ -167,6 +357,11 @@ async function Profile() {
         </CardContent>
       </Card>
 
+        </>
+      )}
+
+      {tab === "experience" && (
+        <>
       <Card>
         <CardHeader>
           <CardTitle>Employment</CardTitle>
@@ -215,7 +410,9 @@ async function Profile() {
               <RemoveButton kind="educations" id={e.id} />
             </div>
           ))}
-          <ActionForm action={addEducationAction} submitLabel="Add education">
+          <details className="rounded-lg border border-dashed p-4">
+            <summary className="cursor-pointer font-medium">Add education</summary>
+          <ActionForm action={addEducationAction} submitLabel="Add education" className="mt-4">
             <div className={grid}>
               <Field label="School" name="institution"><Input id="institution" name="institution" required /></Field>
               <Field label="Degree" name="degree"><Input id="degree" name="degree" placeholder="B.S." /></Field>
@@ -225,49 +422,7 @@ async function Profile() {
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="completed" defaultChecked /> Completed</label>
           </ActionForm>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Skills</CardTitle>
-          <CardDescription>Years are computed from your jobs; set an override only when that&apos;s wrong.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <ActionForm action={addSkillsAction} submitLabel="Add skills" className="max-w-xl">
-            <Input name="names" placeholder="Go, Kubernetes, GraphQL" aria-label="Skills to add" />
-          </ActionForm>
-          {data.skills.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow><TableHead>Skill</TableHead><TableHead className="text-right">Years</TableHead><TableHead>Override and proficiency</TableHead><TableHead /></TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.skills.map((s) => (
-                  <TableRow key={s.skill_id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{years.get(s.normalized) ?? "—"}</TableCell>
-                    <TableCell>
-                      <ActionForm action={updateSkillAction} submitLabel="Save" className="flex-row items-center">
-                        <input type="hidden" name="skill_id" value={s.skill_id} />
-                        <Input name="years_override" type="number" step="0.5" min={0} className="w-24" defaultValue={s.years_override ?? ""} placeholder="years" aria-label="Years override" />
-                        <NativeSelect name="proficiency" defaultValue={s.proficiency ?? ""} aria-label="Proficiency">
-                          <NativeSelectOption value="">Proficiency</NativeSelectOption>
-                          {PROFICIENCIES.map((x) => <NativeSelectOption key={x} value={x}>{x}</NativeSelectOption>)}
-                        </NativeSelect>
-                      </ActionForm>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <form action={removeSkillAction}>
-                        <input type="hidden" name="skill_id" value={s.skill_id} />
-                        <Button type="submit" variant="ghost" size="xs">Remove</Button>
-                      </form>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          </details>
         </CardContent>
       </Card>
 
@@ -282,7 +437,9 @@ async function Profile() {
               <RemoveButton kind="certifications" id={c.id} />
             </div>
           ))}
-          <ActionForm action={addCertificationAction} submitLabel="Add certification">
+          <details className="rounded-lg border border-dashed p-4">
+            <summary className="cursor-pointer font-medium">Add a certification</summary>
+          <ActionForm action={addCertificationAction} submitLabel="Add certification" className="mt-4">
             <div className={grid}>
               <Field label="Name" name="name"><Input id="name" name="name" required /></Field>
               <Field label="Issuer" name="issuer"><Input id="issuer" name="issuer" /></Field>
@@ -291,15 +448,20 @@ async function Profile() {
               <Field label="Credential URL" name="credential_url"><Input id="credential_url" name="credential_url" /></Field>
             </div>
           </ActionForm>
+          </details>
         </CardContent>
       </Card>
 
+        </>
+      )}
+
+      {tab === "skills" && <SkillsTab data={data} params={params} />}
     </>
   );
 }
 
-/** Profile: everything the system knows about you, which is all Claude may use. */
-export default function ProfilePage() {
+/** Profile: everything the system knows about you, which is all Claude may use, in Basics, Experience and Skills tabs. */
+export default function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6">
       <div>
@@ -309,7 +471,7 @@ export default function ProfilePage() {
         </p>
       </div>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-        <Profile />
+        <Profile searchParams={searchParams} />
       </Suspense>
     </main>
   );

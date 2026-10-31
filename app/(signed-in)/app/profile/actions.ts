@@ -4,16 +4,21 @@ import { refresh } from "next/cache";
 import { ownerContext } from "@/server/auth/require-owner";
 import { ValidationError } from "@/server/core/errors";
 import type { Db } from "@/server/db/types";
+import { createClaudeCaller } from "@/server/integrations/anthropic/claude";
 import {
   addCertification,
   addEducation,
   addSkills,
+  mergeSkills,
   removeProfileItem,
   removeSkill,
   saveEmployment,
   saveProfile,
   saveWorkAuthorization,
+  suggestSkillCleanup,
   updateSkill,
+  type NotASkillSuggestion,
+  type SkillMergeSuggestion,
 } from "@/server/modules/profile/profile.service";
 import type { FormMessageState } from "../../_components/form-message";
 
@@ -80,9 +85,32 @@ export async function removeItemAction(formData: FormData) {
   refresh();
 }
 
-/** Removes a skill from your list. */
+/** Removes a skill from your list; `from_jobs=on` also unlinks it from your jobs. */
 export async function removeSkillAction(formData: FormData) {
   const { db, owner } = await ownerContext();
-  await removeSkill(db, owner.id, String(formData.get("skill_id")));
+  await removeSkill(db, owner.id, String(formData.get("skill_id")), { fromJobs: formData.get("from_jobs") === "on" });
   refresh();
+}
+
+/** Merges skills (`merge_id`, repeatable) into `keep_id`. */
+export async function mergeSkillsAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+  const merge = formData.getAll("merge_id").map(String).filter(Boolean);
+  return run("Merged.", (db, userId) => mergeSkills(db, userId, String(formData.get("keep_id")), merge));
+}
+
+/** Cleanup suggestions, or a message. */
+export type CleanupState = FormMessageState & { merges?: SkillMergeSuggestion[]; notSkills?: NotASkillSuggestion[] };
+
+/** "Find duplicates": Claude suggests merges and entries that aren't skills. */
+export async function suggestSkillCleanupAction(): Promise<CleanupState> {
+  const { db, owner } = await ownerContext();
+  if (!process.env.ANTHROPIC_API_KEY) return { error: "This needs ANTHROPIC_API_KEY in the app's environment (Vercel)." };
+  try {
+    const result = await suggestSkillCleanup(db, owner.id, createClaudeCaller());
+    if (!result.merges.length && !result.notSkills.length) return { ok: "Your skill list looks clean: no duplicates found." };
+    return result;
+  } catch (err) {
+    if (err instanceof ValidationError) return { error: err.message };
+    throw err;
+  }
 }
