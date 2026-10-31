@@ -178,7 +178,9 @@ export async function answerQuestion(
     answer, answer_value: value, bucket: "auto", answer_source: "user", user_approved: true, needs_check: false, reason: null,
     question_id: reuse.questionId,
   });
-  if (input.lesson?.trim()) await addLesson(db, userId, { rule: input.lesson, scope: "answers" });
+  if (input.lesson?.trim()) {
+    await addLesson(db, userId, { rule: input.lesson, scope: "answers", source: `Answering "${q.question}" for ${app.job.title} at ${app.job.company_name}` });
+  }
 
   const stillBlocked = blockingQuestions({ questions: app.questions.filter((x) => x.id !== q.id) });
   const movedToReview = app.status === "needs_input" && stillBlocked.length === 0;
@@ -210,5 +212,7 @@ export async function skipApplication(
   if (!app) throw new ValidationError("That application is gone.");
   const reason = input.reason?.trim().slice(0, 500) || null;
   await transition(db, app.id, "skipped", "user:skip", reason ? { reason } : undefined);
-  if (input.lesson?.trim()) await addLesson(db, userId, { rule: input.lesson, scope: input.lessonScope ?? "scoring" });
+  if (input.lesson?.trim()) {
+    await addLesson(db, userId, { rule: input.lesson, scope: input.lessonScope ?? "scoring", source: `Skipped ${app.job.title} at ${app.job.company_name}` });
+  }
 }

@@ -12,8 +12,10 @@ export type { Lesson } from "./lessons.repository";
 export const LESSON_SCOPES = ["global", "scoring", "tailoring", "answers", "cover_letter", "platform"] as const;
 /** One lesson scope. */
 export type LessonScope = (typeof LESSON_SCOPES)[number];
+/** Scopes something reads today; cover_letter and platform wait for cover letters and the apply runner. */
+export const ACTIVE_LESSON_SCOPES = ["scoring", "answers", "tailoring", "global"] as const satisfies readonly LessonScope[];
 
-/** Every lesson, for the Lessons page. */
+/** Every lesson, for the Rules for Claude list on the Search page. */
 export const listLessons = lessons.listLessons;
 
 /** A user's active lessons for a prompt of the given scope, plus global ones. */
@@ -27,14 +29,15 @@ const lessonInput = z.object({
 });
 
 /**
- * Adds a lesson typed by a user.
+ * Adds a lesson.
  *
+ * @param source - Where it came from, shown next to the rule (e.g. "Skipped Senior SRE at Acme"); default "Added on Search".
  * @throws {@link ValidationError} for an empty rule or unknown scope.
  */
-export async function addLesson(db: Db, userId: string, input: { rule: unknown; scope: unknown }): Promise<void> {
+export async function addLesson(db: Db, userId: string, input: { rule: unknown; scope: unknown; source?: string }): Promise<void> {
   const parsed = lessonInput.safeParse(input);
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "Invalid lesson.");
-  await lessons.insertLesson(db, userId, { ...parsed.data, platform: null, source: "typed" });
+  await lessons.insertLesson(db, userId, { ...parsed.data, platform: null, source: input.source?.slice(0, 300) ?? "Added on Search" });
 }
 
 /** Turns a lesson on or off. */

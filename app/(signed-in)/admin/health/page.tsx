@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadMatchingHealth } from "@/server/modules/matching/matching.service";
-import { formatMinutes, loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { formatMinutes, loadDiscoveryHealth, loadWorkerHealth, type WorkerHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
@@ -13,18 +13,44 @@ import { Pager, scrollingTable } from "../../_components/data-table";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+const n = (v: number | undefined) => (v ?? 0).toLocaleString();
+
+/** What a worker's last run did, in a few words. */
+function runSummary(w: WorkerHealth): string {
+  const c = (w.lastRun?.counts ?? {}) as Record<string, number>;
+  if (!w.lastRun) return "";
+  if (!w.lastRun.ok) return w.lastRun.error ?? "unknown error";
+  switch (w.name) {
+    case "discover":
+      return `${n(c.ok)} boards OK · ${n(c.failed)} failed · ${n(c.skipped)} backing off · ${n(c.inserted)} new jobs`;
+    case "match":
+      return c.candidates ? `${n(c.scored)} scored · ${n(c.filtered)} ruled out · ${n(c.failed)} failed${c.deferred ? ` · ${n(c.deferred)} deferred` : ""}` : "nothing new to score";
+    case "prepare":
+      return c.candidates
+        ? `${n(c.queued)} ready · ${n(c.needs_input)} need you · ${n(c.manual)} apply yourself${c.deferred ? ` · ${n(c.deferred)} over the daily cap` : ""}`
+        : "nothing to prepare";
+    case "notify":
+      if (c.sent) return `emailed ${n(c.applications)} applications`;
+      if (c.held_quiet) return `${n(c.due)} waiting for quiet hours to end`;
+      if (c.held_interval) return `${n(c.due)} waiting for the 15-minute gap`;
+      return "nothing new to send";
+    default:
+      return "";
+  }
+}
+
 async function Health({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
   const now = new Date();
-  const [{ boards, worker, workerProblem, intervalMinutes }, matching, params] = await Promise.all([
+  const [{ boards }, workers, matching, params] = await Promise.all([
     loadDiscoveryHealth(db, owner.id, now),
+    loadWorkerHealth(db, owner.id, now),
     loadMatchingHealth(db, owner.id, now),
     searchParams,
   ]);
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
-    ...(workerProblem ? [`Discovery ${workerProblem}.`] : []),
-    ...(matching.lastRun?.ok === false ? [`Matching last run failed: ${matching.lastRun.error ?? "unknown error"}.`] : []),
+    ...workers.filter((w) => w.problem).map((w) => `The ${w.name} worker ${w.problem}.`),
     ...(matching.capReached ? [`Monthly LLM spend cap (${matching.spend.cap}) reached; scoring is paused until next month.`] : []),
     ...active.filter((b) => b.problem).map((b) => `${b.name} (${b.ats}:${b.board_token}) ${b.problem}.`),
   ];
@@ -35,7 +61,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
   return (
     <>
       {problems.length > 0 && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="shrink-0">
           <AlertTitle>Needs attention</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-5">
@@ -45,53 +71,49 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
         </Alert>
       )}
 
-      <Card>
+      <Card className="shrink-0">
         <CardHeader>
-          <CardTitle>Discovery</CardTitle>
-          <CardDescription>Runs every {formatMinutes(intervalMinutes)} on Railway.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          {worker ? (
-            <>
-              <Badge variant={worker.ok ? "secondary" : "destructive"}>
-                {worker.ok ? "OK" : "Failed"} · {ago(worker.started_at, now)}
-              </Badge>
-              <span>
-                {(worker.counts?.ok ?? 0).toLocaleString()} boards OK · {worker.counts?.failed ?? 0} failed ·{" "}
-                {worker.counts?.skipped ?? 0} backing off
-              </span>
-              <RunCounts counts={worker.counts} />
-            </>
-          ) : (
-            <span className="text-muted-foreground">Has not run yet.</span>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Matching</CardTitle>
+          <CardTitle>Workers</CardTitle>
           <CardDescription>
-            Runs after each discovery run. Claude spend this month: ${matching.spend.spent.toFixed(2)} of $
-            {matching.spend.cap.toFixed(2)} cap.
+            Each runs on its own Railway schedule (UTC) and is flagged after two missed runs. Claude spend this month: $
+            {matching.spend.spent.toFixed(2)} of ${matching.spend.cap.toFixed(2)}.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          {matching.lastRun ? (
-            <Badge variant={matching.lastRun.ok ? "secondary" : "destructive"}>
-              {matching.lastRun.ok ? "OK" : "Failed"} · {ago(matching.lastRun.started_at, now)}
-            </Badge>
-          ) : (
-            <Badge variant="outline">Not run yet</Badge>
-          )}
-          <span>
-            {matching.summary.scored.toLocaleString()} scored · {matching.summary.aboveThreshold.toLocaleString()} at{" "}
-            {matching.summary.threshold}+ · {matching.summary.filtered.toLocaleString()} ruled out ·{" "}
-            {matching.summary.failed.toLocaleString()} failed
-          </span>
-          {matching.lastRun?.counts?.deferred ? (
-            <span className="text-muted-foreground">{matching.lastRun.counts.deferred} deferred to the next run</span>
-          ) : null}
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Worker</TableHead>
+                <TableHead>Every</TableHead>
+                <TableHead>Last run</TableHead>
+                <TableHead>What it did</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {workers.map((w) => (
+                <TableRow key={w.name}>
+                  <TableCell className="whitespace-normal">
+                    <div className="font-medium">{w.name}</div>
+                    <div className="text-xs text-muted-foreground">{w.does}</div>
+                  </TableCell>
+                  <TableCell className="tabular-nums">{formatMinutes(w.intervalMinutes)}</TableCell>
+                  <TableCell>
+                    {w.lastRun ? (
+                      <Badge variant={w.problem ? "destructive" : "secondary"}>
+                        {w.lastRun.ok ? "OK" : "Failed"} · {ago(w.lastRun.started_at, now)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Not run yet</Badge>
+                    )}
+                    {w.problem && w.lastRun?.ok !== false && <div className="mt-1 text-xs text-destructive">{w.problem}</div>}
+                  </TableCell>
+                  <TableCell className={w.lastRun?.ok === false ? "whitespace-normal text-destructive" : "whitespace-normal text-muted-foreground"}>
+                    {runSummary(w) || "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
@@ -146,7 +168,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** Health: discovery schedule status, per-board results and a banner for anything failing. */
+/** Health: each worker's schedule and last run, per-board results, and a banner for anything failing. */
 export default function HealthPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

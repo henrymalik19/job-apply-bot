@@ -1,21 +1,69 @@
 import { Suspense } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ownerContext } from "@/server/auth/require-owner";
 import { recentSamples } from "@/server/modules/runs/runs.service";
 import { getJobFilter, getMatchCriteria, getTitleFilter, MAX_AGE_LIMIT_DAYS } from "@/server/modules/criteria/criteria.service";
+import { listLessons, type Lesson } from "@/server/modules/lessons/lessons.service";
+import { ago } from "@/shared/format";
+import { AddRuleForm } from "./add-rule-form";
+import { RULE_SCOPES } from "./rule-scopes";
 import { JobFilterForm } from "./job-filter-form";
 import { MatchCriteriaForm } from "./match-criteria-form";
 import { PruneForm } from "./prune-form";
 import { TitleFilterForm } from "./title-filter-form";
 import { TitleSuggestions } from "./title-suggestions";
+import { toggleLessonAction } from "./rule-actions";
+
+const SCOPE_LABEL: Record<string, string> = Object.fromEntries(RULE_SCOPES);
+
+/** Rules Claude follows: add one, see where each came from, turn them on or off. */
+function RulesForClaude({ rules, now }: { rules: Lesson[]; now: Date }) {
+  return (
+    <Card id="rules" className="scroll-mt-4 xl:col-span-2">
+      <CardHeader>
+        <CardTitle>Rules for Claude ({rules.filter((r) => r.active).length} on)</CardTitle>
+        <CardDescription>
+          Short rules added to Claude&apos;s instructions from the next run. Scoring rules change match scores (&ldquo;Skip
+          roles with heavy on-call&rdquo;); answer and resume rules change what it writes (&ldquo;Keep answers under 80
+          words&rdquo;). You can also add one when you skip a job or answer a question.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <AddRuleForm />
+        {rules.length > 0 && (
+          <ul className="divide-y">
+            {rules.map((r) => (
+              <li key={r.id} className={`flex flex-wrap items-center gap-3 py-3 text-sm ${r.active ? "" : "opacity-60"}`}>
+                <div className="min-w-60 flex-1">
+                  <div>{r.rule}</div>
+                  <div className="text-xs text-muted-foreground">{[r.source, ago(r.created_at, now)].filter(Boolean).join(" · ")}</div>
+                </div>
+                <Badge variant="secondary">{SCOPE_LABEL[r.scope] ?? r.scope}</Badge>
+                <form action={toggleLessonAction}>
+                  <input type="hidden" name="id" value={r.id} />
+                  <input type="hidden" name="active" value={String(!r.active)} />
+                  <Button type="submit" variant="ghost" size="xs">{r.active ? "Turn off" : "Turn on"}</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 async function SearchCriteria() {
   const { db, owner } = await ownerContext();
-  const [title, job, criteria, skipped] = await Promise.all([
+  const now = new Date();
+  const [title, job, criteria, skipped, rules] = await Promise.all([
     getTitleFilter(db, owner.id),
     getJobFilter(db, owner.id),
     getMatchCriteria(db, owner.id),
     recentSamples(db, "discover", 30),
+    listLessons(db, owner.id),
   ]);
 
   return (
@@ -77,6 +125,8 @@ async function SearchCriteria() {
         </CardContent>
       </Card>
 
+      <RulesForClaude rules={rules} now={now} />
+
       <Card className="xl:col-span-2">
         <CardHeader>
           <CardTitle>Recently skipped</CardTitle>
@@ -119,7 +169,7 @@ async function SearchCriteria() {
   );
 }
 
-/** Search: what you're looking for. Discovery filters, matching criteria, and re-filtering saved jobs. */
+/** Search: what you're looking for. Discovery filters, matching criteria, rules for Claude, and re-filtering saved jobs. */
 export default function SearchPage() {
   return (
     <main className="flex flex-col gap-6">

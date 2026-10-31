@@ -8,6 +8,17 @@ export const DEFAULT_INTERVAL_MINUTES = 240;
 /** Settings key holding the discovery interval; must match the Railway cron schedule. */
 export const INTERVAL_SETTING_KEY = "discover_interval_minutes";
 
+/** Minutes between match, prepare and notify runs; mirrors their Railway cron schedules. */
+export const QUEUE_INTERVAL_MINUTES = 15;
+
+/** The worker services, in pipeline order, with what each does (Health page). */
+export const WORKERS = [
+  { name: "discover", does: "Checks every job board for new and closed postings.", perUser: false },
+  { name: "match", does: "Scores new jobs against your profile and criteria.", perUser: true },
+  { name: "prepare", does: "Turns your best matches into applications, up to the daily cap.", perUser: true },
+  { name: "notify", does: "Emails you when applications need you.", perUser: true },
+] as const;
+
 /**
  * How long without a successful run before Health flags it: two missed runs
  * plus 30 minutes of slack (Railway starts cron runs a few minutes late).

@@ -9,6 +9,8 @@ import {
   sourceProblem,
   workerProblem,
   type SourceStatus,
+  QUEUE_INTERVAL_MINUTES,
+  WORKERS,
   type WorkerRun,
 } from "./run-health";
 import { latestWorkerRun, listSourceStatus } from "./runs.repository";
@@ -71,6 +73,30 @@ export async function loadDiscoveryHealth(db: Db, userId: string, now: Date): Pr
     workerProblem: hasActiveBoards ? workerProblem(worker, now, intervalMinutes) : null,
     intervalMinutes,
   };
+}
+
+/** One worker service on the Health page: its schedule, last run and any problem. */
+export type WorkerHealth = {
+  name: string;
+  does: string;
+  intervalMinutes: number;
+  lastRun: WorkerRun | null;
+  problem: string | null;
+};
+
+/**
+ * Every worker service with its latest run (the user's own, for per-user
+ * workers) and a problem if it failed or is late.
+ */
+export async function loadWorkerHealth(db: Db, userId: string, now: Date): Promise<WorkerHealth[]> {
+  const discoverInterval = await getDiscoveryInterval(db);
+  return Promise.all(
+    WORKERS.map(async (w) => {
+      const lastRun = await latestWorkerRun(db, w.name, w.perUser ? userId : undefined);
+      const intervalMinutes = w.name === "discover" ? discoverInterval : QUEUE_INTERVAL_MINUTES;
+      return { name: w.name, does: w.does, intervalMinutes, lastRun, problem: workerProblem(lastRun, now, intervalMinutes) };
+    }),
+  );
 }
 
 /** The most recent finished discovery run, if any. */

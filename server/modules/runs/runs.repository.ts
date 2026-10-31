@@ -76,17 +76,16 @@ export async function listSourceStatus(db: Db, worker: string): Promise<SourceSt
   return rows as unknown as SourceStatus[];
 }
 
-/** The most recent finished worker-level run (`source` is null), if any. */
-export async function latestWorkerRun(db: Db, worker: string): Promise<WorkerRun | null> {
-  const res = await db
+/** The most recent finished worker-level run (`source` is null), if any; `userId` limits it to one user's runs. */
+export async function latestWorkerRun(db: Db, worker: string, userId?: string): Promise<WorkerRun | null> {
+  let query = db
     .from("worker_runs")
     .select("started_at, finished_at, ok, counts, error")
     .eq("worker", worker)
     .is("source", null)
-    .not("ok", "is", null)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .not("ok", "is", null);
+  if (userId) query = query.eq("user_id", userId);
+  const res = await query.order("started_at", { ascending: false }).limit(1).maybeSingle();
   if (res.error) unwrap(res, "latest worker run");
   return (res.data as WorkerRun | null) ?? null;
 }

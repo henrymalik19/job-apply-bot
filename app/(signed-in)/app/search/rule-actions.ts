@@ -6,7 +6,7 @@ import { ValidationError } from "@/server/core/errors";
 import { addLesson, setLessonActive } from "@/server/modules/lessons/lessons.service";
 import type { FormMessageState } from "../../_components/form-message";
 
-/** Add-lesson form action. */
+/** Add-rule form action. */
 export async function addLessonAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { db, owner } = await ownerContext();
   try {
@@ -16,10 +16,10 @@ export async function addLessonAction(_prev: FormMessageState, formData: FormDat
     throw err;
   }
   refresh();
-  return { ok: "Added. It applies from the next run." };
+  return { ok: "Added. Claude follows it from the next run." };
 }
 
-/** Turns a lesson on or off. */
+/** Turns a rule on or off. */
 export async function toggleLessonAction(formData: FormData) {
   const { db, owner } = await ownerContext();
   await setLessonActive(db, owner.id, String(formData.get("id")), formData.get("active") === "true");
