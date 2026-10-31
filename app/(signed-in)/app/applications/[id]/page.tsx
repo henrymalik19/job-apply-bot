@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, FileText } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -9,26 +9,81 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ownerContext } from "@/server/auth/require-owner";
-import { blockingQuestions, getApplication, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import {
+  blockingQuestions,
+  getApplication,
+  type ApplicationQuestion,
+  type ApplicationWithDetails,
+} from "@/server/modules/applications/applications.service";
 import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { getApplicationResume, signedPdfUrl, type Resume, type ResumeDoc } from "@/server/modules/resumes/resumes.service";
+import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { ActionForm } from "../../../_components/action-form";
 import { MatchCard } from "../../../_components/match-card";
+import { statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
 import { approveAction, skipAction } from "../actions";
 import { QuestionForm } from "../question-form";
 
 type Params = Promise<{ id: string }>;
 type Flag = { kind: string; excerpt: string; where: string; hidden?: boolean };
 
-const STATUS_LABEL: Record<string, string> = {
-  queued: "Ready to review",
-  needs_input: "Needs you",
-  manual: "Apply yourself",
-  approved: "Approved",
-  skipped: "Skipped",
-  failed: "Preparing failed",
+/** Colored box per tone for the "next step" callout. */
+const TONE_BOX: Record<Tone, string> = {
+  warning: "border-warning/40 bg-warning/10",
+  info: "border-info/40 bg-info/10",
+  success: "border-success/40 bg-success/10",
+  muted: "border-border bg-muted/40",
+  destructive: "border-destructive/40 bg-destructive/10",
 };
+
+/** What to do next with this application, in one colored box at the top. */
+function NextStep({ app, blockers }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[] }) {
+  const info = statusInfo(app.status);
+  const toCheck = app.questions.filter((q) => q.bucket === "drafted" || q.needs_check).length;
+  let title: string;
+  let body: React.ReactNode;
+  if (app.status === "needs_input") {
+    title = `${blockers.length} required ${blockers.length === 1 ? "question needs" : "questions need"} your answer`;
+    body = (
+      <ul className="list-disc pl-5">
+        {blockers.map((q) => (
+          <li key={q.id}><a href={`#q-${q.id}`} className="underline underline-offset-2">{q.question}</a></li>
+        ))}
+      </ul>
+    );
+  } else if (app.status === "manual") {
+    title = "Apply on the employer's site";
+    body = (
+      <>
+        <p>{app.prepare_error ?? "This form can't be filled automatically."} The resume and answers below are ready to copy.</p>
+        {(app.job.apply_url ?? app.job.url) && (
+          <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
+            <ExternalLink /> Open the application form
+          </a>
+        )}
+      </>
+    );
+  } else if (app.status === "queued") {
+    title = "Ready to review";
+    body = (
+      <p>
+        Everything required is answered.
+        {toCheck > 0 ? ` Look over the ${toCheck} ${toCheck === 1 ? "answer" : "answers"} under “Check these” and the resume,` : " Look over the resume,"} then
+        approve or skip on the right.
+      </p>
+    );
+  } else {
+    title = info.label;
+    body = <p>{info.hint}</p>;
+  }
+  return (
+    <div className={cn("rounded-lg border p-4 text-sm", TONE_BOX[info.tone])}>
+      <div className="mb-1 font-semibold">{title}</div>
+      {body}
+    </div>
+  );
+}
 
 function Flags({ flags }: { flags: Flag[] }) {
   if (flags.length === 0) return null;
@@ -65,26 +120,33 @@ function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           Resume
-          <Badge variant={resume.kind === "tailored" ? "default" : "secondary"}>{resume.kind === "tailored" ? "tailored" : "untailored"}</Badge>
-          {url && (
-            <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <FileText /> Open PDF
-            </a>
-          )}
+          <Badge className={resume.kind === "tailored" ? TONE_BADGE.success : TONE_BADGE.muted}>
+            {resume.kind === "tailored" ? "tailored" : "untailored"}
+          </Badge>
         </CardTitle>
         {problems.length > 0 && (
           <CardDescription>Tailoring didn&apos;t pass the fact guard, so this is your untailored resume: {problems.join("; ")}.</CardDescription>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        {doc.summary && <p>{doc.summary}</p>}
-        {doc.experience.map((j) => (
-          <div key={j.employment_id}>
-            <div className="font-medium">{j.title}, {j.employer} <span className="font-normal text-muted-foreground">· {j.dates}</span></div>
-            <ul className="list-disc pl-5 text-muted-foreground">{j.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
+            <FileText /> Open PDF
+          </a>
+        )}
+        {doc.summary && <p className="text-muted-foreground">{doc.summary}</p>}
+        <details>
+          <summary className="cursor-pointer font-medium">Experience and skills</summary>
+          <div className="mt-3 flex flex-col gap-3">
+            {doc.experience.map((j) => (
+              <div key={j.employment_id}>
+                <div className="font-medium">{j.title}, {j.employer} <span className="font-normal text-muted-foreground">· {j.dates}</span></div>
+                <ul className="list-disc pl-5 text-muted-foreground">{j.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
+              </div>
+            ))}
+            {doc.skills.length > 0 && <p className="text-muted-foreground">Skills: {doc.skills.join(", ")}</p>}
           </div>
-        ))}
-        {doc.skills.length > 0 && <p className="text-muted-foreground">Skills: {doc.skills.join(", ")}</p>}
+        </details>
       </CardContent>
     </Card>
   );
@@ -100,8 +162,8 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
           {app.status === "queued"
             ? "Approving moves it to your to-submit list; you still submit it yourself."
             : app.status === "manual"
-              ? "This form can't be filled automatically. Apply on the employer's site using the resume and answers here."
-              : "Answer every required question above and it moves to Review."}
+              ? "Once you've applied on the employer's site, or decided not to, skip it here."
+              : "Answer every required question and it moves to Review."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -115,19 +177,76 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
           <ActionForm action={skipAction} submitLabel="Skip" className="mt-3">
             <input type="hidden" name="application_id" value={app.id} />
             <input type="hidden" name="back" value={back} />
-            <Input name="reason" placeholder="Why (optional), e.g. too much on-call" className="max-w-xl" />
-            <div className="flex flex-wrap items-center gap-3">
-              <Input name="lesson" placeholder="Save as a lesson (optional), e.g. Skip roles with heavy on-call" className="max-w-xl flex-1" />
-              <NativeSelect name="lesson_scope" defaultValue="scoring" aria-label="Lesson applies to">
-                <NativeSelectOption value="scoring">for scoring</NativeSelectOption>
-                <NativeSelectOption value="tailoring">for resumes</NativeSelectOption>
-                <NativeSelectOption value="answers">for answers</NativeSelectOption>
-                <NativeSelectOption value="global">everywhere</NativeSelectOption>
-              </NativeSelect>
-            </div>
+            <Input name="reason" placeholder="Why (optional), e.g. too much on-call" />
+            <Input name="lesson" placeholder="Save as a lesson (optional)" />
+            <NativeSelect name="lesson_scope" defaultValue="scoring" aria-label="Lesson applies to">
+              <NativeSelectOption value="scoring">for scoring</NativeSelectOption>
+              <NativeSelectOption value="tailoring">for resumes</NativeSelectOption>
+              <NativeSelectOption value="answers">for answers</NativeSelectOption>
+              <NativeSelectOption value="global">everywhere</NativeSelectOption>
+            </NativeSelect>
           </ActionForm>
         </details>
       </CardContent>
+    </Card>
+  );
+}
+
+/** One group of questions; `collapsed` puts it behind a summary line. */
+function QuestionGroup(props: {
+  title: string;
+  hint: string;
+  questions: ApplicationQuestion[];
+  app: ApplicationWithDetails;
+  editable: boolean;
+  tone?: Tone;
+  collapsed?: boolean;
+}) {
+  const { title, hint, questions, app, editable, tone, collapsed = false } = props;
+  if (questions.length === 0) return null;
+  const list = (
+    <div className="divide-y">
+      {questions.map((q) =>
+        editable ? (
+          <div key={q.id} id={`q-${q.id}`} className="scroll-mt-20">
+            <QuestionForm q={q} applicationId={app.id} saveByDefault={q.bucket === "needs_user"} showBucket={false} />
+          </div>
+        ) : (
+          <div key={q.id} className="py-3 text-sm"><span className="font-medium">{q.question}</span>: {q.answer ?? "—"}</div>
+        ),
+      )}
+    </div>
+  );
+  const heading = (
+    <span className="flex items-center gap-2">
+      <span className="font-semibold">{title}</span>
+      <Badge className={tone ? TONE_BADGE[tone] : TONE_BADGE.muted}>{questions.length}</Badge>
+    </span>
+  );
+  return (
+    <Card>
+      {collapsed ? (
+        <CardContent>
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-start gap-2 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-90" />
+              <span className="flex flex-col">
+                {heading}
+                <span className="text-sm text-muted-foreground">{hint}</span>
+              </span>
+            </summary>
+            <div className="mt-2">{list}</div>
+          </details>
+        </CardContent>
+      ) : (
+        <>
+          <CardHeader>
+            <CardTitle>{heading}</CardTitle>
+            <CardDescription>{hint}</CardDescription>
+          </CardHeader>
+          <CardContent>{list}</CardContent>
+        </>
+      )}
     </Card>
   );
 }
@@ -144,18 +263,26 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const flags = (app.flags as Flag[]) ?? [];
   const salary = formatSalary(app.job.salary_min, app.job.salary_max, app.job.salary_currency);
   const editable = app.status === "queued" || app.status === "needs_input" || app.status === "manual";
+  const info = statusInfo(app.status);
+
+  const yours = app.questions.filter((q) => q.bucket === "needs_user" || q.bucket === "cannot_automate");
+  const toCheck = app.questions.filter((q) => !yours.includes(q) && (q.bucket === "drafted" || q.needs_check));
+  const filled = app.questions.filter((q) => !yours.includes(q) && !toCheck.includes(q));
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{app.job.title}</h1>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-          <span className="font-medium text-foreground">{app.job.company_name}</span>
-          {app.job.location && <span>{app.job.location}</span>}
-          {salary && <span className="tabular-nums">{salary}</span>}
-          {app.job.posted_at && <span>posted {ago(app.job.posted_at, now)}</span>}
-          <Badge>{STATUS_LABEL[app.status] ?? app.status}</Badge>
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge>
           {app.job.closed_at && <Badge variant="outline">Posting closed</Badge>}
+          {app.score != null && <span className="text-sm text-muted-foreground">Match {app.score}</span>}
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{app.job.title}</h1>
+          <p className="text-lg">{app.job.company_name}</p>
+          <p className="text-sm text-muted-foreground">
+            {[app.job.location, salary, app.job.posted_at ? `posted ${ago(app.job.posted_at, now)}` : null].filter(Boolean).join(" · ")}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <a href={app.job.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -168,43 +295,53 @@ async function ApplicationDetail({ params }: { params: Params }) {
           )}
           <Link href={`/app/jobs/${app.job.id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>Job details</Link>
         </div>
-        {app.prepare_error && <p className="text-sm text-destructive">{app.prepare_error}</p>}
-      </div>
+      </header>
 
+      <NextStep app={app} blockers={blockers} />
       <Flags flags={flags} />
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <MatchCard match={match} />
-        <ResumeCard resume={resume} url={url} />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Questions</CardTitle>
-          <CardDescription>
-            {app.questions.length} on the form
-            {blockers.length > 0 ? ` · ${blockers.length} required still need you` : " · nothing required is missing"}.
-            {app.status === "queued" && " Answers marked “please check” came from a wording seen for the first time."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="divide-y">
-          {app.questions.length === 0 && <p className="text-sm text-muted-foreground">No form questions were found.</p>}
-          {app.questions.map((q) =>
-            editable ? (
-              <QuestionForm key={q.id} q={q} applicationId={app.id} saveByDefault={q.bucket === "needs_user"} />
-            ) : (
-              <div key={q.id} className="py-3 text-sm"><span className="font-medium">{q.question}</span>: {q.answer ?? "—"}</div>
-            ),
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="flex flex-col gap-6 lg:col-span-2">
+          {app.questions.length === 0 && (
+            <Card><CardContent><p className="text-sm text-muted-foreground">No form questions were found.</p></CardContent></Card>
           )}
-        </CardContent>
-      </Card>
-
-      {editable && <Decide app={app} />}
+          <QuestionGroup
+            title="Needs your answer"
+            hint="Couldn't be answered from your profile or saved answers. Ticking “Save for next time” fills the same question on other applications."
+            questions={yours}
+            app={app}
+            editable={editable}
+            tone="warning"
+          />
+          <QuestionGroup
+            title="Check these"
+            hint="Drafted by Claude, or matched from a wording seen for the first time. Edit anything that's off."
+            questions={toCheck}
+            app={app}
+            editable={editable}
+            tone="info"
+          />
+          <QuestionGroup
+            title="Filled automatically"
+            hint="From your profile, criteria and saved answers. Open to see or change them."
+            questions={filled}
+            app={app}
+            editable={editable}
+            tone="success"
+            collapsed
+          />
+        </div>
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-4">
+          {editable && <Decide app={app} />}
+          <MatchCard match={match} stacked />
+          <ResumeCard resume={resume} url={url} />
+        </aside>
+      </div>
     </div>
   );
 }
 
-/** One application: job, score, flags, tailored resume and every form question, with approve and skip. */
+/** One application: what to do next, its questions by who has to act, and the decision, match and resume alongside. */
 export default function ApplicationPage({ params }: { params: Params }) {
   return (
     <main className="flex flex-col gap-4">

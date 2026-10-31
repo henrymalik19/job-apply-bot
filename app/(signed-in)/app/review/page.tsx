@@ -7,6 +7,10 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { listApplications, REVIEW_STATUSES, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
+import { InfoTip } from "../../_components/info-tip";
+
+/** Short label per flag kind (see the application page for the full text). */
+const FLAG_LABEL: Record<string, string> = { ai_restriction: "Restricts AI", ai_directed_text: "Text aimed at AI" };
 
 /** "14 filled · 2 drafted · 1 to check" for an application's questions. */
 function questionSummary(app: ApplicationWithDetails): string {
@@ -40,13 +44,22 @@ async function ReviewList() {
                 <TableHead>Job</TableHead>
                 <TableHead>Salary</TableHead>
                 <TableHead>Questions</TableHead>
-                <TableHead>Flags</TableHead>
+                <TableHead>
+                  <span className="flex items-center gap-1.5">
+                    Warnings
+                    <InfoTip label="About warnings">
+                      Things found in the posting or form worth knowing before you approve. &ldquo;Restricts AI&rdquo;: the employer
+                      limits AI use in applications, so free-text answers were left for you. &ldquo;Text aimed at AI&rdquo;: the page
+                      has instructions written for AI tools (often hidden); they were ignored. Open the application for the exact text.
+                    </InfoTip>
+                  </span>
+                </TableHead>
                 <TableHead>Prepared</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {apps.map((a) => {
-                const flags = (a.flags as unknown[]) ?? [];
+                const kinds = [...new Set(((a.flags as { kind: string }[] | null) ?? []).map((f) => f.kind))];
                 return (
                   <TableRow key={a.id}>
                     <TableCell className="text-right"><Badge className="tabular-nums">{a.score ?? "—"}</Badge></TableCell>
@@ -56,7 +69,15 @@ async function ReviewList() {
                     </TableCell>
                     <TableCell className="tabular-nums">{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{questionSummary(a)}</TableCell>
-                    <TableCell>{flags.length > 0 ? <Badge variant="destructive">{flags.length}</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>
+                      {kinds.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {kinds.map((k) => <Badge key={k} className="bg-warning/15 text-warning">{FLAG_LABEL[k] ?? k}</Badge>)}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{a.prepared_at ? ago(a.prepared_at, now) : "—"}</TableCell>
                   </TableRow>
                 );

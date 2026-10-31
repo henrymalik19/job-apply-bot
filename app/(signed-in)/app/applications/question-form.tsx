@@ -60,8 +60,10 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
  * an answer form (except for file uploads and "do it yourself" steps).
  *
  * @param saveByDefault - Tick "save for next time" (Needs you) or not (edits on review).
+ * @param showBucket - Show the filled/drafted/needs-you badge (off where questions are already grouped by it).
  */
-export function QuestionForm({ q, applicationId, saveByDefault }: { q: ApplicationQuestion; applicationId: string; saveByDefault: boolean }) {
+export function QuestionForm(props: { q: ApplicationQuestion; applicationId: string; saveByDefault: boolean; showBucket?: boolean }) {
+  const { q, applicationId, saveByDefault, showBucket = true } = props;
   const bucket = BUCKET_LABEL[q.bucket] ?? { label: q.bucket, variant: "outline" as const };
   const source = sourceLabel(q);
   const editable = q.field_type !== "file" && q.field_type !== "hidden" && q.bucket !== "cannot_automate";
@@ -70,7 +72,7 @@ export function QuestionForm({ q, applicationId, saveByDefault }: { q: Applicati
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="font-medium">{q.question}</span>
         {q.required && <span className="text-xs text-muted-foreground">required</span>}
-        <Badge variant={bucket.variant}>{bucket.label}</Badge>
+        {showBucket && <Badge variant={bucket.variant}>{bucket.label}</Badge>}
         {q.needs_check && <Badge variant="outline">please check</Badge>}
         {source && <span className="text-xs text-muted-foreground">{source}</span>}
       </div>

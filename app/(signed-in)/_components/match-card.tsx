@@ -2,8 +2,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { getJobMatch } from "@/server/modules/matching/matching.service";
 
-/** A job's match: score against the threshold with fits and gaps, or why it wasn't scored. */
-export function MatchCard({ match }: { match: Awaited<ReturnType<typeof getJobMatch>> }) {
+/**
+ * A job's match: score against the threshold with fits and gaps, or why it wasn't scored.
+ *
+ * @param stacked - Fits above gaps, for a narrow column.
+ */
+export function MatchCard({ match, stacked = false }: { match: Awaited<ReturnType<typeof getJobMatch>>; stacked?: boolean }) {
   if (!match) {
     return <p className="text-sm text-muted-foreground">Not scored yet. Matching runs after each discovery run.</p>;
   }
@@ -18,18 +22,18 @@ export function MatchCard({ match }: { match: Awaited<ReturnType<typeof getJobMa
     <Card size="sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Match <Badge variant={good ? "default" : "secondary"} className="tabular-nums">{match.score}</Badge>
+          Match <Badge className={good ? "bg-success/15 text-success tabular-nums" : "tabular-nums"} variant={good ? "default" : "secondary"}>{match.score}</Badge>
           <span className="text-sm font-normal text-muted-foreground">threshold {match.threshold}</span>
         </CardTitle>
         {match.summary && <CardDescription>{match.summary}</CardDescription>}
       </CardHeader>
-      <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
+      <CardContent className={stacked ? "grid gap-4 text-sm" : "grid gap-4 text-sm sm:grid-cols-2"}>
         <div>
-          <div className="mb-1 font-medium">Fits</div>
+          <div className="mb-1 font-medium text-success">Fits</div>
           <ul className="list-disc pl-5 text-muted-foreground">{match.fits.map((f, i) => <li key={i}>{f}</li>)}</ul>
         </div>
         <div>
-          <div className="mb-1 font-medium">Gaps</div>
+          <div className="mb-1 font-medium text-warning">Gaps</div>
           <ul className="list-disc pl-5 text-muted-foreground">{match.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul>
         </div>
       </CardContent>
