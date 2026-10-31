@@ -29,3 +29,36 @@ export async function signOutCurrentUser(): Promise<void> {
   const db = await createUserClient();
   await db.auth.signOut();
 }
+
+/**
+ * Emails a password-reset link. Supabase sends it only if the account exists,
+ * and only to `redirectTo` if that URL is in Auth's redirect allow list
+ * (otherwise it falls back to the Site URL).
+ */
+export async function sendPasswordReset(email: string, redirectTo: string): Promise<void> {
+  const db = await createUserClient();
+  await db.auth.resetPasswordForEmail(email, { redirectTo });
+}
+
+/** Turns the code from an emailed link into a session; false if it is invalid or expired. */
+export async function exchangeAuthCode(code: string): Promise<boolean> {
+  const db = await createUserClient();
+  const { error } = await db.auth.exchangeCodeForSession(code);
+  return !error;
+}
+
+/**
+ * Sets a new password for the signed-in owner (after a reset link signed them in).
+ *
+ * @param password - The new password (never logged).
+ */
+export async function updateOwnerPassword(password: string): Promise<SignInResult> {
+  const db = await createUserClient();
+  const { data } = await db.auth.getUser();
+  if (!data.user || !isOwnerId(data.user.id, serverEnv().OWNER_USER_ID)) {
+    return { ok: false, error: "The reset link has expired. Request a new one." };
+  }
+  const { error } = await db.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
