@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOwner } from "@/server/auth/require-owner";
 import { ResetForm } from "./reset-form";
@@ -8,15 +9,24 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** Sets a new password; reached from a reset link, which signs the owner in. */
-export default async function ResetPage() {
+/** Whose password this sets; signed-out visitors are sent to /login. */
+async function ForOwner() {
   const owner = await requireOwner();
+  return <>For {owner.email}.</>;
+}
+
+/** Sets a new password; reached from a reset link, which signs the owner in. */
+export default function ResetPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>New password</CardTitle>
-          <CardDescription>For {owner.email}.</CardDescription>
+          <CardDescription>
+            <Suspense>
+              <ForOwner />
+            </Suspense>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResetForm />
