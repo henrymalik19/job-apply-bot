@@ -19,9 +19,9 @@ async function NeedsYou() {
         <CardHeader>
           <CardTitle>{questionCount} question{questionCount === 1 ? "" : "s"} to answer</CardTitle>
           <CardDescription>
-            Required questions the system couldn&apos;t answer from your profile or saved answers. &ldquo;Save for next time&rdquo;
-            stores the answer so the same question fills in automatically on later forms. When an application has nothing
-            left, it moves to Review.
+            Required questions the system couldn&apos;t answer from your profile or saved answers. Short answers are
+            remembered, so the same question fills in automatically on later forms. When an application has nothing left,
+            it moves to Review.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -34,7 +34,7 @@ async function NeedsYou() {
                 {a.score != null && <Badge className="tabular-nums">{a.score}</Badge>}
               </div>
               <div className="divide-y">
-                {blockingQuestions(a).map((q) => <QuestionForm key={q.id} q={q} applicationId={a.id} saveByDefault />)}
+                {blockingQuestions(a).map((q) => <QuestionForm key={q.id} q={q} applicationId={a.id} />)}
               </div>
             </div>
           ))}

@@ -1,13 +1,10 @@
-import { ArrowLeft, ChevronRight, ExternalLink, FileText } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, FileText, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ownerContext } from "@/server/auth/require-owner";
 import {
   blockingQuestions,
@@ -19,10 +16,9 @@ import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { getApplicationResume, signedPdfUrl, type Resume, type ResumeDoc } from "@/server/modules/resumes/resumes.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
-import { ActionForm } from "../../../_components/action-form";
 import { MatchCard } from "../../../_components/match-card";
 import { statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
-import { approveAction, skipAction } from "../actions";
+import { DecideActions } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 
 type Params = Promise<{ id: string }>;
@@ -38,7 +34,7 @@ const TONE_BOX: Record<Tone, string> = {
 };
 
 /** What to do next with this application, in one colored box at the top. */
-function NextStep({ app, blockers }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[] }) {
+function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[]; flags: Flag[] }) {
   const info = statusInfo(app.status);
   const toCheck = app.questions.filter((q) => q.bucket === "drafted" || q.needs_check).length;
   let title: string;
@@ -69,7 +65,7 @@ function NextStep({ app, blockers }: { app: ApplicationWithDetails; blockers: Ap
     body = (
       <p>
         Everything required is answered.
-        {toCheck > 0 ? ` Look over the ${toCheck} ${toCheck === 1 ? "answer" : "answers"} under “Check these” and the resume,` : " Look over the resume,"} then
+        {toCheck > 0 ? ` Look over the ${toCheck} ${toCheck === 1 ? "answer" : "answers"} under “Double-check these” and the resume,` : " Look over the resume,"} then
         approve or skip on the right.
       </p>
     );
@@ -81,32 +77,27 @@ function NextStep({ app, blockers }: { app: ApplicationWithDetails; blockers: Ap
     <div className={cn("rounded-lg border p-4 text-sm", TONE_BOX[info.tone])}>
       <div className="mb-1 font-semibold">{title}</div>
       {body}
-    </div>
-  );
-}
-
-function Flags({ flags }: { flags: Flag[] }) {
-  if (flags.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-3">
-      {flags.map((f, i) => (
-        <Alert key={i} variant={f.kind === "ai_directed_text" ? "destructive" : "default"}>
-          <AlertTitle>
-            {f.kind === "ai_restriction"
-              ? "The employer restricts AI use"
-              : `Text aimed at AI tools${f.hidden ? " (hidden from human readers)" : ""}`}
-          </AlertTitle>
-          <AlertDescription>
-            <p>&ldquo;{f.excerpt}&rdquo;</p>
-            <p className="mt-1 text-xs">
-              {f.kind === "ai_restriction"
-                ? "Free-text answers were left for you to write."
-                : "Not followed: drafts never see hidden text. Shown here so you know it's there."}
-              {f.where !== "posting" && ` Found in question ${f.where}.`}
-            </p>
-          </AlertDescription>
-        </Alert>
-      ))}
+      {flags.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2 border-t border-current/10 pt-3">
+          {flags.map((f, i) => (
+            <div key={i} className="flex gap-2">
+              <TriangleAlert className={cn("mt-0.5 size-4 shrink-0", f.kind === "ai_directed_text" ? "text-destructive" : "text-warning")} />
+              <p>
+                <span className="font-medium">
+                  {f.kind === "ai_restriction" ? "The employer restricts AI use" : `Text aimed at AI tools${f.hidden ? ", hidden from human readers" : ""}`}
+                  {f.where !== "posting" && ` (in question ${f.where})`}:
+                </span>{" "}
+                &ldquo;{f.excerpt}&rdquo;{" "}
+                <span className="text-muted-foreground">
+                  {f.kind === "ai_restriction"
+                    ? "Free-text answers weren't drafted automatically; you can still draft one with AI."
+                    : "It was ignored; drafts never see hidden text."}
+                </span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -163,30 +154,11 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
             ? "Approving moves it to your to-submit list; you still submit it yourself."
             : app.status === "manual"
               ? "Once you've applied on the employer's site, or decided not to, skip it here."
-              : "Answer every required question and it moves to Review."}
+              : "Approve unlocks once every required question is answered."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {app.status === "queued" && (
-          <ActionForm action={approveAction} submitLabel="Approve">
-            <input type="hidden" name="application_id" value={app.id} />
-          </ActionForm>
-        )}
-        <details>
-          <summary className="cursor-pointer text-sm font-medium">Skip this job</summary>
-          <ActionForm action={skipAction} submitLabel="Skip" className="mt-3">
-            <input type="hidden" name="application_id" value={app.id} />
-            <input type="hidden" name="back" value={back} />
-            <Input name="reason" placeholder="Why (optional), e.g. too much on-call" />
-            <Input name="lesson" placeholder="Save as a lesson (optional)" />
-            <NativeSelect name="lesson_scope" defaultValue="scoring" aria-label="Lesson applies to">
-              <NativeSelectOption value="scoring">for scoring</NativeSelectOption>
-              <NativeSelectOption value="tailoring">for resumes</NativeSelectOption>
-              <NativeSelectOption value="answers">for answers</NativeSelectOption>
-              <NativeSelectOption value="global">everywhere</NativeSelectOption>
-            </NativeSelect>
-          </ActionForm>
-        </details>
+      <CardContent>
+        <DecideActions applicationId={app.id} canApprove={app.status === "queued"} back={back} />
       </CardContent>
     </Card>
   );
@@ -199,17 +171,18 @@ function QuestionGroup(props: {
   questions: ApplicationQuestion[];
   app: ApplicationWithDetails;
   editable: boolean;
+  aiAllowed: (q: ApplicationQuestion) => boolean;
   tone?: Tone;
   collapsed?: boolean;
 }) {
-  const { title, hint, questions, app, editable, tone, collapsed = false } = props;
+  const { title, hint, questions, app, editable, aiAllowed, tone, collapsed = false } = props;
   if (questions.length === 0) return null;
   const list = (
     <div className="divide-y">
       {questions.map((q) =>
         editable ? (
           <div key={q.id} id={`q-${q.id}`} className="scroll-mt-20">
-            <QuestionForm q={q} applicationId={app.id} saveByDefault={q.bucket === "needs_user"} showBucket={false} />
+            <QuestionForm q={q} applicationId={app.id} showBucket={false} aiAllowed={aiAllowed(q)} />
           </div>
         ) : (
           <div key={q.id} className="py-3 text-sm"><span className="font-medium">{q.question}</span>: {q.answer ?? "—"}</div>
@@ -263,6 +236,8 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const flags = (app.flags as Flag[]) ?? [];
   const salary = formatSalary(app.job.salary_min, app.job.salary_max, app.job.salary_currency);
   const editable = app.status === "queued" || app.status === "needs_input" || app.status === "manual";
+  const aiAllowed = (q: ApplicationQuestion) =>
+    !flags.some((f) => f.kind === "ai_restriction" && (f.where === "posting" || f.where === q.field_name));
   const info = statusInfo(app.status);
 
   const yours = app.questions.filter((q) => q.bucket === "needs_user" || q.bucket === "cannot_automate");
@@ -275,7 +250,6 @@ async function ApplicationDetail({ params }: { params: Params }) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge>
           {app.job.closed_at && <Badge variant="outline">Posting closed</Badge>}
-          {app.score != null && <span className="text-sm text-muted-foreground">Match {app.score}</span>}
         </div>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{app.job.title}</h1>
@@ -297,8 +271,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
         </div>
       </header>
 
-      <NextStep app={app} blockers={blockers} />
-      <Flags flags={flags} />
+      <NextStep app={app} blockers={blockers} flags={flags} />
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
@@ -307,18 +280,20 @@ async function ApplicationDetail({ params }: { params: Params }) {
           )}
           <QuestionGroup
             title="Needs your answer"
-            hint="Couldn't be answered from your profile or saved answers. Ticking “Save for next time” fills the same question on other applications."
+            hint="Couldn't be answered from your profile or saved answers. Short answers you give here are remembered, so other applications fill them in automatically."
             questions={yours}
             app={app}
             editable={editable}
+            aiAllowed={aiAllowed}
             tone="warning"
           />
           <QuestionGroup
-            title="Check these"
-            hint="Drafted by Claude, or matched from a wording seen for the first time. Edit anything that's off."
+            title="Double-check these"
+            hint="Worth a look before you approve: answers written by AI, and saved answers used for a question worded a bit differently than before."
             questions={toCheck}
             app={app}
             editable={editable}
+            aiAllowed={aiAllowed}
             tone="info"
           />
           <QuestionGroup
@@ -327,13 +302,14 @@ async function ApplicationDetail({ params }: { params: Params }) {
             questions={filled}
             app={app}
             editable={editable}
+            aiAllowed={aiAllowed}
             tone="success"
             collapsed
           />
         </div>
         <aside className="flex flex-col gap-6 lg:sticky lg:top-4">
           {editable && <Decide app={app} />}
-          <MatchCard match={match} stacked />
+          <MatchCard match={match} stacked showThreshold={false} />
           <ResumeCard resume={resume} url={url} />
         </aside>
       </div>

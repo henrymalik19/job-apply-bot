@@ -3,12 +3,11 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApplicationQuestion, QuestionOption } from "@/server/modules/applications/applications.service";
-import { ActionForm } from "../../_components/action-form";
-import { answerQuestionAction } from "./actions";
+import { AnswerForm } from "./answer-form";
 
 const BUCKET_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   auto: { label: "filled", variant: "secondary" },
-  drafted: { label: "drafted", variant: "outline" },
+  drafted: { label: "AI draft", variant: "outline" },
   needs_user: { label: "needs you", variant: "destructive" },
   cannot_automate: { label: "do it yourself", variant: "destructive" },
 };
@@ -20,7 +19,7 @@ function sourceLabel(q: ApplicationQuestion): string | null {
     case "criteria": return "from your search criteria";
     case "skill_years": return "from your job dates";
     case "answer": return "saved answer";
-    case "drafted": return "drafted by Claude";
+    case "drafted": return "drafted by AI";
     case "rule": return "declined (voluntary)";
     case "user": return "your answer";
     default: return null;
@@ -59,11 +58,12 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
  * One application question: label, status badges and why it needs you, plus
  * an answer form (except for file uploads and "do it yourself" steps).
  *
- * @param saveByDefault - Tick "save for next time" (Needs you) or not (edits on review).
  * @param showBucket - Show the filled/drafted/needs-you badge (off where questions are already grouped by it).
+ * @param aiAllowed - False when the employer restricts AI use: drafting stays available, with a heads-up.
  */
-export function QuestionForm(props: { q: ApplicationQuestion; applicationId: string; saveByDefault: boolean; showBucket?: boolean }) {
-  const { q, applicationId, saveByDefault, showBucket = true } = props;
+export function QuestionForm(props: { q: ApplicationQuestion; applicationId: string; showBucket?: boolean; aiAllowed?: boolean }) {
+  const { q, applicationId, showBucket = true, aiAllowed = false } = props;
+  const freeText = q.field_type === "textarea" || q.answer_source === "drafted";
   const bucket = BUCKET_LABEL[q.bucket] ?? { label: q.bucket, variant: "outline" as const };
   const source = sourceLabel(q);
   const editable = q.field_type !== "file" && q.field_type !== "hidden" && q.bucket !== "cannot_automate";
@@ -71,7 +71,7 @@ export function QuestionForm(props: { q: ApplicationQuestion; applicationId: str
     <div className="flex flex-col gap-2 py-4">
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="font-medium">{q.question}</span>
-        {q.required && <span className="text-xs text-muted-foreground">required</span>}
+        {q.required && <Badge className="bg-destructive/15 text-destructive">required</Badge>}
         {showBucket && <Badge variant={bucket.variant}>{bucket.label}</Badge>}
         {q.needs_check && <Badge variant="outline">please check</Badge>}
         {source && <span className="text-xs text-muted-foreground">{source}</span>}
@@ -80,20 +80,13 @@ export function QuestionForm(props: { q: ApplicationQuestion; applicationId: str
       {!editable ? (
         <p className="text-sm">{q.answer ?? <span className="text-muted-foreground">Nothing to fill in here.</span>}</p>
       ) : (
-        <ActionForm action={answerQuestionAction} submitLabel={q.answer ? "Save answer" : "Answer"} className="gap-2">
-          <input type="hidden" name="application_id" value={applicationId} />
-          <input type="hidden" name="question_id" value={q.id} />
-          <AnswerInput q={q} />
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" name="save" defaultChecked={saveByDefault} /> Save for next time
-            </label>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-muted-foreground">Save as a lesson</summary>
-              <Input name="lesson" className="mt-2 w-[28rem] max-w-full" placeholder="e.g. Keep answers about motivation under 80 words" />
-            </details>
-          </div>
-        </ActionForm>
+        <AnswerForm applicationId={applicationId} questionId={q.id} hasAnswer={!!q.answer} canDraft={freeText}>
+          {/* Keyed by the answer so a new AI draft replaces what the box shows. */}
+          <AnswerInput key={q.answer ?? ""} q={q} />
+        </AnswerForm>
+      )}
+      {editable && freeText && !aiAllowed && (
+        <p className="text-xs text-warning">Heads-up: this employer asks applicants not to use AI. Drafting is up to you.</p>
       )}
     </div>
   );

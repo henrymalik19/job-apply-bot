@@ -4,6 +4,11 @@ import { check, unwrap } from "@/server/core/errors";
 /** A new `application_questions` row (application id added on insert). */
 export type NewQuestion = Omit<Insert<"application_questions">, "application_id">;
 
+/** A job's title, company and description, for redrafting an answer. */
+export async function getJobPosting(db: Db, jobId: string): Promise<{ title: string; company_name: string; description_md: string | null } | null> {
+  return unwrap(await db.from("jobs").select("title, company_name, description_md").eq("id", jobId).maybeSingle(), "read job posting");
+}
+
 /** A matched job ready to prepare, with what the form fetch needs. */
 export type PrepareCandidate = {
   matchId: string;

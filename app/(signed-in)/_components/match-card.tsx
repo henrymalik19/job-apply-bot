@@ -6,8 +6,10 @@ import type { getJobMatch } from "@/server/modules/matching/matching.service";
  * A job's match: score against the threshold with fits and gaps, or why it wasn't scored.
  *
  * @param stacked - Fits above gaps, for a narrow column.
+ * @param showThreshold - Show "threshold N" next to the score.
  */
-export function MatchCard({ match, stacked = false }: { match: Awaited<ReturnType<typeof getJobMatch>>; stacked?: boolean }) {
+export function MatchCard(props: { match: Awaited<ReturnType<typeof getJobMatch>>; stacked?: boolean; showThreshold?: boolean }) {
+  const { match, stacked = false, showThreshold = true } = props;
   if (!match) {
     return <p className="text-sm text-muted-foreground">Not scored yet. Matching runs after each discovery run.</p>;
   }
@@ -23,7 +25,7 @@ export function MatchCard({ match, stacked = false }: { match: Awaited<ReturnTyp
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Match <Badge className={good ? "bg-success/15 text-success tabular-nums" : "tabular-nums"} variant={good ? "default" : "secondary"}>{match.score}</Badge>
-          <span className="text-sm font-normal text-muted-foreground">threshold {match.threshold}</span>
+          {showThreshold && <span className="text-sm font-normal text-muted-foreground">threshold {match.threshold}</span>}
         </CardTitle>
         {match.summary && <CardDescription>{match.summary}</CardDescription>}
       </CardHeader>

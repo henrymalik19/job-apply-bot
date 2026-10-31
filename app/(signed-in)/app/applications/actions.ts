@@ -3,8 +3,10 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { ownerContext } from "@/server/auth/require-owner";
+import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthropic/claude";
 import { ValidationError } from "@/server/core/errors";
 import { answerQuestion, approveApplication, IllegalTransitionError, skipApplication } from "@/server/modules/applications/applications.service";
+import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
 
 const text = (formData: FormData, name: string) => String(formData.get(name) ?? "");
@@ -54,4 +56,24 @@ export async function skipAction(_prev: FormMessageState, formData: FormData): P
     throw err;
   }
   redirect(text(formData, "back") || "/app/review");
+}
+
+/** Redrafts one answer with AI, with optional guidance for this answer. */
+export async function redraftAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+  const { db, owner } = await ownerContext();
+  try {
+    await redraftAnswer({
+      db,
+      userId: owner.id,
+      call: createClaudeCaller(DRAFTING_MODEL),
+      applicationId: text(formData, "application_id"),
+      questionId: text(formData, "question_id"),
+      guidance: text(formData, "guidance"),
+    });
+  } catch (err) {
+    if (err instanceof ValidationError) return { error: err.message };
+    throw err;
+  }
+  refresh();
+  return { ok: "New draft below. Check it, then save." };
 }

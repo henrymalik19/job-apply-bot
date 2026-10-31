@@ -7,7 +7,8 @@
 import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
-import type { AppStatus } from "@/server/modules/applications/applications.service";
+import { ValidationError } from "@/server/core/errors";
+import { getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
 import { getMatchCriteria, type MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
 import { resolvePlace } from "@/server/modules/criteria/places";
@@ -47,6 +48,7 @@ import {
 import {
   asJson,
   countApplicationsSince,
+  getJobPosting,
   insertApplication,
   setPrepareError,
   listPrepareCandidates,
@@ -199,7 +201,7 @@ function answerFromQuestion(row: Draft, q: FormQuestion, question: Question, ctx
 
 /** Calls a structured prompt, retrying once on missing or invalid output. Records usage. */
 async function callWithRetry<T>(
-  deps: PrepareDeps,
+  deps: Pick<PrepareDeps, "db" | "userId">,
   call: StructuredCall,
   purpose: string,
   jobId: string,
@@ -506,4 +508,48 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
     await finishRun(db, runId, { ok: false, counts, error: message }).catch(() => {});
     throw err;
   }
+}
+
+/**
+ * Redrafts one open-ended answer with Claude, from the user's profile, answer
+ * rules and the posting, plus optional guidance for this answer ("shorter",
+ * "mention the payments work"). The user asked for it, so it runs even where the
+ * employer restricts AI use (prepare itself never auto-drafts there).
+ *
+ * @returns The new draft (also saved on the question, marked to check).
+ * @throws {@link ValidationError} when it can't be redrafted or drafting fails.
+ */
+export async function redraftAnswer(deps: {
+  db: Db;
+  userId: string;
+  call: StructuredCall;
+  applicationId: string;
+  questionId: string;
+  guidance?: string;
+  now?: Date;
+}): Promise<string> {
+  const { db, userId, now = new Date() } = deps;
+  const app = await getApplication(db, userId, deps.applicationId);
+  const q = app?.questions.find((x) => x.id === deps.questionId);
+  if (!app || !q) throw new ValidationError("That question is gone; reload the page.");
+  const budget = await getMonthlySpend(db, userId, now);
+  if (budget.spent >= budget.cap) throw new ValidationError("This month's Claude budget is used up.");
+
+  const [profile, lessons, job] = await Promise.all([getProfile(db, userId), lessonsFor(db, userId, "answers"), getJobPosting(db, app.job.id)]);
+  const guidance = deps.guidance?.trim().slice(0, 300);
+  const prompt = buildDraftPrompt({
+    facts: profileLines(profile, now),
+    lessons: [
+      ...lessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+      ...(guidance ? [{ rule: `For this answer: ${guidance}`, scope: "answers", active: true }] : []),
+    ],
+    posting: { title: app.job.title, company_name: app.job.company_name, text: job?.description_md ?? "" },
+    questions: [{ index: 1, label: q.question, description: q.description, fieldType: q.field_type ?? "textarea", options: [], required: q.required }],
+  });
+  const spend = { cost: 0 };
+  const output = await callWithRetry({ db, userId }, deps.call, "redraft", app.job.id, { ...prompt, schema: draftOutputSchema, maxTokens: 2000, effort: "medium" }, spend);
+  const answer = output?.answers.find((a) => a.index === 1)?.answer.trim();
+  if (!answer) throw new ValidationError("Drafting failed; try again or write it yourself.");
+  await setDraftedAnswer(db, userId, app.id, q.id, answer);
+  return answer;
 }

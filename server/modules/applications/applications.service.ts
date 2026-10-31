@@ -36,6 +36,20 @@ export {
 } from "./applications.repository";
 export * from "./application-status";
 
+/**
+ * Replaces one question's answer with a fresh AI draft, marked to check. Only
+ * on applications still waiting (Needs you, Review, Apply yourself).
+ *
+ * @throws {@link ValidationError} when the application or question is gone or no longer editable.
+ */
+export async function setDraftedAnswer(db: Db, userId: string, applicationId: string, questionId: string, answer: string): Promise<void> {
+  const app = await getApplication(db, userId, applicationId);
+  const q = app?.questions.find((x) => x.id === questionId);
+  if (!app || !q) throw new ValidationError("That question is gone; reload the page.");
+  if (!["queued", "needs_input", "manual"].includes(app.status)) throw new ValidationError("This application can't be edited any more.");
+  await updateQuestion(db, q.id, { answer, answer_value: answer, bucket: "drafted", answer_source: "drafted", user_approved: false, needs_check: true, reason: null });
+}
+
 /** Statuses on the Review page. */
 export const REVIEW_STATUSES: readonly AppStatus[] = ["queued"];
 
