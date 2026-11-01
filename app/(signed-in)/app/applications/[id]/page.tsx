@@ -17,6 +17,7 @@ import { getApplicationResume, signedPdfUrl, type Resume, type ResumeDoc } from 
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
+import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions } from "../decide-actions";
 import { QuestionForm } from "../question-form";
@@ -60,6 +61,18 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
     body = (
       <>
         <p>{app.apply_note ?? app.prepare_error ?? "This form can't be filled automatically."} The resume and answers below are ready to copy.</p>
+        {(app.job.apply_url ?? app.job.url) && (
+          <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
+            <ExternalLink /> Open the application form
+          </a>
+        )}
+      </>
+    );
+  } else if (app.status === "approved" && !runnerFills(app.job.source)) {
+    title = "Approved: apply on the employer's site";
+    body = (
+      <>
+        <p>The apply runner can&apos;t fill this site yet. The resume and answers below are ready to copy.</p>
         {(app.job.apply_url ?? app.job.url) && (
           <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
             <ExternalLink /> Open the application form
@@ -267,6 +280,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge>
+          <SiteBadge source={app.job.source} />
           {app.job.closed_at && <Badge variant="outline">Posting closed</Badge>}
         </div>
         <div>

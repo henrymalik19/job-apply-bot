@@ -8,6 +8,7 @@ import { listApplications, REVIEW_STATUSES, type ApplicationWithDetails } from "
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
 import { InfoTip } from "../../_components/info-tip";
+import { SiteBadge } from "../../_components/site-badge";
 
 /** Short label per flag kind (see the application page for the full text). */
 const FLAG_LABEL: Record<string, string> = { ai_restriction: "Restricts AI", ai_directed_text: "Text aimed at AI" };
@@ -65,7 +66,10 @@ async function ReviewList() {
                     <TableCell className="text-right"><Badge className="tabular-nums">{a.score ?? "—"}</Badge></TableCell>
                     <TableCell className="max-w-md whitespace-normal">
                       <Link href={`/app/applications/${a.id}`} className="font-medium hover:underline">{a.job.title}</Link>
-                      <div className="text-sm text-muted-foreground">{a.job.company_name}{a.job.location ? ` · ${a.job.location}` : ""}</div>
+                      <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                        {a.job.company_name}{a.job.location ? ` · ${a.job.location}` : ""}
+                        <SiteBadge source={a.job.source} />
+                      </div>
                     </TableCell>
                     <TableCell className="tabular-nums">{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{questionSummary(a)}</TableCell>
