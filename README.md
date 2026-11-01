@@ -77,6 +77,23 @@ A stage whose variable is missing is skipped.
 Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 
+### Apply runner (your computer only)
+
+```bash
+pnpm worker:apply             # fills approved Greenhouse applications in Chrome; Ctrl+C to stop
+```
+
+It never runs on Railway: it uses your IP and a visible Chrome window, and stops for you at anything a
+person should do (CAPTCHAs, unanswered questions). It needs Google Chrome installed and only
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` (public values). To apply for real, put the production ones in
+`.env.apply` (it overrides `.env.local`); leave it out to work against local Supabase.
+
+The first run asks for your app email and password and keeps only the refreshable session in
+`data/apply-session.json` (delete it to sign out). Chrome uses its own profile in `data/apply-chrome`,
+so sites you sign into there (Workday, say) stay signed in. On a supervised platform it fills the form,
+saves a screenshot, and waits up to 30 minutes for you to click Submit; Settings shows each platform's
+clean-submit streak and, once earned, lets it submit on its own.
+
 ## Checks
 
 ```bash

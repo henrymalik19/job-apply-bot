@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- The parts of Greenhouse's hosted form (job-boards.greenhouse.io) the driver relies on:
+     field names as element ids, react-select comboboxes with a listbox of role=option
+     and the chosen value in .select__single-value, a file input, and a submit that
+     leads to a thank-you page. Saved from the live form's structure in Oct 2026. -->
+<html>
+<body>
+  <form id="application-form" action="#">
+    <label for="first_name">First Name</label><input type="text" id="first_name">
+    <label for="question_1">Why us?</label><textarea id="question_1"></textarea>
+    <div><button type="button">Attach</button><input id="resume" class="visually-hidden" type="file" accept=".pdf"></div>
+    <div class="select-shell" data-options="No|Yes, Netherlands Highly Skilled Migrant Visa|Yes, but not one of the visas listed here">
+      <label id="question_2-label">Sponsorship?</label>
+      <div class="select__control"><div class="select__value-container">
+        <div class="select__input-container"><input class="select__input" id="question_2" role="combobox" type="text"></div>
+      </div></div>
+    </div>
+    <div class="select-shell" data-options="Go|Rust|TypeScript" data-multi="1">
+      <label id="question_3-label">Languages</label>
+      <div class="select__control"><div class="select__value-container">
+        <div class="select__input-container"><input class="select__input" id="question_3" role="combobox" type="text"></div>
+      </div></div>
+    </div>
+    <button type="submit">Submit application</button>
+  </form>
+  <script>
+    for (const shell of document.querySelectorAll(".select-shell")) {
+      const input = shell.querySelector("input");
+      const values = shell.querySelector(".select__value-container");
+      const options = shell.dataset.options.split("|");
+      const render = () => {
+        shell.querySelector("[role=listbox]")?.remove();
+        const box = document.createElement("div");
+        box.id = `react-select-${input.id}-listbox`;
+        box.setAttribute("role", "listbox");
+        const typed = input.value.toLowerCase();
+        options.filter((o) => o.toLowerCase().includes(typed)).forEach((o, i) => {
+          const opt = document.createElement("div");
+          opt.setAttribute("role", "option");
+          opt.id = `react-select-${input.id}-option-${i}`;
+          opt.textContent = o;
+          opt.addEventListener("click", () => {
+            if (!shell.dataset.multi) values.querySelector(".select__single-value")?.remove();
+            const chosen = document.createElement("div");
+            chosen.className = shell.dataset.multi ? "select__multi-value__label" : "select__single-value";
+            chosen.textContent = o;
+            values.prepend(chosen);
+            input.value = "";
+            box.remove();
+          });
+          box.append(opt);
+        });
+        shell.append(box);
+      };
+      input.addEventListener("click", render);
+      input.addEventListener("input", render);
+      input.addEventListener("keydown", (e) => e.key === "Escape" && shell.querySelector("[role=listbox]")?.remove());
+    }
+    document.getElementById("application-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      document.body.innerHTML = "<h1>Thank you for applying.</h1><p>Your application has been received.</p>";
+    });
+  </script>
+</body>
+</html>

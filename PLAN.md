@@ -617,6 +617,21 @@ choices must not block it (see "Keep open" below).
   `required_streak` (default 3) clean applications I may switch a platform to `auto`, which also submits. Any
   correction or failure switches it back and becomes a lesson.
 - LinkedIn Easy Apply is out of scope (terms forbid automation; jobs come from alert emails only).
+- **v1 (built first): Greenhouse, supervised.**
+  - `pnpm worker:apply` signs in as me (email + password asked once in the terminal; only the refreshable session
+    is kept, in `data/apply-session.json`), so RLS limits it to my rows. No service-role key on my machine.
+  - Chrome runs from its own profile in `data/apply-chrome`, so sign-ins made there persist between runs.
+  - Every 20 s it looks for approved applications on Greenhouse jobs, one at a time. `applications.apply_step`
+    (`filling` → `waiting_for_you` → `submitting`) and `apply_note` show progress in the web app.
+  - Greenhouse's hosted form (`job-boards.greenhouse.io/{board}/jobs/{id}`) uses each question's field name as the
+    element id; selects are searchable comboboxes picked by option label; the resume is a file input.
+  - Hand-backs (`approved → manual`, cause `worker:handback`, with the reason): no form on the page, a required
+    question without an answer, a field it can't fill, a visible CAPTCHA, the tab closed, or 30 minutes without a
+    submit.
+  - Evidence: the filled form's screenshot (with the answers and resume sha256 in `detail`), then the confirmation
+    page. Both go to the private `evidence` bucket under `<user id>/<application id>/`.
+  - `platforms (user_id, ats, mode, clean_streak, required_streak)`. A clean run is one I submitted without
+    changing a filled field; a change resets the streak. Auto mode (the runner clicks Submit) unlocks at the streak.
 
 **D. Principle wording**
 - Reword principles 4, 8, 9, 10 to lead with what the system does (find jobs through feeds and alert emails;

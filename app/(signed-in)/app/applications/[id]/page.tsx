@@ -33,6 +33,13 @@ const TONE_BOX: Record<Tone, string> = {
   destructive: "border-destructive/40 bg-destructive/10",
 };
 
+/** Headline while the apply runner works on an approved application. */
+const APPLY_STEP_TITLE: Record<string, string> = {
+  filling: "Filling the form now",
+  waiting_for_you: "Filled: click Submit in Chrome",
+  submitting: "Submitting",
+};
+
 /** What to do next with this application, in one colored box at the top. */
 function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[]; flags: Flag[] }) {
   const info = statusInfo(app.status);
@@ -52,13 +59,24 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
     title = "Apply on the employer's site";
     body = (
       <>
-        <p>{app.prepare_error ?? "This form can't be filled automatically."} The resume and answers below are ready to copy.</p>
+        <p>{app.apply_note ?? app.prepare_error ?? "This form can't be filled automatically."} The resume and answers below are ready to copy.</p>
         {(app.job.apply_url ?? app.job.url) && (
           <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
             <ExternalLink /> Open the application form
           </a>
         )}
       </>
+    );
+  } else if (app.status === "approved") {
+    title = app.apply_step ? APPLY_STEP_TITLE[app.apply_step] : "Approved, waiting for the apply runner";
+    body = app.apply_step ? (
+      <p>{app.apply_note}</p>
+    ) : (
+      <p>
+        The apply runner on your computer fills the form in Chrome and waits for you to click Submit. Start it with{" "}
+        <code className="rounded bg-muted px-1">pnpm worker:apply</code>; it picks this up within 20 seconds.
+        {app.apply_note && <span className="mt-1 block text-muted-foreground">{app.apply_note}</span>}
+      </p>
     );
   } else if (app.status === "queued") {
     title = "Ready to review";

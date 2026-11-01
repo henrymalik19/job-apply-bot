@@ -39,14 +39,14 @@ isOneToOne: false
                   ]
                 },"application_evidence_items": {
                   Row: {
-                    "application_id": string,"created_at": string,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null,"updated_at": string
+                    "application_id": string,"created_at": string,"detail": Json | null,"email_message_id": string | null,"id": string,"kind": string,"storage_path": string | null,"text_excerpt": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id": string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
+                    "application_id": string,"created_at"?: string,"detail"?: Json | null,"email_message_id"?: string | null,"id"?: string,"kind": string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "application_id"?: string,"created_at"?: string,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
+                    "application_id"?: string,"created_at"?: string,"detail"?: Json | null,"email_message_id"?: string | null,"id"?: string,"kind"?: string,"storage_path"?: string | null,"text_excerpt"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -111,14 +111,14 @@ isOneToOne: false
                   ]
                 },"applications": {
                   Row: {
-                    "apply_method": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"notified_status": string | null,"prepare_error": string | null,"prepared_at": string | null,"status": string,"submitted_at": string | null,"updated_at": string,"user_id": string
+                    "apply_method": string | null,"apply_note": string | null,"apply_step": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"notified_status": string | null,"prepare_error": string | null,"prepared_at": string | null,"status": string,"submitted_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "apply_method"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -399,6 +399,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "matches_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"platforms": {
+                  Row: {
+                    "ats": string,"clean_streak": number,"created_at": string,"mode": string,"required_streak": number,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ats": string,"clean_streak"?: number,"created_at"?: string,"mode"?: string,"required_streak"?: number,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "ats"?: string,"clean_streak"?: number,"created_at"?: string,"mode"?: string,"required_streak"?: number,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "platforms_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "users"
@@ -740,6 +760,8 @@ isOneToOne: false
 "transition_application":
 { Args: { "p_application_id": string,"p_cause": string,"p_detail"?: Json,"p_to": string }; Returns: {
               "apply_method": string | null,
+"apply_note": string | null,
+"apply_step": string | null,
 "approved_at": string | null,
 "confirmed_at": string | null,
 "cover_letter": string | null,
