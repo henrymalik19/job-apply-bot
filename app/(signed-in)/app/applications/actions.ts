@@ -7,6 +7,7 @@ import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthro
 import { ValidationError } from "@/server/core/errors";
 import { answerQuestion, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
 import { retryApply } from "@/server/modules/apply/apply.service";
+import { excludeCompany } from "@/server/modules/criteria/criteria.service";
 import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
 
@@ -70,7 +71,7 @@ export async function moveApplicationAction(applicationId: string, to: string): 
   return null;
 }
 
-/** Skips an application, with an optional reason and lesson. */
+/** Skips an application, with an optional reason and lesson, and optionally never matches its company again. */
 export async function skipAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { db, owner } = await ownerContext();
   try {
@@ -79,6 +80,7 @@ export async function skipAction(_prev: FormMessageState, formData: FormData): P
       lesson: text(formData, "lesson"),
       lessonScope: text(formData, "lesson_scope") || "scoring",
     });
+    if (formData.get("exclude_company") === "on") await excludeCompany(db, owner.id, text(formData, "company"));
   } catch (err) {
     if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
     throw err;

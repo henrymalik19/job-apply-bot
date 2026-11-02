@@ -14,14 +14,16 @@ const SECTIONS = [
       { href: "/app/applying", label: "Applying", icon: Send },
       { href: "/app/jobs", label: "Jobs", icon: Briefcase },
       { href: "/app/search", label: "Search", icon: SlidersHorizontal },
-      { href: "/app/companies", label: "Companies", icon: Building2 },
       { href: "/app/profile", label: "Profile", icon: UserRound },
       { href: "/app/settings", label: "Settings", icon: Settings },
     ],
   },
   {
     title: "Admin",
-    items: [{ href: "/admin/health", label: "Health", icon: HeartPulse }],
+    items: [
+      { href: "/admin/health", label: "Health", icon: HeartPulse },
+      { href: "/admin/companies", label: "Companies", icon: Building2 },
+    ],
   },
 ] as const;
 

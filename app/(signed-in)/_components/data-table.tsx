@@ -22,7 +22,7 @@ export const scrollingTable = {
  * search params (filters) and change only `?page=`, so reloads and the back
  * button work.
  *
- * @param basePath - The page's path, e.g. `/app/companies`.
+ * @param basePath - The page's path, e.g. `/admin/companies`.
  * @param params - Search params to keep on every link (e.g. active filters).
  */
 export function Pager({

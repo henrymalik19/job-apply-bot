@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
-import { BOARD_ATS, BOARD_TOKEN, boardUrl, parseBoard } from "@/server/integrations/ats/boards";
+import { BOARD_ATS, BOARD_TOKEN, boardUrl, parseBoard, type BoardAts } from "@/server/integrations/ats/boards";
 import { fetchJson } from "@/server/integrations/ats/http";
 import * as companies from "./companies.repository";
 import { ValidationError } from "@/server/core/errors";
@@ -50,6 +50,70 @@ export async function testBoard(input: BoardInput): Promise<BoardCheck> {
     const message = err instanceof Error ? err.message : String(err);
     throw new ValidationError(/404/.test(message) ? "No board found for that token." : `Board check failed: ${message}`);
   }
+}
+
+/** A board found for a company name or URL. */
+export type FoundBoard = { ats: BoardAts; board_token: string; count: number; sampleTitles: string[] };
+
+// Host of each ATS's public board pages; the board token is the first path segment.
+const BOARD_HOSTS: [RegExp, BoardAts][] = [
+  [/(^|\.)greenhouse\.io$/, "greenhouse"],
+  [/^jobs\.lever\.co$/, "lever"],
+  [/^jobs\.ashbyhq\.com$/, "ashby"],
+];
+
+/**
+ * Reads the ATS and board token from a job-board URL, e.g.
+ * job-boards.greenhouse.io/stripe or jobs.ashbyhq.com/ramp/123. Greenhouse
+ * embed links carry the token in `for=`.
+ *
+ * @returns The board, or null when the text isn't a board URL.
+ */
+export function parseBoardUrl(text: string): { ats: BoardAts; board_token: string } | null {
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(text.trim()) ? text.trim() : `https://${text.trim()}`);
+  } catch {
+    return null;
+  }
+  const ats = BOARD_HOSTS.find(([host]) => host.test(url.hostname.toLowerCase()))?.[1];
+  if (!ats) return null;
+  const token = url.searchParams.get("for") ?? url.pathname.split("/").filter(Boolean).find((s) => s !== "embed");
+  return token && BOARD_TOKEN.test(token) ? { ats, board_token: token } : null;
+}
+
+/** Likely board tokens for a company name: "Scale AI" gives scaleai, scale-ai and scale. */
+export function guessTokens(name: string): string[] {
+  const words = name.toLowerCase().replace(/&/g, " and ").replace(/\b(inc|llc|ltd|corp|co|the)\b\.?/g, " ").match(/[a-z0-9]+/g) ?? [];
+  if (words.length === 0) return [];
+  return [...new Set([words.join(""), words.join("-"), ...words.slice(0, 1)])];
+}
+
+/**
+ * Finds a company's job board from its name or a board URL. A URL is checked as
+ * is; a name is tried as a few likely tokens on every supported ATS at once.
+ *
+ * @param query - A company name or a job-board URL.
+ * @param fetchFn - Injected fetch (tests).
+ * @returns Every board that answered with at least one open job, most jobs first.
+ */
+export async function findBoards(query: string, fetchFn?: typeof fetch): Promise<FoundBoard[]> {
+  const fromUrl = parseBoardUrl(query);
+  const candidates = fromUrl
+    ? [fromUrl]
+    : guessTokens(query).flatMap((board_token) => BOARD_ATS.map((ats) => ({ ats, board_token })));
+  const found = await Promise.all(
+    candidates.map(async ({ ats, board_token }) => {
+      try {
+        const jobs = parseBoard(ats, await fetchJson(boardUrl(ats, board_token), { attempts: 1, timeoutMs: 10_000, fetchFn }));
+        return { ats, board_token, count: jobs.length, sampleTitles: jobs.slice(0, 3).map((j) => j.title) };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  // A name's first word alone can hit an unrelated company's empty board; keep boards with jobs.
+  return found.filter((b): b is FoundBoard => b != null && (fromUrl != null || b.count > 0)).sort((a, b) => b.count - a.count);
 }
 
 /**

@@ -5,9 +5,12 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { ValidationError } from "@/server/core/errors";
 import {
   addCompany,
+  findBoards,
+  parseBoardUrl,
   setCompanyActive,
   testBoard,
   type CompanyInput,
+  type FoundBoard,
 } from "@/server/modules/companies/companies.service";
 
 /** Values typed into the add-company form, echoed back so they survive React's form reset. */
@@ -49,6 +52,29 @@ export async function companyFormAction(_prev: FormState, formData: FormData): P
   } catch (err) {
     return toFormError(err, values);
   }
+}
+
+/** State of the find-a-company form: what was searched and the boards that answered. */
+export type FindState = { query?: string; name?: string; found?: FoundBoard[]; error?: string };
+
+/** Finds a company's job board from its name or a board URL. */
+export async function findCompanyAction(_prev: FindState, formData: FormData): Promise<FindState> {
+  await ownerContext();
+  const query = String(formData.get("query") ?? "").trim().slice(0, 300);
+  if (!query) return { error: "Enter a company name or a job-board URL." };
+  const fromUrl = parseBoardUrl(query);
+  // A URL has no company name; start from the token ("scale-ai" -> "Scale Ai") and let the name be edited.
+  const name = fromUrl ? fromUrl.board_token.replace(/[-_.]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : query;
+  const found = await findBoards(query);
+  if (found.length === 0) {
+    return {
+      query,
+      error: fromUrl
+        ? "That board didn't answer. Check the link."
+        : `No Greenhouse, Lever or Ashby board found for "${query}". Paste a link to one of its job postings instead.`,
+    };
+  }
+  return { query, name, found };
 }
 
 /** Pause/Resume button action for one company row. */

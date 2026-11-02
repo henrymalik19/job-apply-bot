@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from "v
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/criteria.service";
+import { excludeCompany, getMatchCriteria, saveMatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { parseJobFilters } from "@/server/modules/jobs/jobs.service";
 import { browseJobs, runMatch } from "@/server/modules/matching/matching.service";
 import type {} from "./setup";
@@ -158,6 +158,14 @@ describe("matching", () => {
     expect((await getMatchCriteria(db, ownerId)).excluded_companies).toContain(`Someone Else ${tag}`);
     expect((await match()).counts.candidates).toBe(0);
     expect((await matchRows()).length).toBe(4);
+  });
+
+  it("adds a skipped job's company to the excluded list once", async () => {
+    await excludeCompany(db, ownerId, `Skipped Co ${tag}`);
+    await excludeCompany(db, ownerId, `skipped co. ${tag}`);
+    const excluded = (await getMatchCriteria(db, ownerId)).excluded_companies;
+    expect(excluded.filter((c) => c.toLowerCase().startsWith("skipped co"))).toEqual([`Skipped Co ${tag}`]);
+    expect(excluded).toContain(`Excluded ${tag}`);
   });
 
   it("lists relevant, matched and ruled-out jobs, sorted in the database", async () => {

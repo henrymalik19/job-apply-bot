@@ -8,7 +8,7 @@ import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { toggleCompanyAction } from "./actions";
-import { AddCompanyForm } from "./forms";
+import { AddCompanyForm, FindCompanyForm } from "./forms";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -25,12 +25,20 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
         <CardHeader>
           <CardTitle>Add a company</CardTitle>
           <CardDescription>
-            The board token is the name in the company&apos;s job-board URL, e.g. boards.greenhouse.io/<b>stripe</b>,
-            jobs.lever.co/<b>palantir</b>, jobs.ashbyhq.com/<b>ramp</b>.
+            Type the company&apos;s name to look for its Greenhouse, Lever or Ashby board, or paste a link to the board or one of its
+            postings. New boards are checked on the next discovery run.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <AddCompanyForm />
+        <CardContent className="flex flex-col gap-4">
+          <FindCompanyForm />
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Know the board token? Enter it yourself</summary>
+            <p className="mt-2 mb-3 text-muted-foreground">
+              The token is the name in the board&apos;s URL, e.g. job-boards.greenhouse.io/<b>stripe</b>, jobs.lever.co/<b>palantir</b>,
+              jobs.ashbyhq.com/<b>ramp</b>.
+            </p>
+            <AddCompanyForm />
+          </details>
         </CardContent>
       </Card>
 
@@ -76,7 +84,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                 ))}
               </TableBody>
             </Table>
-            <Pager page={page} basePath="/app/companies" />
+            <Pager page={page} basePath="/admin/companies" />
             </>
           )}
         </CardContent>
@@ -85,7 +93,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** Companies: add and test boards, and pause or resume them. */
+/** Admin > Companies: find and add job boards, and pause or resume them. */
 export default function CompaniesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

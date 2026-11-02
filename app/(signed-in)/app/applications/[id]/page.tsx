@@ -188,7 +188,7 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <DecideActions applicationId={app.id} canApprove={app.status === "queued"} back={back} />
+        <DecideActions applicationId={app.id} company={app.job.company_name} canApprove={app.status === "queued"} back={back} />
       </CardContent>
     </Card>
   );

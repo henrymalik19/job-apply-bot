@@ -10,10 +10,10 @@ import { FormMessage, type FormMessageState } from "../../_components/form-messa
 import { approveAction, moveApplicationAction, retryApplyAction, skipAction } from "./actions";
 
 /**
- * Approve and Skip as two equal buttons. Skip asks for an optional reason and
- * rule before it's confirmed.
+ * Approve and Skip as two equal buttons. Skip asks for an optional reason,
+ * rule and whether to never match the company again before it's confirmed.
  */
-export function DecideActions({ applicationId, canApprove, back }: { applicationId: string; canApprove: boolean; back: string }) {
+export function DecideActions({ applicationId, company, canApprove, back }: { applicationId: string; company: string; canApprove: boolean; back: string }) {
   const [approveState, approve, approving] = useActionState<FormMessageState, FormData>(approveAction, {});
   const [skipState, skip, skipping] = useActionState<FormMessageState, FormData>(skipAction, {});
   const [skipOpen, setSkipOpen] = useState(false);
@@ -49,6 +49,11 @@ export function DecideActions({ applicationId, canApprove, back }: { application
             <NativeSelectOption value="answers">Rule applies to answers</NativeSelectOption>
             <NativeSelectOption value="global">Rule applies everywhere</NativeSelectOption>
           </NativeSelect>
+          <input type="hidden" name="company" value={company} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="exclude_company" className="size-4 accent-destructive" />
+            Never match jobs at {company}
+          </label>
           <div className="flex items-center gap-2">
             <Button type="submit" variant="destructive" disabled={skipping}>{skipping ? "Skipping…" : "Skip this job"}</Button>
             <Button type="button" variant="ghost" onClick={() => setSkipOpen(false)}>Cancel</Button>

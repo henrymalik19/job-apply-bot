@@ -4,6 +4,7 @@
 // relocation) are one match_criteria row per user.
 import { z } from "zod";
 import { ValidationError } from "@/server/core/errors";
+import { normalize } from "@/shared/text";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { getProfileLines } from "@/server/modules/profile/profile.service";
@@ -132,6 +133,18 @@ export async function saveMatchCriteria(db: Db, userId: string, input: MatchCrit
   if (JSON.stringify(current) === JSON.stringify(next)) return { criteria: current, changed: false };
   await upsertCriteriaRow(db, userId, next);
   return { criteria: next, changed: true };
+}
+
+/**
+ * Adds a company to "Never match these companies" unless it's already there
+ * (case and punctuation ignored). Jobs already matched keep their status.
+ */
+export async function excludeCompany(db: Db, userId: string, company: string): Promise<void> {
+  const name = company.trim().slice(0, 200);
+  if (!name) return;
+  const current = await getMatchCriteria(db, userId);
+  if (current.excluded_companies.some((c) => normalize(c) === normalize(name))) return;
+  await upsertCriteriaRow(db, userId, { ...current, excluded_companies: [...current.excluded_companies, name] });
 }
 
 /** One suggested title phrase and why. */
