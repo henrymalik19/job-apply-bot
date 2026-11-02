@@ -190,7 +190,7 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
   );
 }
 
-/** One group of questions; `collapsed` puts it behind a summary line. */
+/** One group of questions; `collapsible` puts it behind a summary line you can open and close. */
 function QuestionGroup(props: {
   title: string;
   hint: string;
@@ -199,15 +199,16 @@ function QuestionGroup(props: {
   editable: boolean;
   aiAllowed: (q: ApplicationQuestion) => boolean;
   tone?: Tone;
-  collapsed?: boolean;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const { title, hint, questions, app, editable, aiAllowed, tone, collapsed = false } = props;
+  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false } = props;
   if (questions.length === 0) return null;
   const list = (
     <div className="divide-y">
       {questions.map((q) =>
         editable ? (
-          <div key={q.id} id={`q-${q.id}`} className="scroll-mt-20">
+          <div key={q.id} id={`q-${q.id}`} className="scroll-mt-40">
             <QuestionForm q={q} applicationId={app.id} showBucket={false} aiAllowed={aiAllowed(q)} />
           </div>
         ) : (
@@ -224,9 +225,9 @@ function QuestionGroup(props: {
   );
   return (
     <Card>
-      {collapsed ? (
+      {collapsible ? (
         <CardContent>
-          <details className="group">
+          <details className="group" open={defaultOpen}>
             <summary className="flex cursor-pointer list-none items-start gap-2 [&::-webkit-details-marker]:hidden">
               <ChevronRight className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-90" />
               <span className="flex flex-col">
@@ -273,17 +274,17 @@ async function ApplicationDetail({ params }: { params: Params }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge>
-          <SiteBadge source={app.job.source} />
-          {app.job.closed_at && <Badge variant="outline">Posting closed</Badge>}
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{app.job.title}</h1>
-          <p className="text-lg">{app.job.company_name}</p>
+      {/* Stays at the top while the questions scroll; the negative margins cover the page padding. */}
+      <header className="sticky -top-8 z-10 -mx-4 -mt-4 flex flex-wrap items-end justify-between gap-3 border-b bg-background px-4 pt-4 pb-3 md:-mx-8 md:px-8">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge>
+            <SiteBadge source={app.job.source} />
+            {app.job.closed_at && <Badge variant="outline">Posting closed</Badge>}
+          </div>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">{app.job.title}</h1>
           <p className="text-sm text-muted-foreground">
-            {[app.job.location, salary, app.job.posted_at ? `posted ${ago(app.job.posted_at, now)}` : null].filter(Boolean).join(" · ")}
+            {[app.job.company_name, app.job.location, salary, app.job.posted_at ? `posted ${ago(app.job.posted_at, now)}` : null].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -323,6 +324,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
             editable={editable}
             aiAllowed={aiAllowed}
             tone="muted"
+            collapsible
           />
           <QuestionGroup
             title="Double-check these"
@@ -332,6 +334,8 @@ async function ApplicationDetail({ params }: { params: Params }) {
             editable={editable}
             aiAllowed={aiAllowed}
             tone="info"
+            collapsible
+            defaultOpen
           />
           <QuestionGroup
             title="Filled automatically"
@@ -341,10 +345,10 @@ async function ApplicationDetail({ params }: { params: Params }) {
             editable={editable}
             aiAllowed={aiAllowed}
             tone="success"
-            collapsed
+            collapsible
           />
         </div>
-        <aside className="flex flex-col gap-6 lg:sticky lg:top-4">
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-32">
           {editable && <Decide app={app} />}
           <MatchCard match={match} stacked showThreshold={false} />
           <ResumeCard resume={resume} url={url} />
