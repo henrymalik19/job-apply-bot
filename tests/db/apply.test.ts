@@ -176,7 +176,7 @@ describe("apply runner", () => {
     expect((await app(id)).status).toBe("interviewing");
     await expect(moveApplication(db, userId, id, "responded")).rejects.toBeInstanceOf(IllegalTransitionError);
     await expect(moveApplication(db, userId, id, "approved")).rejects.toThrow(/can only be moved/);
-    expect((await listUserMoves(db)).submitted).toEqual(expect.arrayContaining(["responded", "interviewing", "rejected"]));
+    expect((await listUserMoves(db)).submitted).toEqual(expect.arrayContaining(["responded", "interviewing", "offer", "rejected"]));
   });
 
   it("refuses auto mode until the streak is earned", async () => {
