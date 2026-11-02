@@ -20,7 +20,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
-import { DecideActions, RetryApplyButton } from "../decide-actions";
+import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 
 type Params = Promise<{ id: string }>;
@@ -60,7 +60,10 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
             <ExternalLink /> Open the application form
           </a>
         )}
-        {canRetry(app.job.source, app.apply_note) && <RetryApplyButton applicationId={app.id} className="mt-2" />}
+        <div className="mt-2 flex flex-wrap items-start gap-2">
+          <MarkAppliedButton applicationId={app.id} />
+          {canRetry(app.job.source, app.apply_note) && <RetryApplyButton applicationId={app.id} />}
+        </div>
       </>
     );
   } else if (app.status === "approved" && !runnerFills(app.job.source)) {
@@ -73,6 +76,7 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
             <ExternalLink /> Open the application form
           </a>
         )}
+        <MarkAppliedButton applicationId={app.id} className="mt-2" />
       </>
     );
   } else if (app.status === "approved") {
@@ -179,7 +183,7 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
           {app.status === "queued"
             ? "Approving moves it to your to-submit list; you still submit it yourself."
             : app.status === "manual"
-              ? "Once you've applied on the employer's site, or decided not to, skip it here."
+              ? "Once you've applied on the employer's site, click I applied above; if you decided not to, skip it here."
               : "Approve unlocks once every required question is answered."}
         </CardDescription>
       </CardHeader>

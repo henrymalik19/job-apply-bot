@@ -16,12 +16,13 @@ import { normalize } from "@/shared/text";
 import {
   getApplication,
   listOpenQuestions,
+  listTransitions,
   transition,
   updateQuestion,
   type ApplicationQuestion,
   type ApplicationWithDetails,
 } from "./applications.repository";
-import type { AppStatus } from "./application-status";
+import { USER_MOVE_TARGETS, type AppStatus } from "./application-status";
 
 export {
   countByStatus,
@@ -229,4 +230,27 @@ export async function skipApplication(
   if (input.lesson?.trim()) {
     await addLesson(db, userId, { rule: input.lesson, scope: input.lessonScope ?? "scoring", source: `Skipped ${app.job.title} at ${app.job.company_name}` });
   }
+}
+
+/**
+ * Moves an application by hand (the board, or "I applied" on Apply yourself) to one of
+ * {@link USER_MOVE_TARGETS}; the database still decides whether the move is allowed.
+ *
+ * @throws {@link ValidationError} for another target or a missing application.
+ */
+export async function moveApplication(db: Db, userId: string, applicationId: string, to: string): Promise<void> {
+  const target = USER_MOVE_TARGETS.find((s) => s === to);
+  if (!target) throw new ValidationError("Applications can only be moved to Submitted, Heard back, Interviewing, Offer or Rejected.");
+  const app = await getApplication(db, userId, z.string().uuid().parse(applicationId));
+  if (!app) throw new ValidationError("That application is gone.");
+  if (app.status === target) return;
+  await transition(db, app.id, target, "user:move");
+}
+
+/** Where each status can be moved by hand, for the board's drop targets and Move menu. */
+export async function listUserMoves(db: Db): Promise<Record<string, AppStatus[]>> {
+  const all = await listTransitions(db);
+  return Object.fromEntries(
+    Object.entries(all).map(([from, tos]) => [from, USER_MOVE_TARGETS.filter((s) => tos.includes(s))]),
+  );
 }

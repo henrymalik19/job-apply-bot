@@ -129,3 +129,11 @@ export async function listOpenQuestions(db: Db, userId: string, statuses: readon
   );
   return rows as unknown as OpenQuestion[];
 }
+
+/** Every allowed status move, as from → the statuses it can go to. */
+export async function listTransitions(db: Db): Promise<Record<string, string[]>> {
+  const rows = unwrap(await db.from("application_status_transitions").select("from_status, to_status"), "list transitions");
+  const out: Record<string, string[]> = {};
+  for (const r of rows) (out[r.from_status] ??= []).push(r.to_status);
+  return out;
+}

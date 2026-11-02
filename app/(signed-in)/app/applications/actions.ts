@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { ownerContext } from "@/server/auth/require-owner";
 import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthropic/claude";
 import { ValidationError } from "@/server/core/errors";
-import { answerQuestion, approveApplication, IllegalTransitionError, skipApplication } from "@/server/modules/applications/applications.service";
+import { answerQuestion, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
 import { retryApply } from "@/server/modules/apply/apply.service";
 import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
@@ -54,6 +54,20 @@ export async function retryApplyAction(_prev: FormMessageState, formData: FormDa
   }
   refresh();
   return { ok: "Sent back to the apply runner; it picks it up within 20 seconds while it's running." };
+}
+
+/** Moves an application by hand (board drag, Move menu, "I applied"); returns an error message or null. */
+export async function moveApplicationAction(applicationId: string, to: string): Promise<string | null> {
+  const { db, owner } = await ownerContext();
+  try {
+    await moveApplication(db, owner.id, applicationId, to);
+  } catch (err) {
+    if (err instanceof ValidationError) return err.message;
+    if (err instanceof IllegalTransitionError) return "That move isn't allowed from its current status.";
+    throw err;
+  }
+  refresh();
+  return null;
 }
 
 /** Skips an application, with an optional reason and lesson. */

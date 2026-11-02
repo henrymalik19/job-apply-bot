@@ -1,13 +1,13 @@
 "use client";
 
-import { Check, RotateCw, X } from "lucide-react";
-import { useActionState, useState } from "react";
+import { Check, RotateCw, Send, X } from "lucide-react";
+import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { cn } from "@/shared/cn";
 import { FormMessage, type FormMessageState } from "../../_components/form-message";
-import { approveAction, retryApplyAction, skipAction } from "./actions";
+import { approveAction, moveApplicationAction, retryApplyAction, skipAction } from "./actions";
 
 /**
  * Approve and Skip as two equal buttons. Skip asks for an optional reason and
@@ -71,5 +71,33 @@ export function RetryApplyButton({ applicationId, className }: { applicationId: 
       </Button>
       <FormMessage state={state} />
     </form>
+  );
+}
+
+/** "I applied" for an application you submitted on the employer's site: moves it to Submitted. */
+export function MarkAppliedButton({ applicationId, className }: { applicationId: string; className?: string }) {
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [pending, startTransition] = useTransition();
+  return (
+    <span className={cn("flex flex-col gap-1", className)}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={pending || done}
+        className="w-fit"
+        onClick={() =>
+          startTransition(async () => {
+            const err = await moveApplicationAction(applicationId, "submitted");
+            if (err) setError(err);
+            else setDone(true);
+          })
+        }
+      >
+        <Send /> {pending ? "Saving…" : done ? "Marked as applied" : "I applied"}
+      </Button>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </span>
   );
 }

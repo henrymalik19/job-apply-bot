@@ -14,7 +14,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
-import { RetryApplyButton } from "../applications/decide-actions";
+import { MarkAppliedButton, RetryApplyButton } from "../applications/decide-actions";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -77,6 +77,7 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
               <ExternalLink /> Apply
             </a>
           )}
+          <MarkAppliedButton applicationId={app.id} />
           {canRetry(app.job.source, app.apply_note) && <RetryApplyButton applicationId={app.id} />}
         </span>
       </span>

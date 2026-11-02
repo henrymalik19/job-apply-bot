@@ -1,132 +1,60 @@
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
 import { Suspense } from "react";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
-import { listApplications, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { BOARD_STATUSES, listApplications, listUserMoves, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { ago } from "@/shared/format";
+import { InfoTip } from "../../_components/info-tip";
 import { runnerFills, SiteBadge } from "../../_components/site-badge";
-import { APPLY_STEP_TITLE, TONE_BADGE } from "../../_components/status";
+import { APPLY_STEP_TITLE, statusInfo } from "../../_components/status";
+import { Board, type BoardCard, type BoardColumn } from "./board";
 
-/** Recently submitted applications shown below the approved ones. */
-const RECENT_LIMIT = 20;
+const COLUMNS: BoardColumn[] = [
+  { key: "approved", label: "Approved", statuses: ["approved"], target: null },
+  { key: "submitted", label: "Submitted", statuses: ["submitted", "confirmed"], target: "submitted" },
+  { key: "responded", label: "Heard back", statuses: ["responded"], target: "responded" },
+  { key: "interviewing", label: "Interviewing", statuses: ["interviewing"], target: "interviewing" },
+  { key: "offer", label: "Offer", statuses: ["offer"], target: "offer" },
+  { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: "rejected", muted: true },
+];
 
-function JobCell({ app }: { app: ApplicationWithDetails }) {
-  return (
-    <TableCell className="max-w-md whitespace-normal">
-      <Link href={`/app/applications/${app.id}`} className="font-medium hover:underline">{app.job.title}</Link>
-      <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-        {app.job.company_name}
-        <SiteBadge source={app.job.source} />
-      </div>
-    </TableCell>
-  );
-}
-
-/** Where an approved application stands: queued for the runner, being filled, or yours to submit. */
-function ApprovedState({ app }: { app: ApplicationWithDetails }) {
-  if (!runnerFills(app.job.source)) {
-    return (
-      <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-        <ExternalLink /> Apply yourself
-      </a>
-    );
+/** The line under a card's company: what the runner is doing, or when it reached this status. */
+function cardLine(app: ApplicationWithDetails, now: Date): string {
+  if (app.status === "approved") {
+    if (!runnerFills(app.job.source)) return "Apply on the employer's site, then move it to Submitted";
+    return app.apply_step ? (APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step) : "Waiting for the apply runner";
   }
-  if (app.apply_step) return <Badge className={TONE_BADGE.info}>{APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step}</Badge>;
-  return <Badge className={TONE_BADGE.muted}>Waiting for the runner</Badge>;
+  return `${statusInfo(app.status).label} ${ago(app.last_status_at, now)}`;
 }
 
 async function Applying() {
   const { db, owner } = await ownerContext();
-  const [approved, done] = await Promise.all([
-    listApplications(db, owner.id, ["approved"]),
-    listApplications(db, owner.id, ["submitted", "confirmed"]),
-  ]);
+  const [apps, moves] = await Promise.all([listApplications(db, owner.id, BOARD_STATUSES), listUserMoves(db)]);
   const now = new Date();
-  // The runner takes the oldest approval first.
-  approved.sort((a, b) => (a.approved_at ?? "").localeCompare(b.approved_at ?? ""));
-  const recent = done.sort((a, b) => (b.submitted_at ?? "").localeCompare(a.submitted_at ?? "")).slice(0, RECENT_LIMIT);
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>{approved.length} approved</CardTitle>
-          <CardDescription>
-            The apply runner on your computer (<code>pnpm worker:apply</code>) checks every 20 seconds and fills these one
-            at a time, oldest first. Sites it can&apos;t fill yet are yours to apply to. Anything it hands back moves to
-            Needs you with the reason.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {approved.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing approved right now. Approve applications on Review.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Approved</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {approved.map((a) => (
-                  <TableRow key={a.id}>
-                    <JobCell app={a} />
-                    <TableCell className="whitespace-normal">
-                      <ApprovedState app={a} />
-                      {a.apply_note && <p className="mt-1 text-sm text-muted-foreground">{a.apply_note}</p>}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{a.approved_at ? ago(a.approved_at, now) : "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recently submitted</CardTitle>
-          <CardDescription>The last {RECENT_LIMIT} applications sent, newest first. Each keeps screenshots of the filled form and the confirmation.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recent.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing submitted yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Submitted</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recent.map((a) => (
-                  <TableRow key={a.id}>
-                    <JobCell app={a} />
-                    <TableCell className="text-muted-foreground">{a.submitted_at ? ago(a.submitted_at, now) : "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </>
-  );
+  // Most recent change first within each column; the runner takes approvals oldest first.
+  apps.sort((a, b) => b.last_status_at.localeCompare(a.last_status_at));
+  const cards: BoardCard[] = apps.map((a) => ({
+    id: a.id,
+    status: a.status,
+    title: a.job.title,
+    company: a.job.company_name,
+    badge: <SiteBadge source={a.job.source} />,
+    line: cardLine(a, now),
+    applyUrl: a.status === "approved" && !runnerFills(a.job.source) ? (a.job.apply_url ?? a.job.url) : null,
+  }));
+  return <Board columns={COLUMNS} cards={cards} moves={moves} />;
 }
 
-/** Applying: approved applications and where each stands, then what was sent. */
+/** Applying: everything after approval as a board, from the apply runner's queue to offers. */
 export default function ApplyingPage() {
   return (
-    <main className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Applying</h1>
+    <main className="flex flex-col gap-4 md:h-full">
+      <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        Applying
+        <InfoTip label="About the board">
+          Approved applications on Greenhouse wait for the apply runner on your computer (<code>pnpm worker:apply</code>), which
+          fills them one at a time. Drag a card, or use its Move menu, when you apply yourself, hear back, get an interview, an
+          offer or a no. Anything the runner hands back goes to To do.
+        </InfoTip>
+      </h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <Applying />
       </Suspense>

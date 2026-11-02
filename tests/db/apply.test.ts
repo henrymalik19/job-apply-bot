@@ -4,11 +4,13 @@
 //   - a field the user changed before submitting resets the streak
 //   - a required question without an answer, or a CAPTCHA, hands it back as Apply yourself
 //   - a handed-back application can go back to the runner
+//   - moving by hand (the board) follows the allowed transitions
 //   - auto mode is refused until the streak is earned
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
+import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server/modules/applications/applications.service";
 import { listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { applyOne, retryApply, setPlatformMode, type FormDriver } from "@/server/modules/apply/apply.service";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
@@ -165,6 +167,16 @@ describe("apply runner", () => {
     expect(await app(id)).toMatchObject({ status: "approved", apply_step: null, apply_note: null });
     expect((await listReadyToApply(db, userId, ["greenhouse"])).map((a) => a.id)).toContain(id);
     await expect(retryApply(db, userId, id)).rejects.toThrow(/handed back/);
+  });
+
+  it("moves an application by hand along the board, only where allowed", async () => {
+    const id = await addApproved("moved");
+    await moveApplication(db, userId, id, "submitted");
+    await moveApplication(db, userId, id, "interviewing");
+    expect((await app(id)).status).toBe("interviewing");
+    await expect(moveApplication(db, userId, id, "responded")).rejects.toBeInstanceOf(IllegalTransitionError);
+    await expect(moveApplication(db, userId, id, "approved")).rejects.toThrow(/can only be moved/);
+    expect((await listUserMoves(db)).submitted).toEqual(expect.arrayContaining(["responded", "interviewing", "rejected"]));
   });
 
   it("refuses auto mode until the streak is earned", async () => {
