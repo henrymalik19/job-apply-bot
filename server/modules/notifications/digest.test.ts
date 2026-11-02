@@ -50,6 +50,6 @@ describe("buildDigest", () => {
     expect(text).toContain("Question: Do you hold a clearance?");
     expect(text).toContain("no public form");
     expect(html).toContain("Platform &lt;Lead&gt;");
-    expect(html).toContain('href="https://example.test/app/needs-you"');
+    expect(html).toContain('href="https://example.test/app/todo?tab=answers"');
   });
 });

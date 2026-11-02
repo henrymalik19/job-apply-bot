@@ -50,3 +50,9 @@ export const APPLY_STEP_TITLE: Record<string, string> = {
   waiting_for_you: "Filled: click Submit in Chrome",
   submitting: "Submitting",
 };
+
+/** Where the To do page lists an application of this status, for back links and redirects. */
+export function todoHref(status: string): string {
+  const tab = ({ queued: "ready", needs_input: "answers", manual: "yourself" } as Record<string, string>)[status];
+  return tab ? `/app/todo?tab=${tab}` : "/app/todo";
+}

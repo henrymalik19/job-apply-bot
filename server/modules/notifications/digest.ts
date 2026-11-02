@@ -59,9 +59,9 @@ export function inQuietHours(now: Date, quiet: QuietHours): boolean {
 const SECTIONS: { status: NotifyStatus; heading: string; page: string; count: (n: number) => string }[] = [
   { status: "offer", heading: "Offers", page: "/app", count: (n) => `${n} offer${n === 1 ? "" : "s"}` },
   { status: "interviewing", heading: "Interviews", page: "/app", count: (n) => `${n} interview${n === 1 ? "" : "s"}` },
-  { status: "needs_input", heading: "Questions only you can answer", page: "/app/needs-you", count: (n) => `${n} need${n === 1 ? "s" : ""} you` },
-  { status: "manual", heading: "Apply yourself", page: "/app/needs-you", count: (n) => `${n} to apply yourself` },
-  { status: "queued", heading: "Ready to review", page: "/app/review", count: (n) => `${n} ready to review` },
+  { status: "needs_input", heading: "Questions only you can answer", page: "/app/todo?tab=answers", count: (n) => `${n} need${n === 1 ? "s" : ""} you` },
+  { status: "manual", heading: "Apply yourself", page: "/app/todo?tab=yourself", count: (n) => `${n} to apply yourself` },
+  { status: "queued", heading: "Ready to review", page: "/app/todo?tab=ready", count: (n) => `${n} ready to review` },
 ];
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

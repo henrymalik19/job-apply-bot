@@ -19,7 +19,7 @@ import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
-import { APPLY_STEP_TITLE, statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
+import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 
@@ -170,7 +170,7 @@ function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null
 }
 
 function Decide({ app }: { app: ApplicationWithDetails }) {
-  const back = app.status === "queued" ? "/app/review" : "/app/needs-you";
+  const back = todoHref(app.status);
   return (
     <Card size="sm">
       <CardHeader>
@@ -274,6 +274,9 @@ async function ApplicationDetail({ params }: { params: Params }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <Link href={todoHref(app.status)} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
+        <ArrowLeft /> To do
+      </Link>
       {/* Stays at the top while the questions scroll; the negative margins cover the page padding. */}
       <header className="sticky -top-8 z-10 -mx-4 -mt-4 flex flex-wrap items-end justify-between gap-3 border-b bg-background px-4 pt-4 pb-3 md:-mx-8 md:px-8">
         <div className="min-w-0">
@@ -362,9 +365,6 @@ async function ApplicationDetail({ params }: { params: Params }) {
 export default function ApplicationPage({ params }: { params: Params }) {
   return (
     <main className="flex flex-col gap-4">
-      <Link href="/app/review" className={`${buttonVariants({ variant: "ghost", size: "sm" })} self-start`}>
-        <ArrowLeft /> Review
-      </Link>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <ApplicationDetail params={params} />
       </Suspense>

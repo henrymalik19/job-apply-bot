@@ -45,9 +45,9 @@ export async function getOverview(db: Db, userId: string, now: Date): Promise<Ov
       { label: "Scored", value: matching.scored, hint: "Jobs Claude has scored against your profile and criteria so far, at any score." },
     ],
     waiting: [
-      { status: "needs_input", label: "Needs you", value: byStatus.needs_input, hint: "Prepared, but a required question needs your answer. Once answered it moves to Ready to review.", href: "/app/needs-you" },
-      { status: "manual", label: "Apply yourself", value: byStatus.manual, hint: "The form can't be filled automatically. Resume and answers are ready; apply on the employer's site.", href: "/app/needs-you" },
-      { status: "queued", label: "Ready to review", value: byStatus.queued, hint: "Every required question is answered. Check it, then approve or skip.", href: "/app/review" },
+      { status: "needs_input", label: "Needs you", value: byStatus.needs_input, hint: "Prepared, but a required question needs your answer. Once answered it moves to Ready to review.", href: "/app/todo?tab=answers" },
+      { status: "manual", label: "Apply yourself", value: byStatus.manual, hint: "The form can't be filled automatically. Resume and answers are ready; apply on the employer's site.", href: "/app/todo?tab=yourself" },
+      { status: "queued", label: "Ready to review", value: byStatus.queued, hint: "Every required question is answered. Check it, then approve or skip.", href: "/app/todo?tab=ready" },
     ],
     progress: [
       { status: "approved", label: "Approved", value: byStatus.approved, hint: "You approved it; waiting to be submitted." },

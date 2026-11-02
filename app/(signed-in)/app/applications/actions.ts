@@ -40,7 +40,7 @@ export async function approveAction(_prev: FormMessageState, formData: FormData)
     if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
     throw err;
   }
-  redirect("/app/review");
+  redirect("/app/todo?tab=ready");
 }
 
 /** Sends an application the apply runner handed back to it again. */
@@ -69,7 +69,7 @@ export async function skipAction(_prev: FormMessageState, formData: FormData): P
     if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
     throw err;
   }
-  redirect(text(formData, "back") || "/app/review");
+  redirect(text(formData, "back") || "/app/todo");
 }
 
 /** Redrafts one answer with AI, with optional guidance for this answer. */
