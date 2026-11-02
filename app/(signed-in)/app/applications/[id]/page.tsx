@@ -267,6 +267,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const info = statusInfo(app.status);
 
   const yours = app.questions.filter((q) => q.bucket === "needs_user" || q.bucket === "cannot_automate");
+  const optional = yours.filter((q) => !q.required);
   const toCheck = app.questions.filter((q) => !yours.includes(q) && (q.bucket === "drafted" || q.needs_check));
   const filled = app.questions.filter((q) => !yours.includes(q) && !toCheck.includes(q));
 
@@ -307,12 +308,21 @@ async function ApplicationDetail({ params }: { params: Params }) {
           )}
           <QuestionGroup
             title="Needs your answer"
-            hint="Couldn't be answered from your profile or saved answers. Short answers you give here are remembered, so other applications fill them in automatically."
-            questions={yours}
+            hint="Required, and couldn't be answered from your profile or saved answers. Short answers you give here are remembered, so other applications fill them in automatically."
+            questions={yours.filter((q) => q.required)}
             app={app}
             editable={editable}
             aiAllowed={aiAllowed}
             tone="warning"
+          />
+          <QuestionGroup
+            title="Optional, no answer yet"
+            hint="Not required: the application goes through without these. Answer any you'd like included; short answers are remembered for other forms."
+            questions={optional}
+            app={app}
+            editable={editable}
+            aiAllowed={aiAllowed}
+            tone="muted"
           />
           <QuestionGroup
             title="Double-check these"
