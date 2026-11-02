@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, RotateCw, X } from "lucide-react";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { cn } from "@/shared/cn";
 import { FormMessage, type FormMessageState } from "../../_components/form-message";
-import { approveAction, skipAction } from "./actions";
+import { approveAction, retryApplyAction, skipAction } from "./actions";
 
 /**
  * Approve and Skip as two equal buttons. Skip asks for an optional reason and
@@ -56,5 +57,19 @@ export function DecideActions({ applicationId, canApprove, back }: { application
         </form>
       )}
     </div>
+  );
+}
+
+/** "Try the runner again" for an application the apply runner handed back. */
+export function RetryApplyButton({ applicationId, className }: { applicationId: string; className?: string }) {
+  const [state, retry, retrying] = useActionState<FormMessageState, FormData>(retryApplyAction, {});
+  return (
+    <form action={retry} className={cn("flex flex-col gap-1", className)}>
+      <input type="hidden" name="application_id" value={applicationId} />
+      <Button type="submit" size="sm" variant="outline" disabled={retrying || !!state.ok} className="w-fit">
+        <RotateCw /> {retrying ? "Sending…" : "Try the runner again"}
+      </Button>
+      <FormMessage state={state} />
+    </form>
   );
 }

@@ -6,6 +6,7 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthropic/claude";
 import { ValidationError } from "@/server/core/errors";
 import { answerQuestion, approveApplication, IllegalTransitionError, skipApplication } from "@/server/modules/applications/applications.service";
+import { retryApply } from "@/server/modules/apply/apply.service";
 import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
 
@@ -40,6 +41,19 @@ export async function approveAction(_prev: FormMessageState, formData: FormData)
     throw err;
   }
   redirect("/app/review");
+}
+
+/** Sends an application the apply runner handed back to it again. */
+export async function retryApplyAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+  const { db, owner } = await ownerContext();
+  try {
+    await retryApply(db, owner.id, text(formData, "application_id"));
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
+    throw err;
+  }
+  refresh();
+  return { ok: "Sent back to the apply runner; it picks it up within 20 seconds while it's running." };
 }
 
 /** Skips an application, with an optional reason and lesson. */

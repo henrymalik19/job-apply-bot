@@ -3,13 +3,14 @@
 //   - a supervised run fills, records both screenshots, marks it submitted and grows the streak
 //   - a field the user changed before submitting resets the streak
 //   - a required question without an answer, or a CAPTCHA, hands it back as Apply yourself
+//   - a handed-back application can go back to the runner
 //   - auto mode is refused until the streak is earned
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import { listReadyToApply } from "@/server/modules/apply/apply.repository";
-import { applyOne, setPlatformMode, type FormDriver } from "@/server/modules/apply/apply.service";
+import { applyOne, retryApply, setPlatformMode, type FormDriver } from "@/server/modules/apply/apply.service";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import type {} from "./setup";
 import { testUser } from "./users";
@@ -153,12 +154,17 @@ describe("apply runner", () => {
     expect(await app(id)).toMatchObject({ status: "manual", apply_step: null, apply_note: expect.stringContaining("Why us?") });
   });
 
-  it("hands back when a CAPTCHA shows, without submitting", async () => {
+  it("hands back when a CAPTCHA shows, without submitting, and can be retried", async () => {
     const id = await addApproved("captcha");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
     const outcome = await applyOne(deps(fakeDriver({ challenge: true }).driver), job);
     expect(outcome).toMatchObject({ result: "handed_back", reason: expect.stringContaining("verification") });
     expect((await app(id)).status).toBe("manual");
+
+    await retryApply(db, userId, id);
+    expect(await app(id)).toMatchObject({ status: "approved", apply_step: null, apply_note: null });
+    expect((await listReadyToApply(db, userId, ["greenhouse"])).map((a) => a.id)).toContain(id);
+    await expect(retryApply(db, userId, id)).rejects.toThrow(/handed back/);
   });
 
   it("refuses auto mode until the streak is earned", async () => {

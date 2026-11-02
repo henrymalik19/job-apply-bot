@@ -12,6 +12,7 @@ import {
   type ApplicationQuestion,
   type ApplicationWithDetails,
 } from "@/server/modules/applications/applications.service";
+import { canRetry } from "@/server/modules/apply/apply.service";
 import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { getApplicationResume, signedPdfUrl, type Resume, type ResumeDoc } from "@/server/modules/resumes/resumes.service";
 import { cn } from "@/shared/cn";
@@ -19,7 +20,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { APPLY_STEP_TITLE, statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
-import { DecideActions } from "../decide-actions";
+import { DecideActions, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 
 type Params = Promise<{ id: string }>;
@@ -59,6 +60,7 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
             <ExternalLink /> Open the application form
           </a>
         )}
+        {canRetry(app.job.source, app.apply_note) && <RetryApplyButton applicationId={app.id} className="mt-2" />}
       </>
     );
   } else if (app.status === "approved" && !runnerFills(app.job.source)) {

@@ -3,7 +3,8 @@
 // confirmation and mark it submitted. Anything it can't do is handed back as
 // Apply yourself with the reason; it never works around CAPTCHAs or bot checks.
 import type { Db, Json } from "@/server/db/types";
-import { transition } from "@/server/modules/applications/applications.repository";
+import { ValidationError } from "@/server/core/errors";
+import { getApplication, transition } from "@/server/modules/applications/applications.repository";
 import {
   addEvidence,
   downloadResume,
@@ -212,3 +213,18 @@ export async function setPlatformMode(db: Db, userId: string, ats: string, mode:
   await getPlatform(db, userId, ats);
   await updatePlatform(db, userId, ats, { mode });
 }
+
+/** Sends an application the runner handed back to it again (after you fixed what stopped it, say). */
+export async function retryApply(db: Db, userId: string, applicationId: string): Promise<void> {
+  const app = await getApplication(db, userId, applicationId);
+  if (!app) throw new ValidationError("That application is gone.");
+  if (app.status !== "manual" || !canRetry(app.job.source, app.apply_note)) {
+    throw new ValidationError("Only applications the apply runner handed back can go to it again.");
+  }
+  await setApplyStep(db, app.id, null, null);
+  await transition(db, app.id, "approved", "user:retry_apply");
+}
+
+/** Whether "Try the runner again" applies: a runner site and a hand-back reason from the runner. */
+export const canRetry = (source: string, applyNote: string | null) =>
+  (APPLY_ATS as readonly string[]).includes(source) && applyNote != null;

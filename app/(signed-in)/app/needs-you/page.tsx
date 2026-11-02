@@ -6,6 +6,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ownerContext } from "@/server/auth/require-owner";
 import { blockingQuestions, listApplications } from "@/server/modules/applications/applications.service";
+import { canRetry } from "@/server/modules/apply/apply.service";
+import { RetryApplyButton } from "../applications/decide-actions";
 import { QuestionForm } from "../applications/question-form";
 
 async function NeedsYou() {
@@ -59,6 +61,7 @@ async function NeedsYou() {
               <a href={a.job.apply_url ?? a.job.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "ghost", size: "sm" })}>
                 <ExternalLink /> Apply
               </a>
+              {canRetry(a.job.source, a.apply_note) && <RetryApplyButton applicationId={a.id} />}
             </div>
           ))}
         </CardContent>
