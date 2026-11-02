@@ -65,7 +65,9 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 /** The hosted form URL of a posting on a supported ATS. */
 export function formUrl(job: ApplyJob["job"]): string | null {
   if (job.source === "greenhouse" && job.board_token) {
-    return `https://job-boards.greenhouse.io/${encodeURIComponent(job.board_token)}/jobs/${encodeURIComponent(job.external_id)}`;
+    // The embed page serves the form itself; the hosted job page redirects companies with
+    // their own careers site (Pinterest, say) to it, where the form sits in an iframe.
+    return `https://job-boards.greenhouse.io/embed/job_app?for=${encodeURIComponent(job.board_token)}&token=${encodeURIComponent(job.external_id)}`;
   }
   return null;
 }

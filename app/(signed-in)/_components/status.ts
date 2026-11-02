@@ -43,3 +43,10 @@ export const TONE_BADGE: Record<Tone, string> = {
   muted: "bg-muted text-muted-foreground",
   destructive: "bg-destructive/15 text-destructive",
 };
+
+/** Headline while the apply runner works on an approved application. */
+export const APPLY_STEP_TITLE: Record<string, string> = {
+  filling: "Filling the form now",
+  waiting_for_you: "Filled: click Submit in Chrome",
+  submitting: "Submitting",
+};

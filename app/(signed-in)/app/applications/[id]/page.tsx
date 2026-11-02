@@ -18,7 +18,7 @@ import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
-import { statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
+import { APPLY_STEP_TITLE, statusInfo, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 
@@ -32,13 +32,6 @@ const TONE_BOX: Record<Tone, string> = {
   success: "border-success/40 bg-success/10",
   muted: "border-border bg-muted/40",
   destructive: "border-destructive/40 bg-destructive/10",
-};
-
-/** Headline while the apply runner works on an approved application. */
-const APPLY_STEP_TITLE: Record<string, string> = {
-  filling: "Filling the form now",
-  waiting_for_you: "Filled: click Submit in Chrome",
-  submitting: "Submitting",
 };
 
 /** What to do next with this application, in one colored box at the top. */

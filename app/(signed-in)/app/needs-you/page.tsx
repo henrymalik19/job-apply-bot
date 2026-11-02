@@ -55,7 +55,7 @@ async function NeedsYou() {
             <div key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Link href={`/app/applications/${a.id}`} className="font-medium hover:underline">{a.job.title}</Link>
               <span className="text-muted-foreground">{a.job.company_name}</span>
-              {a.prepare_error && <span className="text-sm text-muted-foreground">({a.prepare_error})</span>}
+              {(a.apply_note ?? a.prepare_error) && <span className="text-sm text-muted-foreground">({a.apply_note ?? a.prepare_error})</span>}
               <a href={a.job.apply_url ?? a.job.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "ghost", size: "sm" })}>
                 <ExternalLink /> Apply
               </a>

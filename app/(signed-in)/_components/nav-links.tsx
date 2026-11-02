@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Building2, ClipboardCheck, HeartPulse, Inbox, LayoutDashboard, Settings, SlidersHorizontal, UserRound } from "lucide-react";
+import { Briefcase, Building2, ClipboardCheck, HeartPulse, Inbox, LayoutDashboard, Send, Settings, SlidersHorizontal, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/cn";
@@ -11,6 +11,7 @@ const SECTIONS = [
     items: [
       { href: "/app", label: "Overview", icon: LayoutDashboard },
       { href: "/app/review", label: "Review", icon: ClipboardCheck },
+      { href: "/app/applying", label: "Applying", icon: Send },
       { href: "/app/needs-you", label: "Needs you", icon: Inbox },
       { href: "/app/jobs", label: "Jobs", icon: Briefcase },
       { href: "/app/search", label: "Search", icon: SlidersHorizontal },
