@@ -2,6 +2,8 @@
 //   - an approved Greenhouse application is listed with its board, questions and resume
 //   - a supervised run fills, records both screenshots, marks it submitted and grows the streak
 //   - a field the user changed before submitting resets the streak
+//   - an optional field it couldn't fill is noted and kept with the evidence
+//   - nobody submitting in time hands it back and closes the tab
 //   - a required question without an answer, or a CAPTCHA, hands it back as Apply yourself
 //   - a handed-back application can go back to the runner
 //   - moving by hand (the board) follows the allowed transitions
@@ -54,19 +56,23 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean } =
   return app!.id;
 }
 
-/** A browser that fills everything and confirms on the second look, optionally with the user's edits or a CAPTCHA. */
-function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean } = {}) {
+/**
+ * A browser that fills everything and confirms on the second look, optionally with the user's
+ * edits, a CAPTCHA, fields it can't fill, or nobody ever submitting.
+ */
+function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean } = {}) {
   const filled: Record<string, string> = {};
   let looks = 0;
   const driver: FormDriver = {
     open: async () => "ok",
     fill: async (step: FillStep) => {
+      if (opts.unfillable?.includes(step.fieldName)) return false;
       filled[step.fieldName] = step.kind === "text" ? step.value : step.kind === "select" ? step.value.join(", ") : "resume.pdf";
       return true;
     },
     values: async () => ({ ...filled, ...opts.edits }),
     challenge: async () => opts.challenge ?? false,
-    confirmation: async () => (++looks > 1 ? "Thank you for applying." : null),
+    confirmation: async () => (!opts.neverSubmitted && ++looks > 1 ? "Thank you for applying." : null),
     submit: async () => {},
     screenshot: async () => PNG,
     focus: async () => {},
@@ -146,6 +152,27 @@ describe("apply runner", () => {
     expect(outcome).toEqual({ result: "submitted", changed: ["First Name"] });
     expect((await app(id)).apply_note).toContain("First Name");
     expect(await streak()).toEqual({ clean_streak: 0, mode: "supervised" });
+  });
+
+  it("records an optional field it couldn't fill and says so in the note", async () => {
+    const id = await addApproved("skipped");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const outcome = await applyOne(
+      { ...deps(fakeDriver({ unfillable: ["question_9", "country"] }).driver), extraSteps: [{ kind: "select", fieldName: "country", label: "Country", required: false, value: ["United States"] }] },
+      job,
+    );
+    expect(outcome).toMatchObject({ result: "submitted" });
+    expect((await app(id)).apply_note).toBe(`Submitted by the apply runner. It couldn't fill "Sponsorship?".`);
+    const { data: evidence } = await db.from("application_evidence_items").select("detail").eq("application_id", id).eq("kind", "screenshot").single();
+    expect(evidence?.detail).toMatchObject({ skipped: ["Sponsorship?"] });
+  });
+
+  it("hands back and closes the tab when nobody submits in time", async () => {
+    const id = await addApproved("timeout");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const outcome = await applyOne({ ...deps(fakeDriver({ neverSubmitted: true }).driver), waitMs: 0 }, job);
+    expect(outcome).toEqual({ result: "handed_back", reason: "Nobody submitted the form within 30 minutes.", closeTab: true });
+    expect((await app(id)).status).toBe("manual");
   });
 
   it("hands back a form with a required question it can't answer", async () => {

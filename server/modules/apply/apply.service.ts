@@ -61,7 +61,10 @@ export type ApplyDeps = {
 };
 
 /** How one run ended. */
-export type ApplyOutcome = { result: "submitted"; changed: string[] } | { result: "handed_back"; reason: string };
+export type ApplyOutcome =
+  | { result: "submitted"; changed: string[] }
+  /** closeTab: nobody is using the tab any more (the wait timed out); otherwise it stays open to finish by hand. */
+  | { result: "handed_back"; reason: string; closeTab?: boolean };
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -76,7 +79,7 @@ export function formUrl(job: ApplyJob["job"]): string | null {
 }
 
 /** Hands an application back to the user as Apply yourself, with the reason. */
-async function handBack(deps: ApplyDeps, app: ApplyJob, reason: string): Promise<ApplyOutcome> {
+async function handBack(deps: ApplyDeps, app: ApplyJob, reason: string): Promise<Extract<ApplyOutcome, { result: "handed_back" }>> {
   deps.log(`${app.id}: handed back: ${reason}`);
   await setApplyStep(deps.db, app.id, null, reason);
   await transition(deps.db, app.id, "manual", "worker:handback", { reason });
@@ -156,9 +159,14 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
 
   if ((await driver.open(url)) === "no_form") return handBack(deps, app, "The posting has no application form (it may have closed).");
   const missed: string[] = [];
+  // Optional questions it couldn't fill; extras are left out, since most forms lack some of them.
+  const skipped: string[] = [];
   for (const step of steps) {
-    if (!(await driver.fill(step, resumePath)) && step.required) missed.push(step.label);
+    if (await driver.fill(step, resumePath)) continue;
+    if (step.required) missed.push(step.label);
+    else if (known.has(step.fieldName)) skipped.push(step.label);
   }
+  const except = skipped.length ? ` It couldn't fill ${skipped.map((m) => `"${m}"`).join(", ")}.` : "";
   if (missed.length) {
     return fail(`Couldn't fill ${missed.map((m) => `"${m}"`).join(", ")}. Finish it in the open Chrome window, or from the job page.`);
   }
@@ -170,20 +178,20 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     applicationId: app.id,
     kind: "screenshot",
     png: await driver.screenshot(),
-    detail: { answers, resume_sha256: app.resume.sha256 } as Json,
+    detail: { answers, skipped, resume_sha256: app.resume.sha256 } as Json,
   });
 
   if (platform.mode === "auto") {
     await setApplyStep(db, app.id, "submitting", `Submitting the form for ${where}.`);
     await driver.submit();
   } else {
-    await setApplyStep(db, app.id, "waiting_for_you", "Filled. Check the Chrome window and click Submit.");
+    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${except} Check the Chrome window and click Submit.`);
     await driver.focus();
   }
 
   const waited = await waitForConfirmation(deps, plan.steps, app, platform);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
-  if ("timedOut" in waited) return fail("Nobody submitted the form within 30 minutes.");
+  if ("timedOut" in waited) return { ...(await fail("Nobody submitted the form within 30 minutes.")), closeTab: true };
 
   const changed = platform.mode === "auto" ? [] : changedFields(plan.steps, waited.last);
   await addEvidence(db, {
@@ -194,7 +202,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     textExcerpt: waited.text.slice(0, 500),
     detail: { changed } as Json,
   });
-  await setApplyStep(db, app.id, null, changed.length ? `Submitted; you changed ${changed.join(", ")}.` : "Submitted by the apply runner.");
+  await setApplyStep(db, app.id, null, (changed.length ? `Submitted; you changed ${changed.join(", ")}.` : "Submitted by the apply runner.") + except);
   await transition(db, app.id, "submitted", "worker:apply", { mode: platform.mode, changed });
   await updatePlatform(db, userId, app.job.source, changed.length
     ? { clean_streak: 0, mode: "supervised" }

@@ -123,7 +123,7 @@ async function main() {
       const ready = await listReadyToApply(db, userId, APPLY_ATS);
       for (const app of ready) {
         if (stopping) break;
-        // Submitted tabs are finished with; handed-back ones stay open for you.
+        // Submitted tabs are finished with; other handed-back ones stay open for you.
         for (const p of done) await p.close().catch(() => undefined);
         done = [];
         const page = await browser.newPage();
@@ -137,6 +137,8 @@ async function main() {
           const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           if (result.result === "submitted") done.push(page);
+          // A form nobody submitted in time is reopened from the app; its tab has no more use.
+          else if (result.closeTab) await page.close().catch(() => undefined);
         } catch (err) {
           both(`${app.id}: failed: ${(err as Error).message}`);
         }
