@@ -122,6 +122,8 @@ export async function applyOne(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOut
   try {
     return await run(deps, app);
   } catch (err) {
+    // The note keeps the first line; the terminal gets the whole trace to debug from.
+    deps.log(`${app.id}: error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     return handBack(deps, app, `The apply runner hit an error: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`);
   }
 }
