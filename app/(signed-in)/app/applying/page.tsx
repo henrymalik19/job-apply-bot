@@ -5,6 +5,7 @@ import { BOARD_STATUSES, countByStatus, listApplications, listUserMoves, runnerH
 import { canRetry } from "@/server/modules/apply/apply.service";
 import { ago } from "@/shared/format";
 import { InfoTip } from "../../_components/info-tip";
+import { LiveRefresh } from "../../_components/live-refresh";
 import { runnerFills, SiteBadge } from "../../_components/site-badge";
 import { APPLY_STEP_TITLE, statusInfo } from "../../_components/status";
 import { Board, type BoardCard, type BoardColumn, type CardNote } from "./board";
@@ -77,6 +78,7 @@ async function Applying() {
 export default function ApplyingPage() {
   return (
     <main className="flex flex-col gap-4 md:h-full">
+      <LiveRefresh />
       <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
         Applying
         <InfoTip label="About the board">

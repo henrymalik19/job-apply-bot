@@ -9,6 +9,7 @@ import { blockingQuestions, listApplications, runnerHandedBack, type Application
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
+import { LiveRefresh } from "../../_components/live-refresh";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
 
@@ -157,6 +158,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
 export default function TodoPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">
+      <LiveRefresh />
       <h1 className="text-2xl font-semibold tracking-tight">To do</h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <Todo searchParams={searchParams} />

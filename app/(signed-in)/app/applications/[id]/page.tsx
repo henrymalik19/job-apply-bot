@@ -19,6 +19,7 @@ import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
+import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
@@ -298,6 +299,8 @@ async function ApplicationDetail({ params }: { params: Params }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* While approved the apply runner may be filling it; other states have answer boxes a refresh could disturb. */}
+      {app.status === "approved" && <LiveRefresh everyMs={5000} />}
       <Link href={todoHref(app.status, app.apply_note)} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
         <ArrowLeft /> To do
       </Link>

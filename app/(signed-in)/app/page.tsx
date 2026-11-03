@@ -9,6 +9,7 @@ import { getOverview, type Tile } from "@/server/modules/dashboard/overview.serv
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { InfoTip } from "../_components/info-tip";
+import { LiveRefresh } from "../_components/live-refresh";
 import { statusInfo, type Tone } from "../_components/status";
 
 /** Left accent per tone, so "waiting on you" numbers stand out from the rest. */
@@ -124,6 +125,7 @@ async function Overview() {
 export default function OverviewPage() {
   return (
     <main className="flex flex-col gap-6">
+      <LiveRefresh everyMs={30_000} />
       <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <Overview />
