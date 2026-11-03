@@ -146,6 +146,17 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
       return EMAIL_CODE.test(await form.innerText({ timeout: 1000 }).catch(() => ""));
     },
 
+    async enterEmailCode(code) {
+      // Greenhouse shows one box per character (security-input-0, -1, …); a single box takes it whole.
+      const boxes = page.locator('input[id^="security-input"]');
+      const n = await boxes.count();
+      if (n === 0) return false;
+      if (n === 1) await boxes.first().fill(code);
+      else for (let i = 0; i < Math.min(n, code.length); i++) await boxes.nth(i).fill(code[i]);
+      await form.locator('button[type="submit"]').click();
+      return true;
+    },
+
     async confirmation() {
       if (page.isClosed()) return null;
       const onForm = (await form.count().catch(() => 1)) > 0;

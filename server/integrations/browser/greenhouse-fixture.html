@@ -93,7 +93,13 @@
       e.preventDefault();
       if (askCode) {
         askCode = false;
-        e.target.insertAdjacentHTML("beforeend", '<p>Enter the 8-character code sent to your email</p><input id="security-input-0" maxlength="1">');
+        const boxes = [...Array(8)].map((_, i) => `<input id="security-input-${i}" maxlength="1">`).join("");
+        e.target.insertAdjacentHTML("beforeend", `<p>Enter the 8-character code sent to your email</p>${boxes}`);
+        return;
+      }
+      const sent = [...document.querySelectorAll('input[id^="security-input"]')].map((i) => i.value).join("");
+      if (sent && sent !== "aB3dE9fG") {
+        e.target.insertAdjacentHTML("beforeend", '<p class="helper-text--error">Incorrect security code</p>');
         return;
       }
       document.body.innerHTML = "<h1>Thank you for applying.</h1><p>Your application has been received.</p>";

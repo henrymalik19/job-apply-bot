@@ -82,6 +82,8 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     await driver.submit();
     expect(await driver.emailCode()).toBe(true);
     expect(await driver.confirmation()).toBeNull();
+    expect(await driver.enterEmailCode("aB3dE9fG")).toBe(true);
+    expect(await driver.confirmation()).toContain("Thank you for applying");
   });
 
   it("sees the thank-you page after submit", async () => {

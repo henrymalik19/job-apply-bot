@@ -32,6 +32,8 @@ export interface FormDriver {
   challenge(): Promise<boolean>;
   /** The form asks for a code it emailed to the applicant before it accepts the submit. */
   emailCode(): Promise<boolean>;
+  /** Types the emailed code and submits again; false when there's nowhere to type it. */
+  enterEmailCode(code: string): Promise<boolean>;
   /** The page says the application was received; its text, or null. */
   confirmation(): Promise<string | null>;
   /** Clicks the form's submit button. */
@@ -55,6 +57,11 @@ export type ApplyDeps = {
   /** Your name, for the resume's file name. */
   fullName: string;
   log: (line: string) => void;
+  /**
+   * Reads the code a form emailed you, from your inbox: mail after `since`, for `company`.
+   * Null when none arrives in time; without it you type the code yourself.
+   */
+  readEmailCode?: (since: Date, company: string) => Promise<string | null>;
   /** How long to wait for the user to submit (default 30 minutes). */
   waitMs?: number;
   /** How often to look at the page while waiting (default 2 seconds). */
@@ -89,6 +96,26 @@ async function handBack(deps: ApplyDeps, app: ApplyJob, reason: string): Promise
 }
 
 /**
+ * Reads the emailed code from your inbox and enters it. The mail can land a little
+ * before the form shows the code box, so mail from the last few minutes counts.
+ *
+ * @returns Whether the code was entered (and the form submitted again).
+ */
+async function enterCodeFromInbox(deps: ApplyDeps, app: ApplyJob): Promise<boolean> {
+  if (!deps.readEmailCode) return false;
+  await setApplyStep(deps.db, app.id, "submitting", "The form emailed a code; reading it from your inbox.");
+  deps.log(`${app.id}: the form asks for an emailed code; checking the inbox`);
+  const code = await deps.readEmailCode(new Date(Date.now() - 5 * 60_000), app.job.company_name);
+  if (!code) {
+    deps.log(`${app.id}: no code arrived in the inbox`);
+    return false;
+  }
+  const entered = await deps.driver.enterEmailCode(code);
+  deps.log(`${app.id}: ${entered ? "entered the emailed code and submitted" : "found the code but no box to type it in"}`);
+  return entered;
+}
+
+/**
  * Waits for the confirmation page, keeping the last field values seen so
  * changes the user made can be found afterwards.
  */
@@ -112,8 +139,10 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
     }
     if (!askedForCode && (await driver.emailCode())) {
       askedForCode = true;
-      await setApplyStep(deps.db, app.id, "waiting_for_you", "The form emailed you a code. Enter it in the Chrome window to finish submitting.");
-      await driver.focus();
+      if (!(await enterCodeFromInbox(deps, app))) {
+        await setApplyStep(deps.db, app.id, "waiting_for_you", "The form emailed you a code. Enter it in the Chrome window to finish submitting.");
+        await driver.focus();
+      }
     }
     try {
       last = { ...last, ...(await driver.values(steps)) };

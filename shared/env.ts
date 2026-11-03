@@ -12,12 +12,21 @@ const serverSchema = z.object({
 const workerSchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_SERVICE_ROLE_KEY: true });
 
 // The local apply runner signs in as the user, so it needs only the public URL and anon key.
-const applySchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_ANON_KEY: true });
+// With the job inbox's password it also reads the security code a form emails you, over IMAP
+// (Purelymail by default; the address is your job_inbox setting unless APPLY_IMAP_USER says otherwise).
+// A variable left blank (as copied from .env.example) counts as unset.
+const blank = (v: unknown) => (v === "" ? undefined : v);
+const applySchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_ANON_KEY: true }).extend({
+  JOB_INBOX_PASSWORD: z.preprocess(blank, z.string().min(1).optional()),
+  APPLY_IMAP_HOST: z.preprocess(blank, z.string().min(1).default("imap.purelymail.com")),
+  APPLY_IMAP_PORT: z.preprocess(blank, z.coerce.number().int().positive().default(993)),
+  APPLY_IMAP_USER: z.preprocess(blank, z.string().min(1).optional()),
+});
 
 /** Environment the local apply runner needs. */
 export type ApplyEnv = z.infer<typeof applySchema>;
 
-/** Validates the apply runner's environment (URL + anon key only). */
+/** Validates the apply runner's environment (URL + anon key, and optionally an IMAP login). */
 export function parseApplyEnv(source: Record<string, string | undefined>): ApplyEnv {
   return parse(applySchema, source);
 }

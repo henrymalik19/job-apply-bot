@@ -17,6 +17,7 @@ import type { Database } from "@/server/db/database.types";
 import type { Db } from "@/server/db/types";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { recordRun } from "@/server/integrations/browser/run-recorder";
+import { codeInbox } from "@/server/integrations/email/code-inbox";
 import { clearStaleSteps, listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { greenhouseExtras, type HomePlace } from "@/server/modules/apply/fill-plan";
 import { usStateName } from "@/server/modules/criteria/places";
@@ -86,6 +87,13 @@ async function profileBasics(db: Db, userId: string): Promise<{ name: string; ho
   };
 }
 
+/** Your job inbox's address (the job_inbox setting), where forms email security codes. */
+async function jobInboxAddress(db: Db, userId: string): Promise<string | null> {
+  const { data } = await db.from("user_settings").select("value").eq("user_id", userId).eq("key", "job_inbox").maybeSingle();
+  const address = (data?.value as { address?: unknown } | null)?.address;
+  return typeof address === "string" ? address : null;
+}
+
 async function main() {
   const env = parseApplyEnv(process.env);
   const db: Db = createClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
@@ -115,7 +123,13 @@ async function main() {
   };
   process.on("SIGINT", stop);
   browser.on("close", stop);
+  // With the job inbox's password, the security code a form emails is read and entered for you.
+  const inboxUser = env.APPLY_IMAP_USER ?? (await jobInboxAddress(db, userId));
+  const inbox = inboxUser && env.JOB_INBOX_PASSWORD
+    ? codeInbox({ host: env.APPLY_IMAP_HOST, port: env.APPLY_IMAP_PORT, user: inboxUser, password: env.JOB_INBOX_PASSWORD }, log)
+    : null;
   log(`apply runner started for ${name}; watching for approved ${APPLY_ATS.join(", ")} applications (Ctrl+C to stop)`);
+  log(inbox ? `emailed security codes are read from ${inboxUser}` : "emailed security codes: you type them (no job inbox address or JOB_INBOX_PASSWORD)");
 
   let done: Page[] = [];
   while (!stopping) {
@@ -134,7 +148,7 @@ async function main() {
         };
         let outcome = "error";
         try {
-          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), saveResume, fullName: name, log: both }, app);
+          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           if (result.result === "submitted") done.push(page);
           // A form nobody submitted in time is reopened from the app; its tab has no more use.
