@@ -6,13 +6,15 @@
 // Needs SUPABASE_URL and SUPABASE_ANON_KEY. The first run asks for your email
 // and password; only the refreshable session is kept, in data/apply-session.json.
 // Chrome uses its own profile in data/apply-chrome, so sign-ins you make there stay.
+// Chrome opens when there's an application to fill and closes again once nothing
+// is left open for you (a submitted tab closes 10 seconds after the thank-you page).
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { createClient } from "@supabase/supabase-js";
-import { chromium, type Page } from "playwright-core";
+import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Database } from "@/server/db/database.types";
 import type { Db } from "@/server/db/types";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
@@ -27,6 +29,8 @@ import { parseApplyEnv } from "@/shared/env";
 const DATA = path.resolve("data");
 const SESSION_FILE = path.join(DATA, "apply-session.json");
 const POLL_MS = 20_000;
+/** How long a submitted tab stays open, so the thank-you page can be seen. */
+const SUBMITTED_TAB_MS = 10_000;
 
 const log = (line: string) => console.log(`[${new Date().toLocaleTimeString()}] ${line}`);
 
@@ -109,11 +113,28 @@ async function main() {
   const stale = await clearStaleSteps(db, userId);
   if (stale) log(`cleared ${stale} application(s) left mid-way by an earlier run`);
 
-  const browser = await chromium.launchPersistentContext(path.join(DATA, "apply-chrome"), {
-    channel: "chrome",
-    headless: false,
-    viewport: null,
-  });
+  let browser: BrowserContext | null = null;
+  /** Chrome, opened if it isn't (closed by the runner, by you, or with its last tab, it opens again). */
+  const chrome = async (): Promise<BrowserContext> => {
+    if (browser) return browser;
+    const ctx = await chromium.launchPersistentContext(path.join(DATA, "apply-chrome"), { channel: "chrome", headless: false, viewport: null });
+    ctx.on("close", () => {
+      if (browser === ctx) browser = null;
+    });
+    browser = ctx;
+    return ctx;
+  };
+  /** A tab for the next form: the blank one Chrome opens with, or a new one. */
+  const newTab = async (): Promise<Page> => {
+    const ctx = await chrome();
+    return ctx.pages().find((p) => p.url() === "about:blank") ?? ctx.newPage();
+  };
+  /** Closes Chrome when every tab is closed or blank: nothing is being filled or left for you. */
+  const closeIfIdle = async () => {
+    if (!browser || browser.pages().some((p) => !p.isClosed() && p.url() !== "about:blank")) return;
+    await browser.close().catch(() => undefined);
+    browser = null;
+  };
   const files = path.join(tmpdir(), "job-search-autopilot-apply");
   await mkdir(files, { recursive: true });
   const saveResume = async (pdf: Uint8Array, fileName: string) => {
@@ -127,7 +148,6 @@ async function main() {
     stopping = true;
   };
   process.on("SIGINT", stop);
-  browser.on("close", stop);
   // With the job inbox's password, the security code a form emails is read and entered for you.
   const inboxUser = env.APPLY_IMAP_USER ?? (await jobInboxAddress(db, userId));
   const inbox = inboxUser && env.JOB_INBOX_PASSWORD
@@ -136,16 +156,12 @@ async function main() {
   log(`apply runner started for ${name}; watching for approved ${APPLY_ATS.join(", ")} applications (Ctrl+C to stop)`);
   log(inbox ? `emailed security codes are read from ${inboxUser}` : "emailed security codes: you type them (no job inbox address or JOB_INBOX_PASSWORD)");
 
-  let done: Page[] = [];
   while (!stopping) {
     try {
       const ready = await listReadyToApply(db, userId, APPLY_ATS);
       for (const app of ready) {
         if (stopping) break;
-        // Submitted tabs are finished with; other handed-back ones stay open for you.
-        for (const p of done) await p.close().catch(() => undefined);
-        done = [];
-        const page = await browser.newPage();
+        const page = await newTab();
         const record = await recordRun(path.join(DATA, "apply-debug"), app.id, page, greenhouseDriver(page));
         const both = (line: string) => {
           log(line);
@@ -156,8 +172,9 @@ async function main() {
         try {
           const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home, school), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
-          if (result.result === "submitted") done.push(page);
-          // A form nobody submitted in time is reopened from the app; its tab has no more use.
+          // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
+          // ones stay open for you, except a form nobody submitted in time, reopened from the app.
+          if (result.result === "submitted") setTimeout(() => void page.close().catch(() => undefined), SUBMITTED_TAB_MS);
           else if (result.closeTab) closeTab = true;
         } catch (err) {
           both(`${app.id}: failed: ${(err as Error).message}`);
@@ -166,13 +183,15 @@ async function main() {
         // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
         if (closeTab) await page.close().catch(() => undefined);
       }
+      if (ready.length === 0) await closeIfIdle();
     } catch (err) {
       log(`poll failed: ${(err as Error).message}`);
     }
     for (let waited = 0; waited < POLL_MS && !stopping; waited += 500) await new Promise((r) => setTimeout(r, 500));
   }
   await rm(files, { recursive: true, force: true });
-  await browser.close().catch(() => undefined);
+  // Set inside chrome(), which TypeScript can't follow from here.
+  await (browser as BrowserContext | null)?.close().catch(() => undefined);
   log("apply runner stopped");
 }
 
