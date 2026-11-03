@@ -35,6 +35,14 @@ function cardNote(app: ApplicationWithDetails, now: Date): CardNote {
     if (app.apply_step) return { text: APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step, tone: "info" };
     return { text: "Waiting for the runner", detail: "The apply runner on your computer picks it up within 20 seconds while it's running (pnpm worker:apply).", tone: "muted" };
   }
+  // Email tracking confirms an application when the employer's receipt arrives; a day without one is worth a look.
+  if (app.status === "submitted" && app.submitted_at && now.getTime() - new Date(app.submitted_at).getTime() > 86_400_000) {
+    return {
+      text: "No confirmation yet",
+      detail: `Submitted ${ago(app.submitted_at, now)} and no confirmation email has arrived. Check that it went through on the employer's site; some employers don't send one.`,
+      tone: "warning",
+    };
+  }
   const tone = app.status === "offer" || app.status === "interviewing" ? "success" : "muted";
   return { text: ago(app.last_status_at, now), detail: `${statusInfo(app.status).label} since ${new Date(app.last_status_at).toLocaleDateString()}`, tone, since: true };
 }

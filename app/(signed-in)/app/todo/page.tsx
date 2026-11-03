@@ -6,12 +6,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import type { AppStatus } from "@/server/modules/applications/application-status";
 import { blockingQuestions, listApplications, runnerHandedBack, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { matchEmail } from "@/server/modules/tracking/classify";
+import { listUnmatchedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
 import { LiveRefresh } from "../../_components/live-refresh";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
+import { LinkEmail, type LinkTarget } from "./link-email";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -80,14 +83,82 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
   );
 }
 
+/** What an email says, for the Unmatched emails tab. */
+const EMAIL_KIND_LABEL: Record<string, string> = {
+  confirmation: "Confirmation",
+  rejection: "Rejection",
+  interview: "Interview",
+  recruiter: "Recruiter reply",
+};
+
+/** Emails tracking couldn't tie to one application: pick it, and it moves as if matched. */
+function UnmatchedEmails({ emails, apps, now }: { emails: UnmatchedEmail[]; apps: ApplicationWithDetails[]; now: Date }) {
+  const targets: LinkTarget[] = apps.map((a) => ({ id: a.id, label: `${a.job.company_name}: ${a.job.title}` }));
+  const tracked = apps.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at }));
+  return (
+    <Card className={scrollingTable.card}>
+      <CardHeader>
+        <CardDescription>
+          Replies in the job inbox that would move an application, but name a company you applied to more than once, or none
+          tracking could find. Pick the application and it moves as if matched (a rejection to Closed, an interview to
+          Interviewing); dismiss one that isn&apos;t about an application.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className={scrollingTable.content}>
+        {emails.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No emails waiting to be linked.</p>
+        ) : (
+          <Table containerClassName={scrollingTable.container}>
+            <TableHeader className={scrollingTable.header}>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Says</TableHead>
+                <TableHead>Application</TableHead>
+                <TableHead>Received</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {emails.map((e) => {
+                const guess = matchEmail({ fromAddress: e.from, fromName: e.from, subject: e.subject, text: e.snippet, receivedAt: new Date(e.receivedAt) }, tracked);
+                return (
+                  <TableRow key={e.id}>
+                    <TableCell className="max-w-md whitespace-normal align-top">
+                      <span className="font-medium">{e.subject || "(no subject)"}</span>
+                      <span className="block text-sm text-muted-foreground">{e.from}</span>
+                      <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={e.snippet}>{e.snippet}</span>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Badge className={e.kind === "rejection" ? TONE_BADGE.muted : e.kind === "confirmation" ? TONE_BADGE.info : TONE_BADGE.success}>
+                        {EMAIL_KIND_LABEL[e.kind] ?? e.kind}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="align-top"><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} /></TableCell>
+                    <TableCell className="align-top text-muted-foreground">{ago(e.receivedAt, now)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 async function Todo({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
-  const [listed, params] = await Promise.all([listApplications(db, owner.id, TABS.flatMap((t) => t.statuses)), searchParams]);
+  const [listed, params, emails, applied] = await Promise.all([
+    listApplications(db, owner.id, TABS.flatMap((t) => t.statuses)),
+    searchParams,
+    listUnmatchedEmails(db, owner.id),
+    listApplications(db, owner.id, ["approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer"]),
+  ]);
   // Ones the apply runner handed back are on the board (Runner stuck).
   const apps = listed.filter((a) => !runnerHandedBack(a));
   const byTab = Object.fromEntries(TABS.map((t) => [t.id, apps.filter((a) => (t.statuses as readonly string[]).includes(a.status))])) as Record<TabId, ApplicationWithDetails[]>;
   // Without a tab in the URL, open the first lane that has something in it.
   const asked = TABS.find((t) => t.id === one(params.tab));
+  const showEmails = one(params.tab) === "emails" || (!asked && TABS.every((t) => byTab[t.id].length === 0) && emails.length > 0);
   const current = asked ?? TABS.find((t) => byTab[t.id].length > 0) ?? TABS[0];
   const rows = byTab[current.id];
   const now = new Date();
@@ -99,17 +170,30 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
           <Link
             key={t.id}
             href={`/app/todo?tab=${t.id}`}
-            aria-current={current.id === t.id ? "page" : undefined}
+            aria-current={!showEmails && current.id === t.id ? "page" : undefined}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-              current.id === t.id && "bg-background text-foreground shadow-sm",
+              !showEmails && current.id === t.id && "bg-background text-foreground shadow-sm",
             )}
           >
             {t.label}
             <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{byTab[t.id].length}</span>
           </Link>
         ))}
+        <Link
+          href="/app/todo?tab=emails"
+          aria-current={showEmails ? "page" : undefined}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+            showEmails && "bg-background text-foreground shadow-sm",
+          )}
+        >
+          Unmatched emails
+          <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{emails.length}</span>
+        </Link>
       </nav>
+
+      {showEmails ? <UnmatchedEmails emails={emails} apps={applied} now={now} /> : (
 
       <Card className={scrollingTable.card}>
         <CardHeader>
@@ -150,6 +234,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
           )}
         </CardContent>
       </Card>
+      )}
     </>
   );
 }

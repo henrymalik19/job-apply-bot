@@ -7,6 +7,7 @@ import { runMatch } from "@/server/modules/matching/matching.service";
 import { createResendSender } from "@/server/integrations/email/resend";
 import { runNotify } from "@/server/modules/notifications/notifications.service";
 import { runPrepare } from "@/server/modules/prepare/prepare.service";
+import { runTrackEmail } from "@/server/modules/tracking/tracking.service";
 import { listUsers } from "@/server/modules/users/users.service";
 
 /** One stage: what it does for one user, and the variables it needs (any one of them). */
@@ -28,6 +29,21 @@ export const prepare = (limit?: number): Stage => ({
   needs: ["ANTHROPIC_API_KEY"],
   run: (db, userId) => runPrepare({ db, userId, call: createClaudeCaller(), draftCall: createClaudeCaller(DRAFTING_MODEL), limit, log }),
 });
+
+/** Email tracking: reads the job inbox and moves applications by the replies. Claude sorts unclear mail when there's a key. */
+export const trackEmail: Stage = {
+  name: "track_email",
+  needs: ["JOB_INBOX_PASSWORD"],
+  /** Reads the user's job inbox and moves applications by what arrived. */
+  run: (db, userId) =>
+    runTrackEmail({
+      db,
+      userId,
+      password: process.env.JOB_INBOX_PASSWORD ?? "",
+      call: process.env.ANTHROPIC_API_KEY ? createClaudeCaller() : undefined,
+      log,
+    }),
+};
 
 /** Notify (the digest email). */
 export const notify: Stage = {

@@ -30,6 +30,7 @@ export {
   getApplication,
   IllegalTransitionError,
   listApplications,
+  listTransitions,
   transition,
   type Application,
   type ApplicationJob,

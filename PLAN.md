@@ -16,7 +16,8 @@ Do not start the next milestone until the current one is deployed and verified.*
 | M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
 | M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page at / (off → 404). |
 | M4 Matching | **Done.** Live 2026-10-29: 274 jobs → 14 ruled out, 260 scored (76 at 75+), 0 failed, $0.11. |
-| M5–M8 | Not started |
+| M6 Email tracking | **Built 2026-11-03.** track_email runs before the digest on the notify service: rules then Claude Haiku sort the job inbox, matched replies move applications, matched rejections move to the "Rejections (Autopilot)" folder, Unmatched emails on To do, "No confirmation yet" on the board after 24h. |
+| M5, M7, M8 | See the milestones below |
 
 ### Revisions
 

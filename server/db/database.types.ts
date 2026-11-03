@@ -197,14 +197,14 @@ isOneToOne: false
                   ]
                 },"emails": {
                   Row: {
-                    "application_id": string | null,"classification": string | null,"created_at": string,"from_addr": string | null,"id": string,"match_confidence": number | null,"message_id": string,"processed_at": string,"received_at": string,"snippet": string | null,"subject": string | null,"updated_at": string,"user_id": string
+                    "application_id": string | null,"archived_at": string | null,"classification": string | null,"created_at": string,"from_addr": string | null,"id": string,"match_confidence": number | null,"message_id": string,"processed_at": string,"reason": string | null,"received_at": string,"snippet": string | null,"subject": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id": string,"processed_at"?: string,"received_at": string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "application_id"?: string | null,"archived_at"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id": string,"processed_at"?: string,"reason"?: string | null,"received_at": string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "application_id"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id"?: string,"processed_at"?: string,"received_at"?: string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "application_id"?: string | null,"archived_at"?: string | null,"classification"?: string | null,"created_at"?: string,"from_addr"?: string | null,"id"?: string,"match_confidence"?: number | null,"message_id"?: string,"processed_at"?: string,"reason"?: string | null,"received_at"?: string,"snippet"?: string | null,"subject"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {

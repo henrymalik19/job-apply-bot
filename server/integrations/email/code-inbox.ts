@@ -2,11 +2,9 @@
 // one when its bot check doesn't pass) from your own inbox over IMAP, so the
 // apply runner can enter it. Only Greenhouse mail that arrived after the form
 // asked is read, and nothing is kept.
-import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { readInbox, type InboxConfig } from "./inbox";
 
-/** Where your application mail arrives; the password stays in .env.apply. */
-export type InboxConfig = { host: string; port: number; user: string; password: string };
+export type { InboxConfig } from "./inbox";
 
 /** One email the code can come from. */
 export type CodeMail = { subject: string; text: string; received: Date };
@@ -53,35 +51,8 @@ export function pickCode(mails: CodeMail[], since: Date, company: string): strin
  */
 export function codeInbox(config: InboxConfig, log: (line: string) => void = () => {}) {
   async function recentMail(since: Date): Promise<CodeMail[]> {
-    const client = new ImapFlow({
-      host: config.host,
-      port: config.port,
-      secure: true,
-      auth: { user: config.user, pass: config.password },
-      logger: false,
-    });
-    await client.connect();
-    try {
-      const lock = await client.getMailboxLock("INBOX");
-      try {
-        // IMAP's SINCE is by day; the exact time is checked after.
-        const uids = await client.search({ since, from: "greenhouse" }, { uid: true });
-        if (!uids || uids.length === 0) return [];
-        const messages = await client.fetchAll(uids.slice(-10), { source: true, internalDate: true }, { uid: true });
-        const mails: CodeMail[] = [];
-        for (const msg of messages) {
-          if (!msg.source) continue;
-          const parsed = await simpleParser(msg.source);
-          const received = msg.internalDate ? new Date(msg.internalDate) : (parsed.date ?? new Date(0));
-          mails.push({ subject: parsed.subject ?? "", text: parsed.text ?? "", received });
-        }
-        return mails;
-      } finally {
-        lock.release();
-      }
-    } finally {
-      await client.logout().catch(() => undefined);
-    }
+    const mails = await readInbox(config, since, { from: "greenhouse", limit: 10 });
+    return mails.map((m) => ({ subject: m.subject, text: m.text, received: m.receivedAt }));
   }
 
   return {

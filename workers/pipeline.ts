@@ -1,5 +1,5 @@
 // Pipeline worker, for running by hand: discover, then for every user
-// match → prepare → notify, in one process. In production each of these is
+// match → prepare → track_email → notify, in one process. In production each of these is
 // its own Railway service.
 //   pnpm worker:pipeline   (reads .env.local locally; Railway variables in production)
 // Matching and prepare need ANTHROPIC_API_KEY, notify needs RESEND_API_KEY (or JOB_INBOX_PASSWORD for SMTP);
@@ -9,13 +9,13 @@
 import { createServiceClient } from "@/server/db/service-client";
 import { runDiscover } from "@/server/modules/discovery/discovery.service";
 import { parseWorkerEnv } from "@/shared/env";
-import { match, notify, prepare, runStages } from "./stages";
+import { match, notify, prepare, runStages, trackEmail } from "./stages";
 
 async function main() {
   const db = createServiceClient(parseWorkerEnv(process.env));
   const discovered = await runDiscover({ db, log: (line) => console.log(line) });
   console.log(JSON.stringify({ stage: "discover", ok: true, counts: discovered.counts }));
-  if (!(await runStages(db, [match, prepare(), notify]))) process.exitCode = 1;
+  if (!(await runStages(db, [match, prepare(), trackEmail, notify]))) process.exitCode = 1;
 }
 
 main().catch((err) => {
