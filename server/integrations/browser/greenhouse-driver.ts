@@ -98,12 +98,19 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
         return sameText(await el.inputValue(), step.value);
       }
       if (step.kind === "location") return pickPlace(step.fieldName, step.value);
+      if (step.kind === "check") {
+        // The id is on a wrapper; the checkbox inside carries the field name.
+        const box = form.locator(`input[type=checkbox][name=${JSON.stringify(step.fieldName)}]`).first();
+        if ((await box.count()) === 0) return false;
+        await box.check();
+        return box.isChecked();
+      }
       for (const label of step.value) if (!(await pick(step.fieldName, label))) return false;
       return true;
     },
 
     async values(steps) {
-      const fields = steps.filter((s) => s.kind !== "resume").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
+      const fields = steps.filter((s) => s.kind !== "resume" && s.kind !== "check").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
       return page.evaluate((list) => {
         const out: Record<string, string> = {};
         for (const f of list) {

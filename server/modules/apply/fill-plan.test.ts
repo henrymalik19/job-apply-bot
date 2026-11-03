@@ -90,12 +90,13 @@ describe("sameText", () => {
 });
 
 describe("greenhouseExtras", () => {
-  it("fills Country and, with a city, Location", () => {
+  it("fills Country, Location when there is a city, and the demographic consent", () => {
     expect(greenhouseExtras({ city: "Atlanta", stateName: "Georgia", country: "United States" }).map((s) => [s.fieldName, s.kind === "resume" ? null : s.value])).toEqual([
       ["country", ["United States"]],
       ["candidate-location", "Atlanta, Georgia"],
+      ["gdpr_demographic_data_consent_given", true],
     ]);
-    expect(greenhouseExtras({ city: null, stateName: null, country: "United States" }).map((s) => s.fieldName)).toEqual(["country"]);
+    expect(greenhouseExtras({ city: null, stateName: null, country: "United States" }).map((s) => s.fieldName)).toEqual(["country", "gdpr_demographic_data_consent_given"]);
   });
 
   it("counts a longer picked option or a reformatted phone as unchanged", () => {

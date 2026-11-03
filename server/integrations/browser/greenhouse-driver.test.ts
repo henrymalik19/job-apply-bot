@@ -53,7 +53,7 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
   }, 20_000);
 
-  it("finds demographic selects by their number and picks a city from the search", async () => {
+  it("finds demographic selects by their number, picks a city and ticks the consent box", async () => {
     const driver = greenhouseDriver(page);
     await driver.open(FIXTURE);
     const steps: FillStep[] = [
@@ -63,6 +63,9 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     for (const step of steps) expect(await driver.fill(step, resume), step.label).toBe(true);
     expect(await driver.values(steps)).toEqual({ demographic_29783: "I don't wish to answer", "candidate-location": "Atlanta, Georgia, United States" });
     expect(await driver.fill({ kind: "location", fieldName: "candidate-location", label: "Location (City)", required: false, value: "Atlanta, Ohio" }, resume)).toBe(false);
+    const consent: FillStep = { kind: "check", fieldName: "gdpr_demographic_data_consent_given", label: "Consent", required: false, value: true };
+    expect(await driver.fill(consent, resume)).toBe(true);
+    expect(await page.locator("#gdpr_demographic_data_consent_given_1").isChecked()).toBe(true);
   });
 
   it("reports an option that isn't on the form", async () => {

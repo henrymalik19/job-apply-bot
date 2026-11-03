@@ -15,12 +15,14 @@ export type PlanQuestion = {
 
 /**
  * One field to fill: text typed, option labels picked, the resume attached, or a
- * place typed into a search box and the first suggestion starting with `value` picked.
+ * place typed into a search box and the first suggestion starting with `value` picked,
+ * or a checkbox ticked.
  */
 export type FillStep =
   | { kind: "text"; fieldName: string; label: string; required: boolean; value: string }
   | { kind: "select"; fieldName: string; label: string; required: boolean; value: string[] }
   | { kind: "location"; fieldName: string; label: string; required: boolean; value: string }
+  | { kind: "check"; fieldName: string; label: string; required: boolean; value: true }
   | { kind: "resume"; fieldName: string; label: string; required: boolean };
 
 /** The steps in form order, and why the form can't be filled (empty when it can). */
@@ -81,8 +83,9 @@ export function sameText(shown: string, typed: string): boolean {
 export type HomePlace = { city: string | null; stateName: string | null; country: string };
 
 /**
- * Greenhouse fields that aren't in the job's question list: the phone's Country
- * and "Location (City)". Not required here: a form without them skips them, and a
+ * Greenhouse fields that aren't in the job's question list: the phone's Country,
+ * "Location (City)" and the consent to processing the demographic answers (you
+ * agreed to have it ticked). Not required here: a form without them skips them, and a
  * form that needs them shows the gap when it is checked before submitting.
  */
 export function greenhouseExtras(home: HomePlace): FillStep[] {
@@ -91,6 +94,7 @@ export function greenhouseExtras(home: HomePlace): FillStep[] {
     const value = home.stateName ? `${home.city}, ${home.stateName}` : home.city;
     steps.push({ kind: "location", fieldName: "candidate-location", label: "Location (City)", required: false, value });
   }
+  steps.push({ kind: "check", fieldName: "gdpr_demographic_data_consent_given", label: "Demographic data consent", required: false, value: true });
   return steps;
 }
 
@@ -104,7 +108,7 @@ export function changedFields(steps: FillStep[], final: Record<string, string>):
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
   const same = (s: FillStep, shown: string) => {
     if (s.kind === "text") return sameText(shown, s.value);
-    if (s.kind === "resume") return true;
+    if (s.kind === "resume" || s.kind === "check") return true;
     // A picked option can read longer than what was asked for ("United States" -> "United States +1").
     const asked = s.kind === "select" ? s.value.join(", ") : s.value;
     return norm(shown).toLowerCase().startsWith(norm(asked).toLowerCase());
