@@ -36,19 +36,40 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     return true;
   }
 
+  /**
+   * Attaches a file and waits for its name to show in the field. The page's
+   * uploader can still be starting up after the form renders ("Cannot read
+   * properties of undefined (reading 'uploadFile')"), so a failed attach is retried.
+   */
+  async function attach(fieldName: string, filePath: string): Promise<boolean> {
+    const group = form.locator(`[aria-labelledby=${JSON.stringify(`upload-label-${fieldName}`)}]`);
+    const name = filePath.split(/[\\/]/).pop() ?? "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const input = form.locator(byId(fieldName));
+      if ((await input.count()) === 0) break;
+      await input.setInputFiles(filePath);
+      const attached = await group.getByText(name, { exact: false }).first().waitFor({ timeout: 5000 }).then(() => true, () => false);
+      if (attached) return true;
+      // Clear the failed attempt so setting the same file fires a change again, then retry once the page settles.
+      await input.setInputFiles([]).catch(() => undefined);
+      await page.waitForTimeout(2000);
+    }
+    return false;
+  }
+
   return {
     async open(url) {
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      return (await form.waitFor({ timeout: formTimeoutMs }).then(() => true, () => false)) ? "ok" : "no_form";
+      if (!(await form.waitFor({ timeout: formTimeoutMs }).then(() => true, () => false))) return "no_form";
+      // The form re-renders while its scripts finish loading; filling before that loses work.
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      return "ok";
     },
 
     async fill(step: FillStep, resumePath: string) {
       const el = form.locator(byId(step.fieldName));
       if ((await el.count()) === 0) return false;
-      if (step.kind === "resume") {
-        await el.setInputFiles(resumePath);
-        return true;
-      }
+      if (step.kind === "resume") return attach(step.fieldName, resumePath);
       if (step.kind === "text") {
         await el.fill(step.value);
         return (await el.inputValue()) === step.value;

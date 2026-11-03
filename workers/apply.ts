@@ -16,6 +16,7 @@ import { chromium, type Page } from "playwright-core";
 import type { Database } from "@/server/db/database.types";
 import type { Db } from "@/server/db/types";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
+import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { clearStaleSteps, listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { APPLY_ATS, applyOne } from "@/server/modules/apply/apply.service";
 import { parseApplyEnv } from "@/shared/env";
@@ -120,12 +121,20 @@ async function main() {
         for (const p of done) await p.close().catch(() => undefined);
         done = [];
         const page = await browser.newPage();
+        const record = await recordRun(path.join(DATA, "apply-debug"), app.id, page, greenhouseDriver(page));
+        const both = (line: string) => {
+          log(line);
+          record.log(line);
+        };
+        let outcome = "error";
         try {
-          const outcome = await applyOne({ db, userId, driver: greenhouseDriver(page), saveResume, fullName: name, log }, app);
-          if (outcome.result === "submitted") done.push(page);
+          const result = await applyOne({ db, userId, driver: record.driver, saveResume, fullName: name, log: both }, app);
+          outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
+          if (result.result === "submitted") done.push(page);
         } catch (err) {
-          log(`${app.id}: failed: ${(err as Error).message}`);
+          both(`${app.id}: failed: ${(err as Error).message}`);
         }
+        log(`${app.id}: run record in ${path.relative(process.cwd(), await record.finish(outcome))}`);
       }
     } catch (err) {
       log(`poll failed: ${(err as Error).message}`);

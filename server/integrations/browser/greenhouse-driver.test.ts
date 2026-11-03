@@ -40,11 +40,18 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     const driver = greenhouseDriver(page);
     expect(await driver.open(FIXTURE)).toBe("ok");
     for (const step of plan.steps) expect(await driver.fill(step, resume), step.label).toBe(true);
-    expect(await page.locator("#resume").evaluate((el: HTMLInputElement) => el.files?.[0]?.name)).toBe("driver-test-resume.pdf");
+    expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
     expect(await driver.values(plan.steps)).toEqual({ first_name: "Ada", question_1: "Because.", question_2: "No", question_3: "Rust, Go" });
     expect(await driver.challenge()).toBe(false);
     expect(await driver.confirmation()).toBeNull();
   });
+
+  it("attaches the resume again when the page's uploader wasn't ready", async () => {
+    const driver = greenhouseDriver(page);
+    expect(await driver.open(`${FIXTURE}?flaky`)).toBe("ok");
+    expect(await driver.fill({ kind: "resume", fieldName: "resume", label: "Resume/CV", required: true }, resume)).toBe(true);
+    expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
+  }, 20_000);
 
   it("reports an option that isn't on the form", async () => {
     const driver = greenhouseDriver(page);
