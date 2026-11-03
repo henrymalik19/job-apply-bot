@@ -30,6 +30,8 @@ export interface FormDriver {
   values(steps: FillStep[]): Promise<Record<string, string>>;
   /** A CAPTCHA or bot check is showing and needs a person. */
   challenge(): Promise<boolean>;
+  /** The form asks for a code it emailed to the applicant before it accepts the submit. */
+  emailCode(): Promise<boolean>;
   /** The page says the application was received; its text, or null. */
   confirmation(): Promise<string | null>;
   /** Clicks the form's submit button. */
@@ -97,6 +99,7 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
   const deadline = Date.now() + (deps.waitMs ?? 30 * 60_000);
   let last: Record<string, string> = {};
   let askedForCheck = false;
+  let askedForCode = false;
   while (Date.now() < deadline) {
     if (driver.closed()) return { closed: true as const };
     const text = await driver.confirmation();
@@ -105,6 +108,11 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
       // A check after an automatic submit is the user's to complete, never the runner's.
       askedForCheck = true;
       await setApplyStep(deps.db, app.id, "waiting_for_you", "Complete the verification check in the Chrome window.");
+      await driver.focus();
+    }
+    if (!askedForCode && (await driver.emailCode())) {
+      askedForCode = true;
+      await setApplyStep(deps.db, app.id, "waiting_for_you", "The form emailed you a code. Enter it in the Chrome window to finish submitting.");
       await driver.focus();
     }
     try {

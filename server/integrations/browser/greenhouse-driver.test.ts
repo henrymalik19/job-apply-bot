@@ -75,9 +75,19 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await driver.fill({ kind: "text", fieldName: "question_404", label: "Gone", required: true, value: "x" }, resume)).toBe(false);
   });
 
+  it("notices the form asking for a code it emailed", async () => {
+    const driver = greenhouseDriver(page);
+    await driver.open(`${FIXTURE}?code`);
+    expect(await driver.emailCode()).toBe(false);
+    await driver.submit();
+    expect(await driver.emailCode()).toBe(true);
+    expect(await driver.confirmation()).toBeNull();
+  });
+
   it("sees the thank-you page after submit", async () => {
     const driver = greenhouseDriver(page);
     await driver.open(FIXTURE);
+    expect(await driver.emailCode()).toBe(false);
     await driver.submit();
     expect(await driver.confirmation()).toContain("Thank you for applying");
   });

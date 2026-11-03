@@ -87,8 +87,15 @@
       }
       wrapper.innerHTML = `<span class="filename">${e.target.files[0].name}</span><button type="button">Remove file</button>`;
     });
+    // With ?code the first submit asks for the code Greenhouse emails, as it does when its bot check fails.
+    let askCode = location.search.includes("code");
     document.getElementById("application-form").addEventListener("submit", (e) => {
       e.preventDefault();
+      if (askCode) {
+        askCode = false;
+        e.target.insertAdjacentHTML("beforeend", '<p>Enter the 8-character code sent to your email</p><input id="security-input-0" maxlength="1">');
+        return;
+      }
       document.body.innerHTML = "<h1>Thank you for applying.</h1><p>Your application has been received.</p>";
     });
   </script>

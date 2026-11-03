@@ -72,6 +72,7 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
     },
     values: async () => ({ ...filled, ...opts.edits }),
     challenge: async () => opts.challenge ?? false,
+    emailCode: async () => false,
     confirmation: async () => (!opts.neverSubmitted && ++looks > 1 ? "Thank you for applying." : null),
     submit: async () => {},
     screenshot: async () => PNG,

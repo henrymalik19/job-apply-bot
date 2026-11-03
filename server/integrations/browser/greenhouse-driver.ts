@@ -11,6 +11,8 @@ import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 const domId = (fieldName: string) => fieldName.replace(/^demographic_(?=\d+$)/, "");
 const byId = (fieldName: string) => `[id=${JSON.stringify(domId(fieldName))}]`;
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+/** Greenhouse's check after submit: "enter the 8-character code sent to your email". */
+const EMAIL_CODE = /code (was |that was |we )?(sent|emailed) to|security code|verification code/i;
 const CONFIRMED = /thank you for (applying|your (application|interest))|application (has been |was )?(received|submitted)/i;
 
 /**
@@ -136,6 +138,12 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
         if (box && box.height > 100 && (await frame.isVisible())) return true;
       }
       return false;
+    },
+
+    async emailCode() {
+      if (page.isClosed()) return false;
+      if ((await page.locator('input[id^="security-input"]').count().catch(() => 0)) > 0) return true;
+      return EMAIL_CODE.test(await form.innerText({ timeout: 1000 }).catch(() => ""));
     },
 
     async confirmation() {

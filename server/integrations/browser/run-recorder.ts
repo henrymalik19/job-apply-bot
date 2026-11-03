@@ -20,6 +20,7 @@ export async function recordRun(root: string, appId: string, page: Page, driver:
   const file = path.join(dir, "run.log");
   const write = (line: string) => appendFile(file, `${new Date().toISOString().slice(11, 23)} ${line}\n`).catch(() => undefined);
   let shots = 0;
+  let sawCode = false;
   const shot = async (name: string) => {
     if (page.isClosed()) return;
     const to = path.join(dir, `${String(++shots).padStart(2, "0")}-${name}.png`);
@@ -76,6 +77,18 @@ export async function recordRun(root: string, appId: string, page: Page, driver:
     async screenshot() {
       await shot("evidence");
       return driver.screenshot();
+    },
+    async emailCode() {
+      const asked = await driver.emailCode();
+      if (asked && !sawCode) {
+        // Kept to build entering the code automatically: what the step looks like.
+        sawCode = true;
+        await write("the form asks for a code sent to your email");
+        await shot("email-code");
+        const html = await page.content().catch(() => null);
+        if (html) await writeFile(path.join(dir, "email-code.html"), html).catch(() => undefined);
+      }
+      return asked;
     },
   };
 
