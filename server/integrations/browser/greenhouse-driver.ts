@@ -1,12 +1,15 @@
 // Fills Greenhouse's hosted application form (job-boards.greenhouse.io) in a
 // real Chrome tab. Each question's field name from the form API is the
-// element id; selects are react-select comboboxes picked by option label; the
+// element id (demographic questions drop the "demographic_" prefix the API
+// gives them); selects are react-select comboboxes picked by option label; the
 // resume is a file input. Never touches CAPTCHAs: it only reports them.
 import type { Page } from "playwright-core";
 import type { FormDriver } from "@/server/modules/apply/apply.service";
-import type { FillStep } from "@/server/modules/apply/fill-plan";
+import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 
-const byId = (id: string) => `[id=${JSON.stringify(id)}]`;
+/** The element id of a form field: demographic questions use their bare number. */
+const domId = (fieldName: string) => fieldName.replace(/^demographic_(?=\d+$)/, "");
+const byId = (fieldName: string) => `[id=${JSON.stringify(domId(fieldName))}]`;
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const CONFIRMED = /thank you for (applying|your (application|interest))|application (has been |was )?(received|submitted)/i;
 
@@ -23,11 +26,31 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     const input = page.locator(byId(fieldName));
     await input.click();
     await input.fill(label);
-    const options = page.locator(`${byId(`react-select-${fieldName}-listbox`)} [role=option]`);
+    const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
     await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
     const texts = await options.allTextContents();
     let i = texts.findIndex((t) => norm(t) === norm(label));
     if (i < 0 && texts.length === 1 && norm(texts[0]).startsWith(norm(label))) i = 0;
+    if (i < 0) {
+      await input.press("Escape");
+      return false;
+    }
+    await options.nth(i).click();
+    return true;
+  }
+
+  /**
+   * Types a place into a search combobox and picks the first suggestion that
+   * starts with it ("Atlanta, Georgia" picks "Atlanta, Georgia, United States").
+   * Only the part before the first comma is typed; the search finds nothing for "Atlanta, GA".
+   */
+  async function pickPlace(fieldName: string, place: string): Promise<boolean> {
+    const input = form.locator(byId(fieldName));
+    await input.click();
+    await input.fill(place.split(",")[0].trim());
+    const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
+    await options.first().waitFor({ timeout: 5000 }).catch(() => undefined);
+    const i = (await options.allTextContents()).findIndex((t) => norm(t).startsWith(norm(place)));
     if (i < 0) {
       await input.press("Escape");
       return false;
@@ -72,18 +95,19 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
       if (step.kind === "resume") return attach(step.fieldName, resumePath);
       if (step.kind === "text") {
         await el.fill(step.value);
-        return (await el.inputValue()) === step.value;
+        return sameText(await el.inputValue(), step.value);
       }
+      if (step.kind === "location") return pickPlace(step.fieldName, step.value);
       for (const label of step.value) if (!(await pick(step.fieldName, label))) return false;
       return true;
     },
 
     async values(steps) {
-      const fields = steps.filter((s) => s.kind !== "resume").map((s) => ({ name: s.fieldName, select: s.kind === "select" }));
+      const fields = steps.filter((s) => s.kind !== "resume").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
       return page.evaluate((list) => {
         const out: Record<string, string> = {};
         for (const f of list) {
-          const el = document.getElementById(f.name) as HTMLInputElement | HTMLTextAreaElement | null;
+          const el = document.getElementById(f.id) as HTMLInputElement | HTMLTextAreaElement | null;
           if (!el) continue;
           if (!f.select) {
             out[f.name] = el.value;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFillPlan, changedFields, type PlanQuestion } from "./fill-plan";
+import { buildFillPlan, changedFields, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
 
 const q = (over: Partial<PlanQuestion>): PlanQuestion => ({
   question: "Q",
@@ -77,5 +77,33 @@ describe("changedFields", () => {
 
   it("names fields whose value changed", () => {
     expect(changedFields(plan.steps, { a: "Ada", b: "Yes", resume: "x.pdf" })).toEqual(["Name", "Pick"]);
+  });
+});
+
+describe("sameText", () => {
+  it("matches phone numbers by their digits", () => {
+    expect(sameText("(704) 555-0100", "7045550100")).toBe(true);
+    expect(sameText("(704) 555-0199", "7045550100")).toBe(false);
+    expect(sameText("Ada  Lovelace ", "Ada Lovelace")).toBe(true);
+    expect(sameText("Ada", "Ada Lovelace")).toBe(false);
+  });
+});
+
+describe("greenhouseExtras", () => {
+  it("fills Country and, with a city, Location", () => {
+    expect(greenhouseExtras({ city: "Atlanta", stateName: "Georgia", country: "United States" }).map((s) => [s.fieldName, s.kind === "resume" ? null : s.value])).toEqual([
+      ["country", ["United States"]],
+      ["candidate-location", "Atlanta, Georgia"],
+    ]);
+    expect(greenhouseExtras({ city: null, stateName: null, country: "United States" }).map((s) => s.fieldName)).toEqual(["country"]);
+  });
+
+  it("counts a longer picked option or a reformatted phone as unchanged", () => {
+    const steps: FillStep[] = [
+      { kind: "location", fieldName: "loc", label: "Location", required: false, value: "Atlanta, Georgia" },
+      { kind: "text", fieldName: "phone", label: "Phone", required: true, value: "7045550100" },
+    ];
+    expect(changedFields(steps, { loc: "Atlanta, Georgia, United States", phone: "(704) 555-0100" })).toEqual([]);
+    expect(changedFields(steps, { loc: "Atlanta, Texas, United States", phone: "(704) 555-0100" })).toEqual(["Location"]);
   });
 });

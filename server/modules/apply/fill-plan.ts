@@ -13,10 +13,14 @@ export type PlanQuestion = {
   answer_value: Json | null;
 };
 
-/** One field to fill: text typed, option labels picked, or the resume attached. */
+/**
+ * One field to fill: text typed, option labels picked, the resume attached, or a
+ * place typed into a search box and the first suggestion starting with `value` picked.
+ */
 export type FillStep =
   | { kind: "text"; fieldName: string; label: string; required: boolean; value: string }
   | { kind: "select"; fieldName: string; label: string; required: boolean; value: string[] }
+  | { kind: "location"; fieldName: string; label: string; required: boolean; value: string }
   | { kind: "resume"; fieldName: string; label: string; required: boolean };
 
 /** The steps in form order, and why the form can't be filled (empty when it can). */
@@ -64,6 +68,33 @@ export function buildFillPlan(questions: PlanQuestion[]): FillPlan {
 }
 
 /**
+ * Whether a text field shows what was typed. Phone-like values count when the
+ * digits match, since forms reformat them ("7045550100" -> "(704) 555-0100").
+ */
+export function sameText(shown: string, typed: string): boolean {
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+  if (norm(shown) === norm(typed)) return true;
+  return /^[\d\s()+.-]+$/.test(typed) && shown.replace(/\D/g, "") === typed.replace(/\D/g, "");
+}
+
+/** Where you live, from your profile, for form fields the ATS adds outside its question list. */
+export type HomePlace = { city: string | null; stateName: string | null; country: string };
+
+/**
+ * Greenhouse fields that aren't in the job's question list: the phone's Country
+ * and "Location (City)". Not required here: a form without them skips them, and a
+ * form that needs them shows the gap when it is checked before submitting.
+ */
+export function greenhouseExtras(home: HomePlace): FillStep[] {
+  const steps: FillStep[] = [{ kind: "select", fieldName: "country", label: "Country", required: false, value: [home.country] }];
+  if (home.city) {
+    const value = home.stateName ? `${home.city}, ${home.stateName}` : home.city;
+    steps.push({ kind: "location", fieldName: "candidate-location", label: "Location (City)", required: false, value });
+  }
+  return steps;
+}
+
+/**
  * Fields the user changed before submitting: steps whose final value differs from what was filled.
  *
  * @param steps - What the runner filled.
@@ -71,8 +102,12 @@ export function buildFillPlan(questions: PlanQuestion[]): FillPlan {
  */
 export function changedFields(steps: FillStep[], final: Record<string, string>): string[] {
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
-  const filled = (s: FillStep) => (s.kind === "text" ? s.value : s.kind === "select" ? s.value.join(", ") : null);
-  return steps
-    .filter((s) => s.kind !== "resume" && s.fieldName in final && norm(final[s.fieldName]) !== norm(filled(s) ?? ""))
-    .map((s) => s.label);
+  const same = (s: FillStep, shown: string) => {
+    if (s.kind === "text") return sameText(shown, s.value);
+    if (s.kind === "resume") return true;
+    // A picked option can read longer than what was asked for ("United States" -> "United States +1").
+    const asked = s.kind === "select" ? s.value.join(", ") : s.value;
+    return norm(shown).toLowerCase().startsWith(norm(asked).toLowerCase());
+  };
+  return steps.filter((s) => s.fieldName in final && !same(s, final[s.fieldName])).map((s) => s.label);
 }

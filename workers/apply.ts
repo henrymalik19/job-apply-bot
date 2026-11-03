@@ -18,6 +18,8 @@ import type { Db } from "@/server/db/types";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { clearStaleSteps, listReadyToApply } from "@/server/modules/apply/apply.repository";
+import { greenhouseExtras, type HomePlace } from "@/server/modules/apply/fill-plan";
+import { usStateName } from "@/server/modules/criteria/places";
 import { APPLY_ATS, applyOne } from "@/server/modules/apply/apply.service";
 import { parseApplyEnv } from "@/shared/env";
 
@@ -75,9 +77,13 @@ async function signIn(db: Db): Promise<string> {
   return res.data.user.id;
 }
 
-async function fullName(db: Db, userId: string): Promise<string> {
-  const { data } = await db.from("profiles").select("first_name, last_name").eq("user_id", userId).maybeSingle();
-  return [data?.first_name, data?.last_name].filter(Boolean).join(" ") || "Resume";
+/** Your name (for the resume file name) and where you live (for Country and Location fields). */
+async function profileBasics(db: Db, userId: string): Promise<{ name: string; home: HomePlace }> {
+  const { data } = await db.from("profiles").select("first_name, last_name, city, state").eq("user_id", userId).maybeSingle();
+  return {
+    name: [data?.first_name, data?.last_name].filter(Boolean).join(" ") || "Resume",
+    home: { city: data?.city ?? null, stateName: usStateName(data?.state), country: "United States" },
+  };
 }
 
 async function main() {
@@ -86,7 +92,7 @@ async function main() {
     auth: { storage: fileStorage(), persistSession: true, autoRefreshToken: true, storageKey: "apply-runner" },
   });
   const userId = await signIn(db);
-  const name = await fullName(db, userId);
+  const { name, home } = await profileBasics(db, userId);
   const stale = await clearStaleSteps(db, userId);
   if (stale) log(`cleared ${stale} application(s) left mid-way by an earlier run`);
 
@@ -128,7 +134,7 @@ async function main() {
         };
         let outcome = "error";
         try {
-          const result = await applyOne({ db, userId, driver: record.driver, saveResume, fullName: name, log: both }, app);
+          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           if (result.result === "submitted") done.push(page);
         } catch (err) {

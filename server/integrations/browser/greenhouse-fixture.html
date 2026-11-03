@@ -2,8 +2,8 @@
 <!-- The parts of Greenhouse's hosted form (job-boards.greenhouse.io) the driver relies on:
      field names as element ids, react-select comboboxes with a listbox of role=option
      and the chosen value in .select__single-value, a file input whose name shows once
-     attached, and a submit that
-     leads to a thank-you page. Saved from the live form's structure in Oct 2026. -->
+     attached, a city search box, demographic selects with numeric ids, and a submit
+     that leads to a thank-you page. Saved from the live form's structure in Oct 2026. -->
 <html>
 <body>
   <form id="application-form" action="#">
@@ -23,6 +23,18 @@
       <label id="question_3-label">Languages</label>
       <div class="select__control"><div class="select__value-container">
         <div class="select__input-container"><input class="select__input" id="question_3" role="combobox" type="text"></div>
+      </div></div>
+    </div>
+    <div class="select-shell" data-options="Atlanta, Texas, United States|Atlanta, Georgia, United States">
+      <label id="candidate-location-label">Location (City)</label>
+      <div class="select__control"><div class="select__value-container">
+        <div class="select__input-container"><input class="select__input" id="candidate-location" role="combobox" type="text"></div>
+      </div></div>
+    </div>
+    <div class="select-shell" data-options="Man|Woman|I don't wish to answer">
+      <label id="29783-label">Gender</label>
+      <div class="select__control"><div class="select__value-container">
+        <div class="select__input-container"><input class="select__input" id="29783" role="combobox" type="text"></div>
       </div></div>
     </div>
     <button type="submit">Submit application</button>

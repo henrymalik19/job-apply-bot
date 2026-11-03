@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildFillPlan } from "@/server/modules/apply/fill-plan";
+import { buildFillPlan, type FillStep } from "@/server/modules/apply/fill-plan";
 import { greenhouseDriver } from "./greenhouse-driver";
 
 const FIXTURE = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "greenhouse-fixture.html")).href;
@@ -52,6 +52,18 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await driver.fill({ kind: "resume", fieldName: "resume", label: "Resume/CV", required: true }, resume)).toBe(true);
     expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
   }, 20_000);
+
+  it("finds demographic selects by their number and picks a city from the search", async () => {
+    const driver = greenhouseDriver(page);
+    await driver.open(FIXTURE);
+    const steps: FillStep[] = [
+      { kind: "select", fieldName: "demographic_29783", label: "Gender", required: true, value: ["I don't wish to answer"] },
+      { kind: "location", fieldName: "candidate-location", label: "Location (City)", required: false, value: "Atlanta, Georgia" },
+    ];
+    for (const step of steps) expect(await driver.fill(step, resume), step.label).toBe(true);
+    expect(await driver.values(steps)).toEqual({ demographic_29783: "I don't wish to answer", "candidate-location": "Atlanta, Georgia, United States" });
+    expect(await driver.fill({ kind: "location", fieldName: "candidate-location", label: "Location (City)", required: false, value: "Atlanta, Ohio" }, resume)).toBe(false);
+  });
 
   it("reports an option that isn't on the form", async () => {
     const driver = greenhouseDriver(page);

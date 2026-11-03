@@ -46,6 +46,8 @@ export type ApplyDeps = {
   db: Db;
   userId: string;
   driver: FormDriver;
+  /** Fields the form adds outside the job's question list (Country, Location), filled first unless the plan has them. */
+  extraSteps?: FillStep[];
   /** Writes the resume to a local file and returns its path. */
   saveResume: (pdf: Uint8Array, fileName: string) => Promise<string>;
   /** Your name, for the resume's file name. */
@@ -135,6 +137,9 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   if (!url) return handBack(deps, app, `The runner can't fill ${app.job.source} forms yet.`);
 
   const plan = buildFillPlan(app.questions);
+  const known = new Set(plan.steps.map((s) => s.fieldName));
+  // Extras go first (Country before the phone it formats) and aren't checked for your edits.
+  const steps = [...(deps.extraSteps ?? []).filter((s) => !known.has(s.fieldName)), ...plan.steps];
   if (plan.blockers.length) return handBack(deps, app, `Can't fill the form: ${plan.blockers.join("; ")}.`);
   if (!app.resume?.pdf_path) return handBack(deps, app, "No resume PDF was prepared for this application.");
 
@@ -151,7 +156,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
 
   if ((await driver.open(url)) === "no_form") return handBack(deps, app, "The posting has no application form (it may have closed).");
   const missed: string[] = [];
-  for (const step of plan.steps) {
+  for (const step of steps) {
     if (!(await driver.fill(step, resumePath)) && step.required) missed.push(step.label);
   }
   if (missed.length) {
@@ -159,7 +164,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   }
   if (await driver.challenge()) return fail("The form shows a verification check. Finish it in the open Chrome window.");
 
-  const answers = plan.steps.map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.value }));
+  const answers = steps.map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.value }));
   await addEvidence(db, {
     userId,
     applicationId: app.id,
