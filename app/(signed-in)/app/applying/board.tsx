@@ -14,8 +14,10 @@ export type BoardCard = {
   badge: ReactNode;
   /** One line under the company: the runner's progress, or when it got here. */
   line: string;
-  /** Approved on a site the runner can't fill: where to apply. */
+  /** Approved on a site the runner can't fill, or stuck: where to apply. */
   applyUrl?: string | null;
+  /** Stuck, and the apply runner can try it again (moving it to Approved). */
+  canRetry?: boolean;
 };
 
 /** A board column: the statuses it shows and the status a card dropped on it moves to. */
@@ -23,6 +25,7 @@ export type BoardColumn = { key: string; label: string; statuses: string[]; targ
 
 /** Name of each status you can move a card to, for the Move menu. */
 const TARGET_LABEL: Record<string, string> = {
+  approved: "Approved (retry)",
   submitted: "Submitted",
   responded: "Heard back",
   interviewing: "Interviewing",
@@ -43,7 +46,8 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
   const [dragging, setDragging] = useState<BoardCard | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canMove = (card: BoardCard, to: string | null) => !!to && card.status !== to && (moves[card.status] ?? []).includes(to);
+  const targetsOf = (card: BoardCard) => [...(card.canRetry ? ["approved"] : []), ...(moves[card.status] ?? [])].filter((t) => t !== card.status);
+  const canMove = (card: BoardCard, to: string | null) => !!to && targetsOf(card).includes(to);
   const send = (card: BoardCard, to: string) => {
     setError(null);
     startTransition(async () => {
@@ -84,7 +88,7 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
               <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2">
                 {list.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{dragging && droppable ? "Drop here" : "None"}</p>}
                 {list.map((c) => {
-                  const targets = (moves[c.status] ?? []).filter((t) => t !== c.status);
+                  const targets = targetsOf(c);
                   return (
                     <article
                       key={c.id}
@@ -118,7 +122,7 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                               aria-label={`Move ${c.title}`}
                               value=""
                               onChange={(e) => e.target.value && send(c, e.target.value)}
-                              className="h-7 rounded-md border bg-background px-1.5 text-xs text-muted-foreground"
+                              className="h-7 max-w-32 min-w-0 rounded-md border bg-background px-1.5 text-xs text-muted-foreground"
                             >
                               <option value="">Move to…</option>
                               {targets.map((t) => <option key={t} value={t}>{TARGET_LABEL[t] ?? t}</option>)}

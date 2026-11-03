@@ -1,24 +1,20 @@
-import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import type { AppStatus } from "@/server/modules/applications/application-status";
 import { blockingQuestions, listApplications, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
-import { canRetry } from "@/server/modules/apply/apply.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
-import { MarkAppliedButton, RetryApplyButton } from "../applications/decide-actions";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-/** The three lanes waiting on you, by the application status each holds (ids match todoHref). */
+/** The two lanes waiting on you before approval, by the application status each holds (ids match todoHref). */
 const TABS = [
   {
     id: "ready",
@@ -33,13 +29,6 @@ const TABS = [
     status: "needs_input",
     hint: "A required question couldn't be answered from your profile or saved answers. Open one to answer; once nothing is missing it moves to Ready to approve, and short answers fill in on other forms.",
     empty: "No questions waiting on you.",
-  },
-  {
-    id: "yourself",
-    label: "Apply yourself",
-    status: "manual",
-    hint: "Forms the system can't fill, or ones the apply runner handed back. The resume and answers are ready to copy.",
-    empty: "Nothing to apply to yourself.",
   },
 ] as const satisfies readonly { id: string; label: string; status: AppStatus; hint: string; empty: string }[];
 
@@ -63,22 +52,6 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
         <span className="font-medium text-warning">{qs.length} required question{qs.length === 1 ? "" : "s"}</span>
         <span className="block truncate text-muted-foreground" title={qs.map((q) => q.question).join("\n")}>
           {qs.map((q) => q.question).join(" · ")}
-        </span>
-      </span>
-    );
-  }
-  if (tab === "yourself") {
-    return (
-      <span className="flex flex-col items-start gap-1">
-        <span className="text-muted-foreground">{app.apply_note ?? app.prepare_error ?? "This form can't be filled automatically."}</span>
-        <span className="flex flex-wrap items-center gap-2">
-          {(app.job.apply_url ?? app.job.url) && (
-            <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <ExternalLink /> Apply
-            </a>
-          )}
-          <MarkAppliedButton applicationId={app.id} />
-          {canRetry(app.job.source, app.apply_note) && <RetryApplyButton applicationId={app.id} />}
         </span>
       </span>
     );
@@ -166,7 +139,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** To do: everything waiting on you, one row per application, in three lanes. */
+/** To do: applications waiting on you before approval, one row per application, in two lanes. Stuck ones are on the board. */
 export default function TodoPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

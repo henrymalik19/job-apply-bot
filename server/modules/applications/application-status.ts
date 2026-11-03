@@ -21,9 +21,9 @@ export const NEEDS_YOU_STATUSES: readonly AppStatus[] = ["needs_input", "manual"
 /** Cause format for status changes: `<actor>:<action>`, e.g. `user:approve`, `email:confirmation`. */
 export const CAUSE_PATTERN = /^(user|email|worker|system):[a-z_]+$/;
 
-/** Statuses after approval, shown on the Applying board (confirmed shares the Submitted column). */
+/** Statuses after approval, shown on the Applying board (confirmed shares the Submitted column; manual is Runner stuck). */
 export const BOARD_STATUSES: readonly AppStatus[] = [
-  "approved", "submitted", "confirmed", "responded", "interviewing", "offer", "rejected", "expired", "failed",
+  "approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer", "rejected", "expired", "failed",
 ];
 
 /** Statuses you can move an application to by hand: you applied, they replied, an interview, an offer, a no. */

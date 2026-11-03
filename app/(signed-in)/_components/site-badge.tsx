@@ -20,7 +20,7 @@ export function SiteBadge({ source, className }: { source: string; className?: s
   return (
     <Badge
       className={cn(site?.className ?? TONE_BADGE.muted, className)}
-      title={runnerFills(source) ? "The apply runner fills this form" : "The apply runner can't fill this site yet; you apply yourself"}
+      title={runnerFills(source) ? "The apply runner fills this form" : "The apply runner can't fill this site yet; it waits in Approved, or you apply yourself"}
     >
       {site?.label ?? source}
     </Badge>

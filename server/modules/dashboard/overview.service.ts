@@ -12,7 +12,7 @@ export type Tile = { label: string; value: number; hint: string; href?: string; 
 export type Overview = {
   /** Open jobs, new in 24h and 7 days, matched and scored under the current criteria. */
   jobs: Tile[];
-  /** Applications waiting on the user: needs you, apply yourself, ready to review. */
+  /** Applications waiting on the user: needs you, runner stuck, ready to review. */
   waiting: Tile[];
   /** Applications on their way: approved through offer. */
   progress: Tile[];
@@ -46,7 +46,7 @@ export async function getOverview(db: Db, userId: string, now: Date): Promise<Ov
     ],
     waiting: [
       { status: "needs_input", label: "Needs you", value: byStatus.needs_input, hint: "Prepared, but a required question needs your answer. Once answered it moves to Ready to review.", href: "/app/todo?tab=answers" },
-      { status: "manual", label: "Apply yourself", value: byStatus.manual, hint: "The form can't be filled automatically. Resume and answers are ready; apply on the employer's site.", href: "/app/todo?tab=yourself" },
+      { status: "manual", label: "Runner stuck", value: byStatus.manual, hint: "The form couldn't be filled automatically. Send it back to the apply runner, or apply on the employer's site.", href: "/app/applying" },
       { status: "queued", label: "Ready to review", value: byStatus.queued, hint: "Every required question is answered. Check it, then approve or skip.", href: "/app/todo?tab=ready" },
     ],
     progress: [

@@ -57,11 +57,15 @@ export async function retryApplyAction(_prev: FormMessageState, formData: FormDa
   return { ok: "Sent back to the apply runner; it picks it up within 20 seconds while it's running." };
 }
 
-/** Moves an application by hand (board drag, Move menu, "I applied"); returns an error message or null. */
+/**
+ * Moves an application by hand (board drag, Move menu, "I applied"); returns an error message or null.
+ * Moving a stuck one back to Approved sends it to the apply runner again.
+ */
 export async function moveApplicationAction(applicationId: string, to: string): Promise<string | null> {
   const { db, owner } = await ownerContext();
   try {
-    await moveApplication(db, owner.id, applicationId, to);
+    if (to === "approved") await retryApply(db, owner.id, applicationId);
+    else await moveApplication(db, owner.id, applicationId, to);
   } catch (err) {
     if (err instanceof ValidationError) return err.message;
     if (err instanceof IllegalTransitionError) return "That move isn't allowed from its current status.";

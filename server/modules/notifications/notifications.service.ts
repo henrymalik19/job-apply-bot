@@ -68,7 +68,7 @@ async function dueItems(db: Db, userId: string): Promise<NotifyItem[]> {
 
 /**
  * Notify worker, per user: emails one digest of their applications that need attention (Needs
- * you, apply yourself, ready to review, interviews, offers), from the job
+ * you, runner stuck, ready to review, interviews, offers), from the job
  * inbox to `notifications.to` (default: the inbox itself). Sends at most once
  * per `min_interval_minutes` and never in quiet hours; anything held back goes
  * in the next digest. Each run is a `worker_runs` row (worker `notify`).

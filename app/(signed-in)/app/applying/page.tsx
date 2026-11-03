@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { ownerContext } from "@/server/auth/require-owner";
-import { BOARD_STATUSES, listApplications, listUserMoves, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { BOARD_STATUSES, countByStatus, listApplications, listUserMoves, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { canRetry } from "@/server/modules/apply/apply.service";
 import { ago } from "@/shared/format";
 import { InfoTip } from "../../_components/info-tip";
 import { runnerFills, SiteBadge } from "../../_components/site-badge";
@@ -8,7 +10,8 @@ import { APPLY_STEP_TITLE, statusInfo } from "../../_components/status";
 import { Board, type BoardCard, type BoardColumn } from "./board";
 
 const COLUMNS: BoardColumn[] = [
-  { key: "approved", label: "Approved", statuses: ["approved"], target: null },
+  { key: "approved", label: "Approved", statuses: ["approved"], target: "approved" },
+  { key: "stuck", label: "Runner stuck", statuses: ["manual"], target: null },
   { key: "submitted", label: "Submitted", statuses: ["submitted", "confirmed"], target: "submitted" },
   { key: "responded", label: "Heard back", statuses: ["responded"], target: "responded" },
   { key: "interviewing", label: "Interviewing", statuses: ["interviewing"], target: "interviewing" },
@@ -16,10 +19,11 @@ const COLUMNS: BoardColumn[] = [
   { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: "rejected", muted: true },
 ];
 
-/** The line under a card's company: what the runner is doing, or when it reached this status. */
+/** The line under a card's company: what the runner is doing, why it's stuck, or when it reached this status. */
 function cardLine(app: ApplicationWithDetails, now: Date): string {
+  if (app.status === "manual") return app.apply_note ?? app.prepare_error ?? "This form can't be filled automatically.";
   if (app.status === "approved") {
-    if (!runnerFills(app.job.source)) return "Apply on the employer's site, then move it to Submitted";
+    if (!runnerFills(app.job.source)) return "The runner can't fill this site yet; it waits here. Or apply on the employer's site and move it to Submitted";
     return app.apply_step ? (APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step) : "Waiting for the apply runner";
   }
   return `${statusInfo(app.status).label} ${ago(app.last_status_at, now)}`;
@@ -27,7 +31,7 @@ function cardLine(app: ApplicationWithDetails, now: Date): string {
 
 async function Applying() {
   const { db, owner } = await ownerContext();
-  const [apps, moves] = await Promise.all([listApplications(db, owner.id, BOARD_STATUSES), listUserMoves(db)]);
+  const [apps, moves, counts] = await Promise.all([listApplications(db, owner.id, BOARD_STATUSES), listUserMoves(db), countByStatus(db, owner.id)]);
   const now = new Date();
   // Most recent change first within each column; the runner takes approvals oldest first.
   apps.sort((a, b) => b.last_status_at.localeCompare(a.last_status_at));
@@ -38,9 +42,24 @@ async function Applying() {
     company: a.job.company_name,
     badge: <SiteBadge source={a.job.source} />,
     line: cardLine(a, now),
-    applyUrl: a.status === "approved" && !runnerFills(a.job.source) ? (a.job.apply_url ?? a.job.url) : null,
+    applyUrl: (a.status === "approved" && !runnerFills(a.job.source)) || a.status === "manual" ? (a.job.apply_url ?? a.job.url) : null,
+    canRetry: a.status === "manual" && canRetry(a.job.source, a.apply_note),
   }));
-  return <Board columns={COLUMNS} cards={cards} moves={moves} />;
+  const review = counts.queued ?? 0;
+  const answers = counts.needs_input ?? 0;
+  return (
+    <>
+      {(review > 0 || answers > 0) && (
+        <p className="text-sm text-muted-foreground">
+          Before approval, on To do:{" "}
+          {review > 0 && <Link href="/app/todo?tab=ready" className="font-medium text-foreground hover:underline">{review} to review</Link>}
+          {review > 0 && answers > 0 && " · "}
+          {answers > 0 && <Link href="/app/todo?tab=answers" className="font-medium text-foreground hover:underline">{answers} missing answers</Link>}
+        </p>
+      )}
+      <Board columns={COLUMNS} cards={cards} moves={moves} />
+    </>
+  );
 }
 
 /** Applying: everything after approval as a board, from the apply runner's queue to offers. */
@@ -51,8 +70,8 @@ export default function ApplyingPage() {
         Applying
         <InfoTip label="About the board">
           Approved applications on Greenhouse wait for the apply runner on your computer (<code>pnpm worker:apply</code>), which
-          fills them one at a time. Drag a card, or use its Move menu, when you apply yourself, hear back, get an interview, an
-          offer or a no. Anything the runner hands back goes to To do.
+          fills them one at a time. Anything it can&apos;t finish goes to Runner stuck with the reason; move it back to Approved to
+          try again. Drag a card, or use its Move menu, when you apply yourself, hear back, get an interview, an offer or a no.
         </InfoTip>
       </h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
