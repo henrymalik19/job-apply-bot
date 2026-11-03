@@ -83,7 +83,7 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                 setDragging(null);
               }}
               className={cn(
-                "flex w-60 min-w-60 flex-1 flex-col rounded-xl border bg-muted/40 transition-colors md:min-h-0",
+                "flex w-72 shrink-0 flex-col rounded-xl border bg-muted/40 transition-colors md:min-h-0",
                 dragging && (to ? "border-primary/60 bg-primary/5" : "opacity-50"),
               )}
             >
@@ -91,7 +91,8 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                 {col.label}
                 <span className="text-xs font-normal tabular-nums text-muted-foreground">{list.length}</span>
               </h2>
-              <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2">
+              {/* Scrolls without a visible scrollbar. */}
+              <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {list.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{dragging && to ? "Drop here" : "None"}</p>}
                 {list.map((c) => {
                   const targets = targetsOf(c);
