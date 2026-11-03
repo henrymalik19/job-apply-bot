@@ -18,6 +18,12 @@ export const FUNNEL_STATUSES: readonly AppStatus[] = [
 /** Statuses that are waiting on the owner (the "Needs you" lane). */
 export const NEEDS_YOU_STATUSES: readonly AppStatus[] = ["needs_input", "manual"];
 
+/**
+ * Whether a manual application is one the apply runner handed back (it always leaves its
+ * reason in apply_note), rather than one preparing found can't be filled automatically.
+ */
+export const runnerHandedBack = (app: { status: string; apply_note: string | null }) => app.status === "manual" && app.apply_note != null;
+
 /** Cause format for status changes: `<actor>:<action>`, e.g. `user:approve`, `email:confirmation`. */
 export const CAUSE_PATTERN = /^(user|email|worker|system):[a-z_]+$/;
 

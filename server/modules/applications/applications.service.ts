@@ -205,7 +205,8 @@ export async function answerQuestion(
 }
 
 /**
- * Approves a queued application, which confirms the question wordings its
+ * Approves a queued application (or one that can't be filled automatically, to wait for the
+ * apply runner), which confirms the question wordings its
  * answers were matched by (they stop showing "please check").
  */
 export async function approveApplication(db: Db, userId: string, applicationId: string): Promise<void> {

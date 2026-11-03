@@ -45,7 +45,7 @@ describe("buildDigest", () => {
       ],
       "https://example.test/",
     );
-    expect(subject).toBe("[Autopilot] 1 needs you, 1 runner stuck, 1 ready to review");
+    expect(subject).toBe("[Autopilot] 1 needs you, 1 can't fill automatically, 1 ready to review");
     expect(text).toContain("https://example.test/app/applications/a1");
     expect(text).toContain("Question: Do you hold a clearance?");
     expect(text).toContain("no public form");

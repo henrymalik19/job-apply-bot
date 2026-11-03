@@ -50,6 +50,24 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
         ))}
       </ul>
     );
+  } else if (app.status === "manual" && app.apply_note == null) {
+    title = "Can't be filled automatically";
+    body = (
+      <>
+        <p>
+          {app.prepare_error ?? "A required question can't be answered automatically."} Approve it to wait in Approved until the
+          apply runner can fill it, or apply on the employer&apos;s site yourself. The resume and answers below are ready to copy.
+        </p>
+        {(app.job.apply_url ?? app.job.url) && (
+          <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
+            <ExternalLink /> Open the application form
+          </a>
+        )}
+        <div className="mt-2 flex flex-wrap items-start gap-2">
+          <MarkAppliedButton applicationId={app.id} />
+        </div>
+      </>
+    );
   } else if (app.status === "manual") {
     title = "Apply on the employer's site";
     body = (
@@ -174,7 +192,7 @@ function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null
 }
 
 function Decide({ app }: { app: ApplicationWithDetails }) {
-  const back = todoHref(app.status);
+  const back = todoHref(app.status, app.apply_note);
   return (
     <Card size="sm">
       <CardHeader>
@@ -182,13 +200,15 @@ function Decide({ app }: { app: ApplicationWithDetails }) {
         <CardDescription>
           {app.status === "queued"
             ? "Approving moves it to your to-submit list; you still submit it yourself."
-            : app.status === "manual"
+            : app.status === "manual" && app.apply_note == null
+              ? "Approving moves it to Approved, where it waits for the apply runner; or apply yourself and click I applied above."
+              : app.status === "manual"
               ? "Once you've applied on the employer's site, click I applied above; if you decided not to, skip it here."
               : "Approve unlocks once every required question is answered."}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <DecideActions applicationId={app.id} company={app.job.company_name} canApprove={app.status === "queued"} back={back} />
+        <DecideActions applicationId={app.id} company={app.job.company_name} canApprove={app.status === "queued" || (app.status === "manual" && app.apply_note == null)} back={back} />
       </CardContent>
     </Card>
   );
@@ -278,7 +298,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href={todoHref(app.status)} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
+      <Link href={todoHref(app.status, app.apply_note)} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
         <ArrowLeft /> To do
       </Link>
       {/* Stays at the top while the questions scroll; the negative margins cover the page padding. */}

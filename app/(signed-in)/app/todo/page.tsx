@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import type { AppStatus } from "@/server/modules/applications/application-status";
-import { blockingQuestions, listApplications, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { blockingQuestions, listApplications, runnerHandedBack, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
@@ -14,23 +14,26 @@ import { TONE_BADGE } from "../../_components/status";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-/** The two lanes waiting on you before approval, by the application status each holds (ids match todoHref). */
+/**
+ * The two lanes waiting on you before approval, by the statuses each holds (ids match todoHref).
+ * Ready to approve includes forms preparing found can't be filled automatically.
+ */
 const TABS = [
   {
     id: "ready",
     label: "Ready to approve",
-    status: "queued",
-    hint: "Every required question is answered. Open one to check it, then approve or skip.",
+    statuses: ["queued", "manual"],
+    hint: "Every required question is answered, or the form can't be filled automatically (approve those to wait for the apply runner, or apply yourself). Open one to check it, then approve or skip.",
     empty: "Nothing to approve. New applications are prepared after each matching run.",
   },
   {
     id: "answers",
     label: "Missing answers",
-    status: "needs_input",
+    statuses: ["needs_input"],
     hint: "A required question couldn't be answered from your profile or saved answers. Open one to answer; once nothing is missing it moves to Ready to approve, and short answers fill in on other forms.",
     empty: "No questions waiting on you.",
   },
-] as const satisfies readonly { id: string; label: string; status: AppStatus; hint: string; empty: string }[];
+] as const satisfies readonly { id: string; label: string; statuses: readonly AppStatus[]; hint: string; empty: string }[];
 
 type TabId = (typeof TABS)[number]["id"];
 
@@ -56,6 +59,15 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
       </span>
     );
   }
+  if (app.status === "manual") {
+    const reason = app.prepare_error ?? blockingQuestions(app).find((q) => q.bucket === "cannot_automate")?.question;
+    return (
+      <span>
+        <Badge className={TONE_BADGE.warning}>Can&apos;t fill automatically</Badge>
+        {reason && <span className="mt-1 block truncate text-muted-foreground" title={reason}>{reason}</span>}
+      </span>
+    );
+  }
   const toCheck = app.questions.filter((q) => q.bucket === "drafted" || q.needs_check).length;
   const kinds = [...new Set(((app.flags as { kind: string }[] | null) ?? []).map((f) => f.kind))];
   if (!toCheck && !kinds.length) return <span className="text-muted-foreground">All answers filled</span>;
@@ -69,8 +81,10 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
 
 async function Todo({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
-  const [apps, params] = await Promise.all([listApplications(db, owner.id, TABS.map((t) => t.status)), searchParams]);
-  const byTab = Object.fromEntries(TABS.map((t) => [t.id, apps.filter((a) => a.status === t.status)])) as Record<TabId, ApplicationWithDetails[]>;
+  const [listed, params] = await Promise.all([listApplications(db, owner.id, TABS.flatMap((t) => t.statuses)), searchParams]);
+  // Ones the apply runner handed back are on the board (Runner stuck).
+  const apps = listed.filter((a) => !runnerHandedBack(a));
+  const byTab = Object.fromEntries(TABS.map((t) => [t.id, apps.filter((a) => (t.statuses as readonly string[]).includes(a.status))])) as Record<TabId, ApplicationWithDetails[]>;
   // Without a tab in the URL, open the first lane that has something in it.
   const asked = TABS.find((t) => t.id === one(params.tab));
   const current = asked ?? TABS.find((t) => byTab[t.id].length > 0) ?? TABS[0];

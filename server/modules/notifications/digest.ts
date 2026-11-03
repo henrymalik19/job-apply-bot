@@ -60,7 +60,7 @@ const SECTIONS: { status: NotifyStatus; heading: string; page: string; count: (n
   { status: "offer", heading: "Offers", page: "/app", count: (n) => `${n} offer${n === 1 ? "" : "s"}` },
   { status: "interviewing", heading: "Interviews", page: "/app", count: (n) => `${n} interview${n === 1 ? "" : "s"}` },
   { status: "needs_input", heading: "Questions only you can answer", page: "/app/todo?tab=answers", count: (n) => `${n} need${n === 1 ? "s" : ""} you` },
-  { status: "manual", heading: "Runner stuck", page: "/app/applying", count: (n) => `${n} runner stuck` },
+  { status: "manual", heading: "Can't fill automatically", page: "/app/applying", count: (n) => `${n} can't fill automatically` },
   { status: "queued", heading: "Ready to review", page: "/app/todo?tab=ready", count: (n) => `${n} ready to review` },
 ];
 

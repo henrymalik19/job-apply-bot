@@ -46,7 +46,7 @@ export async function getOverview(db: Db, userId: string, now: Date): Promise<Ov
     ],
     waiting: [
       { status: "needs_input", label: "Needs you", value: byStatus.needs_input, hint: "Prepared, but a required question needs your answer. Once answered it moves to Ready to review.", href: "/app/todo?tab=answers" },
-      { status: "manual", label: "Runner stuck", value: byStatus.manual, hint: "The form couldn't be filled automatically. Send it back to the apply runner, or apply on the employer's site.", href: "/app/applying" },
+      { status: "manual", label: "Can't fill automatically", value: byStatus.manual, hint: "Forms preparing or the apply runner couldn't fill. Approve them to wait for the runner, retry them, or apply on the employer's site.", href: "/app/applying" },
       { status: "queued", label: "Ready to review", value: byStatus.queued, hint: "Every required question is answered. Check it, then approve or skip.", href: "/app/todo?tab=ready" },
     ],
     progress: [

@@ -108,7 +108,7 @@ describe("notify", () => {
     // The last send was recorded at the real clock time, so step past it.
     const later = await notify(new Date(Date.now() + 16 * 60_000));
     expect(later.counts).toMatchObject({ due: 1, sent: 1 });
-    expect(sent.at(-1)!.email.subject).toBe("[Autopilot] 1 runner stuck");
+    expect(sent.at(-1)!.email.subject).toBe("[Autopilot] 1 can't fill automatically");
   });
 
   it("holds email during quiet hours", async () => {

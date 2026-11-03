@@ -24,7 +24,31 @@ export type BoardCard = {
  * A board column: the statuses it shows and the status a card dropped on it moves to, the
  * first of `target` the card can move to (Closed is Rejected after submitting, Expired before).
  */
-export type BoardColumn = { key: string; label: string; statuses: string[]; target: string | string[] | null; muted?: boolean };
+export type BoardColumn = {
+  key: string;
+  label: string;
+  statuses: string[];
+  target: string | string[] | null;
+  /** The lane's color: its top edge, count and the edge of its cards. */
+  accent: Accent;
+  muted?: boolean;
+};
+
+/** Lane colors, written out in full so Tailwind keeps the classes. */
+const ACCENTS = {
+  sky: { lane: "border-t-sky-500", count: "bg-sky-500/15 text-sky-700 dark:text-sky-300", card: "border-l-sky-500" },
+  amber: { lane: "border-t-amber-500", count: "bg-amber-500/15 text-amber-700 dark:text-amber-300", card: "border-l-amber-500" },
+  indigo: { lane: "border-t-indigo-500", count: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300", card: "border-l-indigo-500" },
+  violet: { lane: "border-t-violet-500", count: "bg-violet-500/15 text-violet-700 dark:text-violet-300", card: "border-l-violet-500" },
+  teal: { lane: "border-t-teal-500", count: "bg-teal-500/15 text-teal-700 dark:text-teal-300", card: "border-l-teal-500" },
+  emerald: { lane: "border-t-emerald-500", count: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", card: "border-l-emerald-500" },
+  zinc: { lane: "border-t-zinc-400", count: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400", card: "border-l-zinc-400" },
+} as const;
+/** A lane color name. */
+export type Accent = keyof typeof ACCENTS;
+
+/** Hides a scroll area's scrollbar; it still scrolls by wheel, trackpad and touch. */
+const NO_SCROLLBAR = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 /** Name of each status you can move a card to, for the Move menu. */
 const TARGET_LABEL: Record<string, string> = {
@@ -66,7 +90,7 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
+      <div className={cn("flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2", NO_SCROLLBAR)}>
         {columns.map((col) => {
           const list = shown.filter((c) => col.statuses.includes(c.status));
           const to = dragging ? dropTarget(dragging, col) : null;
@@ -83,16 +107,16 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                 setDragging(null);
               }}
               className={cn(
-                "flex w-72 shrink-0 flex-col rounded-xl border bg-muted/40 transition-colors md:min-h-0",
+                "flex w-72 shrink-0 flex-col rounded-xl border border-t-4 bg-muted/40 transition-colors md:min-h-0",
+                ACCENTS[col.accent].lane,
                 dragging && (to ? "border-primary/60 bg-primary/5" : "opacity-50"),
               )}
             >
               <h2 className="flex items-center justify-between px-3 pt-3 pb-2 text-sm font-semibold">
                 {col.label}
-                <span className="text-xs font-normal tabular-nums text-muted-foreground">{list.length}</span>
+                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium tabular-nums", ACCENTS[col.accent].count)}>{list.length}</span>
               </h2>
-              {/* Scrolls without a visible scrollbar. */}
-              <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className={cn("flex flex-col gap-2 overflow-y-auto px-2 pb-2", NO_SCROLLBAR)}>
                 {list.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{dragging && to ? "Drop here" : "None"}</p>}
                 {list.map((c) => {
                   const targets = targetsOf(c);
@@ -106,7 +130,8 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                       }}
                       onDragEnd={() => setDragging(null)}
                       className={cn(
-                        "flex flex-col gap-1 rounded-lg border bg-card p-3 text-sm shadow-xs",
+                        "flex flex-col gap-1 rounded-lg border border-l-4 bg-card p-3 text-sm shadow-xs",
+                        ACCENTS[col.accent].card,
                         targets.length > 0 && "cursor-grab active:cursor-grabbing",
                         col.muted && "opacity-70",
                       )}

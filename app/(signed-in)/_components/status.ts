@@ -11,8 +11,8 @@ export const STATUS: Record<string, StatusInfo> = {
     tone: "warning",
   },
   manual: {
-    label: "Runner stuck",
-    hint: "The form couldn't be filled automatically; the reason is on it. Send it back to the apply runner, or apply on the employer's site and mark it submitted.",
+    label: "Can't fill automatically",
+    hint: "The form can't be filled automatically; the reason is on it. Approve it to wait for the apply runner, send it back to the runner, or apply on the employer's site and mark it submitted.",
     tone: "warning",
   },
   queued: {
@@ -51,9 +51,12 @@ export const APPLY_STEP_TITLE: Record<string, string> = {
   submitting: "Submitting",
 };
 
-/** Where an application of this status is listed, for back links and redirects: a To do lane, or the board. */
-export function todoHref(status: string): string {
-  if (status === "manual") return "/app/applying";
-  const tab = ({ queued: "ready", needs_input: "answers" } as Record<string, string>)[status];
+/**
+ * Where an application is listed, for back links and redirects: a To do lane, or the board for
+ * one the apply runner handed back (it leaves a note).
+ */
+export function todoHref(status: string, applyNote: string | null = null): string {
+  if (status === "manual" && applyNote != null) return "/app/applying";
+  const tab = ({ queued: "ready", manual: "ready", needs_input: "answers" } as Record<string, string>)[status];
   return tab ? `/app/todo?tab=${tab}` : "/app/todo";
 }
