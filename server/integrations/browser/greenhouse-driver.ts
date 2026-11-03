@@ -42,6 +42,38 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     return true;
   }
 
+  /**
+   * Types into a search combobox and picks the closest suggestion by shared words
+   * ("Georgia State University" for "Georgia State Univ."). The whole value is
+   * typed first, then shorter starts of it, since the search can miss on the full
+   * name. Nothing close enough means nothing is picked.
+   */
+  async function pickClosest(fieldName: string, value: string): Promise<boolean> {
+    const input = form.locator(byId(fieldName));
+    const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
+    const words = norm(value).split(/[^a-z0-9]+/).filter(Boolean);
+    const queries = [...new Set([value, words.slice(0, 3).join(" "), words.slice(0, 2).join(" "), words.find((w) => w.length > 3) ?? ""])].filter(Boolean);
+    const score = (option: string) => {
+      const have = new Set(norm(option).split(/[^a-z0-9]+/).filter(Boolean));
+      const shared = words.filter((w) => have.has(w)).length;
+      return shared / Math.max(words.length, have.size);
+    };
+    for (const query of queries) {
+      await input.click();
+      await input.fill(query);
+      await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
+      const texts = await options.allTextContents();
+      const best = texts.map((t, i) => ({ i, s: score(t) })).sort((a, b) => b.s - a.s)[0];
+      if (best && best.s >= 0.5) {
+        await options.nth(best.i).click();
+        return true;
+      }
+    }
+    await input.fill("");
+    await input.press("Escape");
+    return false;
+  }
+
   /** Opens a combobox and picks its decline option ("I don't wish to answer", "Decline To Self Identify"). */
   async function pickDecline(fieldName: string): Promise<boolean> {
     const input = form.locator(byId(fieldName));
@@ -117,6 +149,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
       }
       if (step.kind === "location") return pickPlace(step.fieldName, step.value);
       if (step.kind === "decline") return pickDecline(step.fieldName);
+      if (step.kind === "closest") return pickClosest(step.fieldName, step.value);
       if (step.kind === "check") {
         // The id is on a wrapper; the checkbox inside carries the field name.
         const box = form.locator(`input[type=checkbox][name=${JSON.stringify(step.fieldName)}]`).first();

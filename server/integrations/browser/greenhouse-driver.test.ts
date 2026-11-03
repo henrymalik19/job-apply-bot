@@ -70,7 +70,11 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await driver.fill({ kind: "decline", fieldName: "gender", label: "Gender", required: false }, resume)).toBe(true);
     expect(await page.locator("#gender").locator("xpath=ancestor::div[contains(@class,'select__control')]").innerText()).toContain("Decline To Self Identify");
     expect(await driver.fill({ kind: "decline", fieldName: "disability_status", label: "Disability", required: false }, resume)).toBe(false);
-  });
+    // The closest school, after the full name finds nothing; nothing close enough picks nothing.
+    expect(await driver.fill({ kind: "closest", fieldName: "school--0", label: "School", required: false, value: "Georgia State Univ" }, resume)).toBe(true);
+    expect(await driver.values([{ kind: "closest", fieldName: "school--0", label: "School", required: false, value: "x" }])).toEqual({ "school--0": "Georgia State University" });
+    expect(await driver.fill({ kind: "closest", fieldName: "school--0", label: "School", required: false, value: "Stanford University" }, resume)).toBe(false);
+  }, 30_000);
 
   it("reports an option that isn't on the form", async () => {
     const driver = greenhouseDriver(page);

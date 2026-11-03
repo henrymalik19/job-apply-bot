@@ -19,7 +19,7 @@ import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-drive
 import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { codeInbox } from "@/server/integrations/email/code-inbox";
 import { clearStaleSteps, listReadyToApply } from "@/server/modules/apply/apply.repository";
-import { greenhouseExtras, type HomePlace } from "@/server/modules/apply/fill-plan";
+import { greenhouseExtras, type HomePlace, type Schooling } from "@/server/modules/apply/fill-plan";
 import { usStateName } from "@/server/modules/criteria/places";
 import { APPLY_ATS, applyOne } from "@/server/modules/apply/apply.service";
 import { parseApplyEnv } from "@/shared/env";
@@ -78,12 +78,17 @@ async function signIn(db: Db): Promise<string> {
   return res.data.user.id;
 }
 
-/** Your name (for the resume file name) and where you live (for Country and Location fields). */
-async function profileBasics(db: Db, userId: string): Promise<{ name: string; home: HomePlace }> {
-  const { data } = await db.from("profiles").select("first_name, last_name, city, state").eq("user_id", userId).maybeSingle();
+/** Your name (for the resume file name), where you live (Country and Location fields) and your first education. */
+async function profileBasics(db: Db, userId: string): Promise<{ name: string; home: HomePlace; school: Schooling | null }> {
+  const [{ data }, { data: edu }] = await Promise.all([
+    db.from("profiles").select("first_name, last_name, city, state").eq("user_id", userId).maybeSingle(),
+    db.from("educations").select("institution, degree, field_of_study, start_year, end_year").eq("user_id", userId)
+      .order("sort_order").order("end_year", { ascending: false, nullsFirst: true }).limit(1).maybeSingle(),
+  ]);
   return {
     name: [data?.first_name, data?.last_name].filter(Boolean).join(" ") || "Resume",
     home: { city: data?.city ?? null, stateName: usStateName(data?.state), country: "United States" },
+    school: edu ? { institution: edu.institution, degree: edu.degree, fieldOfStudy: edu.field_of_study, startYear: edu.start_year, endYear: edu.end_year } : null,
   };
 }
 
@@ -100,7 +105,7 @@ async function main() {
     auth: { storage: fileStorage(), persistSession: true, autoRefreshToken: true, storageKey: "apply-runner" },
   });
   const userId = await signIn(db);
-  const { name, home } = await profileBasics(db, userId);
+  const { name, home, school } = await profileBasics(db, userId);
   const stale = await clearStaleSteps(db, userId);
   if (stale) log(`cleared ${stale} application(s) left mid-way by an earlier run`);
 
@@ -149,7 +154,7 @@ async function main() {
         let outcome = "error";
         let closeTab = false;
         try {
-          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
+          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home, school), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           if (result.result === "submitted") done.push(page);
           // A form nobody submitted in time is reopened from the app; its tab has no more use.

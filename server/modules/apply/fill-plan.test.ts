@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFillPlan, changedFields, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
+import { buildFillPlan, changedFields, educationSteps, greenhouseDegree, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
 
 const q = (over: Partial<PlanQuestion>): PlanQuestion => ({
   question: "Q",
@@ -52,6 +52,14 @@ describe("buildFillPlan", () => {
     expect(plan.steps).toEqual([{ kind: "decline", fieldName: "demographic_4", label: "Gender identity", required: false }]);
   });
 
+  it("answers No to an unanswered referral question", () => {
+    const plan = buildFillPlan([
+      q({ question: "Were you referred to this role by a current employee?", field_name: "question_7", field_type: "select", options: [{ label: "Yes", value: "1" }, { label: "No", value: "0" }] }),
+      q({ question: "If yes, please provide the full name of the employee who referred you.", field_name: "question_8" }),
+    ]);
+    expect(plan.steps).toEqual([{ kind: "select", fieldName: "question_7", label: "Were you referred to this role by a current employee?", required: false, value: ["No"] }]);
+  });
+
   it("falls back to the answer text when the value isn't an option value", () => {
     const plan = buildFillPlan([q({ field_type: "select", options: [{ label: "Yes", value: "1" }], answer: "Yes", answer_value: "Yes" })]);
     expect(plan.steps[0]).toMatchObject({ kind: "select", value: ["Yes"] });
@@ -95,6 +103,26 @@ describe("sameText", () => {
     expect(sameText("(704) 555-0199", "7045550100")).toBe(false);
     expect(sameText("Ada  Lovelace ", "Ada Lovelace")).toBe(true);
     expect(sameText("Ada", "Ada Lovelace")).toBe(false);
+  });
+});
+
+describe("education", () => {
+  it("maps degrees onto Greenhouse's list", () => {
+    expect(["B.S.", "Bachelor of Science", "BA", "M.S. Computer Science", "MBA", "Ph.D.", "Associate of Science", "Certificate"].map(greenhouseDegree)).toEqual([
+      "Bachelor's Degree", "Bachelor's Degree", "Bachelor's Degree", "Master's Degree",
+      "Master of Business Administration (M.B.A.)", "Doctor of Philosophy (Ph.D.)", "Associate's Degree", "Other",
+    ]);
+  });
+
+  it("fills school, degree, discipline and years, leaving out what the profile lacks", () => {
+    expect(educationSteps({ institution: "Georgia State University", degree: "B.S.", fieldOfStudy: "Computer Science", startYear: 2012, endYear: 2016 }).map((s) => [s.fieldName, "value" in s ? s.value : null])).toEqual([
+      ["school--0", "Georgia State University"],
+      ["degree--0", ["Bachelor's Degree"]],
+      ["discipline--0", "Computer Science"],
+      ["start-year--0", "2012"],
+      ["end-year--0", "2016"],
+    ]);
+    expect(educationSteps({ institution: "Self-taught", degree: null, fieldOfStudy: null, startYear: null, endYear: null }).map((s) => s.fieldName)).toEqual(["school--0"]);
   });
 });
 
