@@ -7,7 +7,7 @@ import { ago } from "@/shared/format";
 import { InfoTip } from "../../_components/info-tip";
 import { runnerFills, SiteBadge } from "../../_components/site-badge";
 import { APPLY_STEP_TITLE, statusInfo } from "../../_components/status";
-import { Board, type BoardCard, type BoardColumn } from "./board";
+import { Board, type BoardCard, type BoardColumn, type CardNote } from "./board";
 
 const COLUMNS: BoardColumn[] = [
   { key: "approved", label: "Approved", statuses: ["approved"], target: "approved", accent: "sky" },
@@ -19,14 +19,23 @@ const COLUMNS: BoardColumn[] = [
   { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: ["rejected", "expired"], accent: "zinc", muted: true },
 ];
 
-/** The line under a card's company: what the runner is doing, why it's stuck, or when it reached this status. */
-function cardLine(app: ApplicationWithDetails, now: Date): string {
-  if (app.status === "manual") return app.apply_note ?? "";
+/** A card's status pill: what the runner is doing, why it's stuck, or how long it has been in its lane. */
+function cardNote(app: ApplicationWithDetails, now: Date): CardNote {
+  if (app.status === "manual") return { text: app.apply_note ?? "Handed back", detail: app.apply_note ?? undefined, tone: "warning" };
   if (app.status === "approved") {
-    if (!runnerFills(app.job.source)) return "The runner can't fill this site yet; it waits here. Or apply on the employer's site and move it to Submitted";
-    return app.apply_step ? (APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step) : "Waiting for the apply runner";
+    if (!runnerFills(app.job.source)) {
+      return {
+        text: "Site not supported yet",
+        detail: "The apply runner can't fill this site yet, so it waits here. Or apply on the employer's site and move it to Submitted.",
+        tone: "muted",
+      };
+    }
+    if (app.apply_step === "waiting_for_you") return { text: APPLY_STEP_TITLE.waiting_for_you, tone: "warning" };
+    if (app.apply_step) return { text: APPLY_STEP_TITLE[app.apply_step] ?? app.apply_step, tone: "info" };
+    return { text: "Waiting for the runner", detail: "The apply runner on your computer picks it up within 20 seconds while it's running (pnpm worker:apply).", tone: "muted" };
   }
-  return `${statusInfo(app.status).label} ${ago(app.last_status_at, now)}`;
+  const tone = app.status === "offer" || app.status === "interviewing" ? "success" : "muted";
+  return { text: ago(app.last_status_at, now), detail: `${statusInfo(app.status).label} since ${new Date(app.last_status_at).toLocaleDateString()}`, tone, since: true };
 }
 
 async function Applying() {
@@ -43,7 +52,7 @@ async function Applying() {
     title: a.job.title,
     company: a.job.company_name,
     badge: <SiteBadge source={a.job.source} />,
-    line: cardLine(a, now),
+    note: cardNote(a, now),
     applyUrl: (a.status === "approved" && !runnerFills(a.job.source)) || a.status === "manual" ? (a.job.apply_url ?? a.job.url) : null,
     canRetry: a.status === "manual" && canRetry(a.job.source, a.apply_note),
   }));

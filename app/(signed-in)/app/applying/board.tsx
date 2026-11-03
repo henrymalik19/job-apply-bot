@@ -12,9 +12,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { Clock, Ellipsis } from "lucide-react";
 import Link from "next/link";
 import { useOptimistic, useState, useTransition, type ReactNode } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/shared/cn";
+import { TONE_BADGE, type Tone } from "../../_components/status";
 import { moveApplicationAction } from "../applications/actions";
 
 /** One application as a card; `badge` is the site badge, rendered on the server. */
@@ -24,13 +27,19 @@ export type BoardCard = {
   title: string;
   company: string;
   badge: ReactNode;
-  /** One line under the company: the runner's progress, or when it got here. */
-  line: string;
+  /** Where it stands: the runner's progress, why it's stuck, or how long it has been here. */
+  note: CardNote;
   /** Approved on a site the runner can't fill, or stuck: where to apply. */
   applyUrl?: string | null;
   /** Stuck, and the apply runner can try it again (moving it to Approved). */
   canRetry?: boolean;
 };
+
+/**
+ * A card's status pill: `text` is short; `detail`, when given, opens on hover or tap.
+ * `since` shows a clock, for "how long it has been in this lane".
+ */
+export type CardNote = { text: string; detail?: string; tone: Tone; since?: boolean };
 
 /**
  * A board column: the statuses it shows and the status a card dropped on it moves to, the
@@ -81,7 +90,7 @@ const TARGET_LABEL: Record<string, string> = {
  */
 export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards: BoardCard[]; moves: Record<string, string[]> }) {
   const [shown, move] = useOptimistic(cards, (list, m: { id: string; to: string }) =>
-    list.map((c) => (c.id === m.id ? { ...c, status: m.to, line: "Moving…" } : c)),
+    list.map((c) => (c.id === m.id ? { ...c, status: m.to, note: { text: "Moving…", tone: "info" as const } } : c)),
   );
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState<BoardCard | null>(null);
@@ -115,7 +124,8 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
+    // A fixed id keeps dnd-kit's accessibility ids the same on the server and in the browser.
+    <DndContext id="applying-board" sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className={cn("flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2", NO_SCROLLBAR)}>
@@ -200,30 +210,66 @@ function CardBody({ card, accent, muted, targets = [], onMove, lifted }: {
         {card.company}
         {card.badge}
       </div>
-      <p className="text-xs text-muted-foreground">{card.line}</p>
-      {(card.applyUrl || targets.length > 0) && (
-        <div className="mt-1 flex items-center justify-between gap-2">
-          {card.applyUrl ? (
-            <a href={card.applyUrl} target="_blank" rel="noreferrer" draggable={false} className="text-xs font-medium text-primary hover:underline">
-              Apply ↗
-            </a>
-          ) : <span />}
-          {targets.length > 0 && onMove && (
-            <select
-              aria-label={`Move ${card.title}`}
-              value=""
-              // Picking from the menu isn't the start of a drag.
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onChange={(e) => e.target.value && onMove(e.target.value)}
-              className="h-7 max-w-32 min-w-0 rounded-md border bg-background px-1.5 text-xs text-muted-foreground"
-            >
-              <option value="">Move to…</option>
-              {targets.map((t) => <option key={t} value={t}>{TARGET_LABEL[t] ?? t}</option>)}
-            </select>
-          )}
-        </div>
-      )}
+      <div className="mt-1.5 flex items-center gap-2">
+        <Note note={card.note} />
+        {card.applyUrl && (
+          <a href={card.applyUrl} target="_blank" rel="noreferrer" draggable={false} className="shrink-0 text-xs font-medium text-primary hover:underline">
+            Apply ↗
+          </a>
+        )}
+        {targets.length > 0 && onMove && <MoveMenu title={card.title} targets={targets} onMove={onMove} />}
+      </div>
     </article>
+  );
+}
+
+/** The status pill; a long one is cut to a line and shows in full on hover or tap. */
+function Note({ note }: { note: CardNote }) {
+  const pill = (
+    <span className={cn("inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-xs font-medium", TONE_BADGE[note.tone])}>
+      {note.since && <Clock className="size-3 shrink-0" />}
+      <span className="truncate">{note.text}</span>
+    </span>
+  );
+  if (!note.detail) return <span className="mr-auto min-w-0">{pill}</span>;
+  return (
+    <Popover>
+      <PopoverTrigger openOnHover delay={150} className="mr-auto min-w-0 text-left">{pill}</PopoverTrigger>
+      <PopoverContent side="top" className="w-64 text-xs leading-relaxed">{note.detail}</PopoverContent>
+    </Popover>
+  );
+}
+
+/** Where a card can go, for keyboards and small screens; dragging does the same. */
+function MoveMenu({ title, targets, onMove }: { title: string; targets: string[]; onMove: (to: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        aria-label={`Move ${title}`}
+        // Opening the menu isn't the start of a drag.
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        className="ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Ellipsis className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-48 gap-0.5 p-1">
+        <p className="px-2 py-1 text-xs text-muted-foreground">Move to</p>
+        {targets.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onMove(t);
+            }}
+            className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+          >
+            {TARGET_LABEL[t] ?? t}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
