@@ -9,6 +9,9 @@ import type { BoardAts } from "./boards";
 /** How a question is answered on the form. */
 export type FieldType = "text" | "textarea" | "select" | "multiselect" | "boolean" | "file" | "location" | "hidden";
 
+/** An option that declines to answer: "I don't wish to answer", "Decline To Self Identify", "Prefer not to say". */
+export const DECLINE = /\b(decline|prefer not|don'?t wish|do not wish|choose not)\b/i;
+
 /** One choice of a select question. `decline` marks "I don't wish to answer". */
 export type FormOption = { label: string; value: string; decline?: boolean };
 
@@ -44,6 +47,26 @@ const greenhouseJob = z.object({
             name: z.string(),
             type: z.string(),
             values: z.array(z.object({ label: z.string(), value: z.union([z.string(), z.number()]) })).nullish(),
+          }),
+        ),
+      }),
+    )
+    .nullish(),
+  // The self-identification (EEOC) section: gender, race, veteran and disability status, by field name.
+  compliance: z
+    .array(
+      z.object({
+        questions: z.array(
+          z.object({
+            label: z.string(),
+            required: z.boolean().nullish(),
+            fields: z.array(
+              z.object({
+                name: z.string(),
+                type: z.string(),
+                values: z.array(z.object({ label: z.string(), value: z.union([z.string(), z.number()]) })).nullish(),
+              }),
+            ),
           }),
         ),
       }),
@@ -98,7 +121,22 @@ export function parseGreenhouseForm(body: unknown): ApplicationForm {
       description: null,
       required: q.required ?? false,
       fieldType: GREENHOUSE_TYPES[q.type] ?? "select",
-      options: q.answer_options.map((o) => ({ label: o.label, value: String(o.id), decline: o.decline_to_answer ?? false })),
+      // Not every board flags its decline option ("I don't wish to answer" without decline_to_answer).
+      options: q.answer_options.map((o) => ({ label: o.label, value: String(o.id), decline: (o.decline_to_answer ?? false) || DECLINE.test(o.label) })),
+      group: "eeo",
+    });
+  }
+  for (const q of (job.compliance ?? []).flatMap((c) => c.questions)) {
+    const field = q.fields[0];
+    if (!field) continue;
+    questions.push({
+      fieldName: field.name,
+      // "VeteranStatus" -> "Veteran Status"
+      label: q.label.replace(/([a-z])([A-Z])/g, "$1 $2").trim(),
+      description: null,
+      required: q.required ?? false,
+      fieldType: GREENHOUSE_TYPES[field.type] ?? "select",
+      options: (field.values ?? []).map((v) => ({ label: v.label, value: String(v.value), decline: DECLINE.test(v.label) })),
       group: "eeo",
     });
   }
@@ -144,7 +182,6 @@ const ASHBY_TYPES: Record<string, FieldType> = {
   Location: "location",
 };
 
-const DECLINE = /\b(decline|prefer not|don'?t wish|do not wish|choose not)\b/i;
 
 /** Parses Ashby's `ApiJobPosting` GraphQL response into a form; null when the posting is gone. */
 export function parseAshbyForm(body: unknown): ApplicationForm | null {

@@ -5,6 +5,7 @@
 // resume is a file input. Never touches CAPTCHAs: it only reports them.
 import type { Page } from "playwright-core";
 import type { FormDriver } from "@/server/modules/apply/apply.service";
+import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 
 /** The element id of a form field: demographic questions use their bare number. */
@@ -33,6 +34,21 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     const texts = await options.allTextContents();
     let i = texts.findIndex((t) => norm(t) === norm(label));
     if (i < 0 && texts.length === 1 && norm(texts[0]).startsWith(norm(label))) i = 0;
+    if (i < 0) {
+      await input.press("Escape");
+      return false;
+    }
+    await options.nth(i).click();
+    return true;
+  }
+
+  /** Opens a combobox and picks its decline option ("I don't wish to answer", "Decline To Self Identify"). */
+  async function pickDecline(fieldName: string): Promise<boolean> {
+    const input = form.locator(byId(fieldName));
+    await input.click();
+    const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
+    await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
+    const i = (await options.allTextContents()).findIndex((t) => DECLINE.test(t));
     if (i < 0) {
       await input.press("Escape");
       return false;
@@ -100,6 +116,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
         return sameText(await el.inputValue(), step.value);
       }
       if (step.kind === "location") return pickPlace(step.fieldName, step.value);
+      if (step.kind === "decline") return pickDecline(step.fieldName);
       if (step.kind === "check") {
         // The id is on a wrapper; the checkbox inside carries the field name.
         const box = form.locator(`input[type=checkbox][name=${JSON.stringify(step.fieldName)}]`).first();
@@ -112,7 +129,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     },
 
     async values(steps) {
-      const fields = steps.filter((s) => s.kind !== "resume" && s.kind !== "check").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
+      const fields = steps.filter((s) => s.kind !== "resume" && s.kind !== "check" && s.kind !== "decline").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
       return page.evaluate((list) => {
         const out: Record<string, string> = {};
         for (const f of list) {

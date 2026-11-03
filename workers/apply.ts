@@ -147,16 +147,19 @@ async function main() {
           record.log(line);
         };
         let outcome = "error";
+        let closeTab = false;
         try {
           const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           if (result.result === "submitted") done.push(page);
           // A form nobody submitted in time is reopened from the app; its tab has no more use.
-          else if (result.closeTab) await page.close().catch(() => undefined);
+          else if (result.closeTab) closeTab = true;
         } catch (err) {
           both(`${app.id}: failed: ${(err as Error).message}`);
         }
         log(`${app.id}: run record in ${path.relative(process.cwd(), await record.finish(outcome))}`);
+        // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
+        if (closeTab) await page.close().catch(() => undefined);
       }
     } catch (err) {
       log(`poll failed: ${(err as Error).message}`);

@@ -56,7 +56,7 @@ export async function recordRun(root: string, appId: string, page: Page, driver:
       return result;
     },
     async fill(step, resumePath) {
-      const shown = step.kind === "resume" ? path.basename(resumePath) : JSON.stringify(step.value).slice(0, 120);
+      const shown = step.kind === "resume" ? path.basename(resumePath) : step.kind === "decline" ? "(decline)" : JSON.stringify(step.value).slice(0, 120);
       let ok = false;
       try {
         ok = await driver.fill(step, resumePath);

@@ -209,7 +209,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   }
   if (await driver.challenge()) return fail("The form shows a verification check. Finish it in the open Chrome window.");
 
-  const answers = steps.map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.value }));
+  const answers = steps.map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.kind === "decline" ? "declined" : s.value }));
   await addEvidence(db, {
     userId,
     applicationId: app.id,

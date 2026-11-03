@@ -43,6 +43,15 @@ describe("buildFillPlan", () => {
     ]);
   });
 
+  it("declines a voluntary question left blank when the form offers that", () => {
+    const options = [{ label: "Man", value: "1" }, { label: "I don't wish to answer", value: "2" }];
+    const plan = buildFillPlan([
+      q({ question: "Gender identity", field_name: "demographic_4", field_type: "multiselect", options }),
+      q({ question: "Referred?", field_name: "question_9", field_type: "select", options: [{ label: "Yes", value: "1" }, { label: "No", value: "0" }] }),
+    ]);
+    expect(plan.steps).toEqual([{ kind: "decline", fieldName: "demographic_4", label: "Gender identity", required: false }]);
+  });
+
   it("falls back to the answer text when the value isn't an option value", () => {
     const plan = buildFillPlan([q({ field_type: "select", options: [{ label: "Yes", value: "1" }], answer: "Yes", answer_value: "Yes" })]);
     expect(plan.steps[0]).toMatchObject({ kind: "select", value: ["Yes"] });
@@ -90,13 +99,15 @@ describe("sameText", () => {
 });
 
 describe("greenhouseExtras", () => {
-  it("fills Country, Location when there is a city, and the demographic consent", () => {
-    expect(greenhouseExtras({ city: "Atlanta", stateName: "Georgia", country: "United States" }).map((s) => [s.fieldName, s.kind === "resume" ? null : s.value])).toEqual([
+  it("fills Country, Location when there is a city, the demographic consent, and declines self-identification", () => {
+    const eeoc = ["gender", "hispanic_ethnicity", "race", "veteran_status", "disability_status"].map((f) => [f, "decline"]);
+    expect(greenhouseExtras({ city: "Atlanta", stateName: "Georgia", country: "United States" }).map((s) => [s.fieldName, "value" in s ? s.value : s.kind])).toEqual([
       ["country", ["United States"]],
       ["candidate-location", "Atlanta, Georgia"],
       ["gdpr_demographic_data_consent_given", true],
+      ...eeoc,
     ]);
-    expect(greenhouseExtras({ city: null, stateName: null, country: "United States" }).map((s) => s.fieldName)).toEqual(["country", "gdpr_demographic_data_consent_given"]);
+    expect(greenhouseExtras({ city: null, stateName: null, country: "United States" }).map((s) => s.fieldName).slice(0, 2)).toEqual(["country", "gdpr_demographic_data_consent_given"]);
   });
 
   it("counts a longer picked option or a reformatted phone as unchanged", () => {

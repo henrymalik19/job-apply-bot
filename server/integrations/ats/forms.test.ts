@@ -17,8 +17,27 @@ const greenhouseJob = {
       fields: [{ name: "question_1", type: "multi_value_single_select", values: [{ label: "Yes", value: 1 }, { label: "No", value: 0 }] }],
     },
   ],
+  compliance: [
+    {
+      type: "eeoc",
+      questions: [
+        {
+          required: false,
+          label: "VeteranStatus",
+          fields: [{ name: "veteran_status", type: "multi_value_single_select", values: [{ label: "I am not a protected veteran", value: "1" }, { label: "I don't wish to answer", value: "3" }] }],
+        },
+      ],
+    },
+  ],
   demographic_questions: {
     questions: [
+      {
+        id: 8,
+        label: "Pronouns",
+        required: false,
+        type: "multi_value_single_select",
+        answer_options: [{ id: 80, label: "She/her", decline_to_answer: false }, { id: 81, label: "I don't wish to answer", decline_to_answer: false }],
+      },
       {
         id: 7,
         label: "Gender",
@@ -68,10 +87,15 @@ describe("parseGreenhouseForm", () => {
       ["first_name", "text", "application"],
       ["resume", "file", "application"],
       ["question_1", "select", "application"],
+      ["demographic_8", "select", "eeo"],
       ["demographic_7", "select", "eeo"],
+      ["veteran_status", "select", "eeo"],
     ]);
     expect(form.questions[2]).toMatchObject({ label: "Do you require sponsorship?", required: true, options: [{ label: "Yes", value: "1" }, { label: "No", value: "0" }] });
-    expect(form.questions[3].options[1]).toEqual({ label: "I don't wish to answer", value: "71", decline: true });
+    expect(form.questions[4].options[1]).toEqual({ label: "I don't wish to answer", value: "71", decline: true });
+    // An unflagged "I don't wish to answer" still declines, and EEOC questions read like the form.
+    expect(form.questions[3].options[1].decline).toBe(true);
+    expect(form.questions[5]).toMatchObject({ label: "Veteran Status", options: [{ decline: false }, { label: "I don't wish to answer", value: "3", decline: true }] });
   });
 });
 

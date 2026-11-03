@@ -66,6 +66,10 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     const consent: FillStep = { kind: "check", fieldName: "gdpr_demographic_data_consent_given", label: "Consent", required: false, value: true };
     expect(await driver.fill(consent, resume)).toBe(true);
     expect(await page.locator("#gdpr_demographic_data_consent_given_1").isChecked()).toBe(true);
+    // The decline option, whatever this form calls it; a field the form lacks isn't filled.
+    expect(await driver.fill({ kind: "decline", fieldName: "gender", label: "Gender", required: false }, resume)).toBe(true);
+    expect(await page.locator("#gender").locator("xpath=ancestor::div[contains(@class,'select__control')]").innerText()).toContain("Decline To Self Identify");
+    expect(await driver.fill({ kind: "decline", fieldName: "disability_status", label: "Disability", required: false }, resume)).toBe(false);
   });
 
   it("reports an option that isn't on the form", async () => {
