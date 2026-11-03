@@ -38,6 +38,30 @@ export async function transition(
   return data as Application;
 }
 
+/** Statuses an application has before it is submitted: the ones a closed posting expires. */
+const BEFORE_SUBMIT: readonly AppStatus[] = ["queued", "needs_input", "manual", "approved"];
+
+/**
+ * Expires every user's not-yet-submitted applications whose posting has closed
+ * (discovery sets `jobs.closed_at` when a job leaves its board). One the apply
+ * runner is working on is left alone. Service-role client.
+ *
+ * @returns How many were expired.
+ */
+export async function expireClosedApplications(db: Db): Promise<number> {
+  const rows = unwrap(
+    await db
+      .from("applications")
+      .select("id, jobs!inner(closed_at)")
+      .in("status", [...BEFORE_SUBMIT])
+      .is("apply_step", null)
+      .not("jobs.closed_at", "is", null),
+    "list applications of closed postings",
+  );
+  for (const row of rows) await transition(db, row.id, "expired", "system:posting_closed");
+  return rows.length;
+}
+
 /** Number of a user's applications in each status (every status present, zero if none). */
 export async function countByStatus(db: Db, userId: string): Promise<Record<AppStatus, number>> {
   const rows = unwrap(await db.from("applications").select("status").eq("user_id", userId), "count applications");

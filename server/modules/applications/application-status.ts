@@ -26,5 +26,8 @@ export const BOARD_STATUSES: readonly AppStatus[] = [
   "approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer", "rejected", "expired", "failed",
 ];
 
-/** Statuses you can move an application to by hand: you applied, they replied, an interview, an offer, a no. */
-export const USER_MOVE_TARGETS: readonly AppStatus[] = ["submitted", "responded", "interviewing", "offer", "rejected"];
+/**
+ * Statuses you can move an application to by hand: you applied, they replied, an interview, an
+ * offer, a no, or the posting is gone (expired, before submitting).
+ */
+export const USER_MOVE_TARGETS: readonly AppStatus[] = ["submitted", "responded", "interviewing", "offer", "rejected", "expired"];

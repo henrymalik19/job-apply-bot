@@ -16,7 +16,7 @@ const COLUMNS: BoardColumn[] = [
   { key: "responded", label: "Heard back", statuses: ["responded"], target: "responded" },
   { key: "interviewing", label: "Interviewing", statuses: ["interviewing"], target: "interviewing" },
   { key: "offer", label: "Offer", statuses: ["offer"], target: "offer" },
-  { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: "rejected", muted: true },
+  { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: ["rejected", "expired"], muted: true },
 ];
 
 /** The line under a card's company: what the runner is doing, why it's stuck, or when it reached this status. */

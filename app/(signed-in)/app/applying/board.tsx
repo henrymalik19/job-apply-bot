@@ -20,8 +20,11 @@ export type BoardCard = {
   canRetry?: boolean;
 };
 
-/** A board column: the statuses it shows and the status a card dropped on it moves to. */
-export type BoardColumn = { key: string; label: string; statuses: string[]; target: string | null; muted?: boolean };
+/**
+ * A board column: the statuses it shows and the status a card dropped on it moves to, the
+ * first of `target` the card can move to (Closed is Rejected after submitting, Expired before).
+ */
+export type BoardColumn = { key: string; label: string; statuses: string[]; target: string | string[] | null; muted?: boolean };
 
 /** Name of each status you can move a card to, for the Move menu. */
 const TARGET_LABEL: Record<string, string> = {
@@ -31,6 +34,7 @@ const TARGET_LABEL: Record<string, string> = {
   interviewing: "Interviewing",
   offer: "Offer",
   rejected: "Rejected",
+  expired: "Closed (posting gone)",
 };
 
 /**
@@ -47,7 +51,9 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
   const [error, setError] = useState<string | null>(null);
 
   const targetsOf = (card: BoardCard) => [...(card.canRetry ? ["approved"] : []), ...(moves[card.status] ?? [])].filter((t) => t !== card.status);
-  const canMove = (card: BoardCard, to: string | null) => !!to && targetsOf(card).includes(to);
+  /** Where a card dropped on a column goes, or null when it can't go there. */
+  const dropTarget = (card: BoardCard, col: BoardColumn) =>
+    [col.target ?? []].flat().find((t) => t !== card.status && targetsOf(card).includes(t)) ?? null;
   const send = (card: BoardCard, to: string) => {
     setError(null);
     startTransition(async () => {
@@ -63,22 +69,22 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
         {columns.map((col) => {
           const list = shown.filter((c) => col.statuses.includes(c.status));
-          const droppable = dragging ? canMove(dragging, col.target) : false;
+          const to = dragging ? dropTarget(dragging, col) : null;
           return (
             <section
               key={col.key}
               aria-label={col.label}
               onDragOver={(e) => {
-                if (droppable) e.preventDefault();
+                if (to) e.preventDefault();
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                if (dragging && droppable && col.target) send(dragging, col.target);
+                if (dragging && to) send(dragging, to);
                 setDragging(null);
               }}
               className={cn(
                 "flex w-60 min-w-60 flex-1 flex-col rounded-xl border bg-muted/40 transition-colors md:min-h-0",
-                dragging && (droppable ? "border-primary/60 bg-primary/5" : "opacity-50"),
+                dragging && (to ? "border-primary/60 bg-primary/5" : "opacity-50"),
               )}
             >
               <h2 className="flex items-center justify-between px-3 pt-3 pb-2 text-sm font-semibold">
@@ -86,7 +92,7 @@ export function Board({ columns, cards, moves }: { columns: BoardColumn[]; cards
                 <span className="text-xs font-normal tabular-nums text-muted-foreground">{list.length}</span>
               </h2>
               <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2">
-                {list.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{dragging && droppable ? "Drop here" : "None"}</p>}
+                {list.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{dragging && to ? "Drop here" : "None"}</p>}
                 {list.map((c) => {
                   const targets = targetsOf(c);
                   return (

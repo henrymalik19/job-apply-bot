@@ -26,6 +26,7 @@ import { USER_MOVE_TARGETS, type AppStatus } from "./application-status";
 
 export {
   countByStatus,
+  expireClosedApplications,
   getApplication,
   IllegalTransitionError,
   listApplications,
@@ -240,7 +241,7 @@ export async function skipApplication(
  */
 export async function moveApplication(db: Db, userId: string, applicationId: string, to: string): Promise<void> {
   const target = USER_MOVE_TARGETS.find((s) => s === to);
-  if (!target) throw new ValidationError("Applications can only be moved to Submitted, Heard back, Interviewing, Offer or Rejected.");
+  if (!target) throw new ValidationError("Applications can only be moved to Submitted, Heard back, Interviewing, Offer, Rejected or Closed.");
   const app = await getApplication(db, userId, z.string().uuid().parse(applicationId));
   if (!app) throw new ValidationError("That application is gone.");
   if (app.status === target) return;

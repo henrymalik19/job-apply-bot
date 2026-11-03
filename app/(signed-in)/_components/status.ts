@@ -27,7 +27,7 @@ export const STATUS: Record<string, StatusInfo> = {
   interviewing: { label: "Interviewing", hint: "You have an interview in progress.", tone: "success" },
   offer: { label: "Offer", hint: "You received an offer.", tone: "success" },
   skipped: { label: "Skipped", hint: "You skipped this job.", tone: "muted" },
-  expired: { label: "Expired", hint: "It waited too long and was closed.", tone: "muted" },
+  expired: { label: "Expired", hint: "The posting closed before it was submitted.", tone: "muted" },
   rejected: { label: "Rejected", hint: "The employer declined.", tone: "muted" },
   failed: { label: "Preparing failed", hint: "Something went wrong while preparing it.", tone: "destructive" },
 };

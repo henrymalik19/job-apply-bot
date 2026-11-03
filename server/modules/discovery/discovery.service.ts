@@ -4,6 +4,7 @@
 // plus one for the whole run. Runs with the service-role client (RLS bypass)
 // from the Railway worker.
 import type { Db } from "@/server/db/types";
+import { expireClosedApplications } from "@/server/modules/applications/applications.service";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
 import {
   getJobFilter,
@@ -70,7 +71,8 @@ export type BoardCounts = {
 /** Totals for a whole run, plus the id of its worker-level `runs` row. */
 export type DiscoverSummary = {
   runId: string;
-  counts: { boards: number; ok: number; failed: number; skipped: number } & BoardCounts;
+  /** `expired`: applications not yet submitted whose posting closed. */
+  counts: { boards: number; ok: number; failed: number; skipped: number; expired: number } & BoardCounts;
 };
 
 // `locations` is only for filtering; the jobs table stores the primary location.
@@ -165,7 +167,7 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
   if (interrupted) log(`closed ${interrupted} interrupted run(s) from an earlier process`);
   const runId = await startRun(db, WORKER, null);
   const totals: DiscoverSummary["counts"] = {
-    boards: 0, ok: 0, failed: 0, skipped: 0,
+    boards: 0, ok: 0, failed: 0, skipped: 0, expired: 0,
     fetched: 0, filtered: 0, new: 0, inserted: 0, duplicates: 0, seen: 0, closed: 0,
   };
 
@@ -211,6 +213,9 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
       }),
     );
 
+    // Includes postings closed on earlier runs, so nothing waits on a job that's gone.
+    totals.expired = await expireClosedApplications(db);
+    if (totals.expired) log(`expired ${totals.expired} application(s) whose posting closed`);
     await finishRun(db, runId, { ok: true, counts: totals });
     return { runId, counts: totals };
   } catch (err) {

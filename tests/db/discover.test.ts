@@ -1,6 +1,7 @@
 // M2 acceptance against a local Supabase: the discover worker with mocked boards.
 //   - a run inserts jobs; a second run inserts none and advances last_seen_at
 //   - a job removed from its board gets closed_at (and reopens if relisted)
+//   - its applications not yet submitted expire, unless the apply runner is on one
 //   - a failing board records ok=false without failing the others, then backs off
 //   - only the service role may call the sync functions
 import { randomUUID } from "node:crypto";
@@ -114,6 +115,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const ids = Object.values(companyIds);
+  const { data: jobs } = await service.from("jobs").select("id").in("company_id", ids);
+  await service.from("applications").delete().in("job_id", (jobs ?? []).map((j) => j.id));
   await service.from("jobs").delete().in("company_id", ids);
   await service.from("companies").delete().in("id", ids);
   await service.from("worker_runs").delete().in("source", Object.values(boards).map((b) => `${b.ats}:${b.token}`));
@@ -161,6 +164,34 @@ describe("discover worker", () => {
     listings.ghA.push(removed);
     await discover();
     expect((await jobsFor("ghA")).find((j) => j.external_id === removed.id)?.closed_at).toBeNull();
+  });
+
+  it("expires applications not yet submitted when their posting closes", async () => {
+    const { data: jobs } = await service.from("jobs").select("id, external_id").in("company_id", [companyIds.ghB, companyIds.lvB]);
+    const jobId = (externalId: string) => jobs!.find((j) => j.external_id === externalId)!.id;
+    const add = async (externalId: string, status: string, applyStep: string | null = null) => {
+      const { data, error } = await service
+        .from("applications")
+        .insert({ user_id: userId, job_id: jobId(externalId), status, apply_step: applyStep })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return data.id;
+    };
+    const waiting = await add("201", "queued");
+    const filling = await add("202", "approved", "filling");
+    const submitted = await add(`l3-${tag}`, "submitted");
+    const saved = { ghB: listings.ghB, lvB: listings.lvB };
+    listings.ghB = [];
+    listings.lvB = [];
+
+    expect((await discover()).expired).toBeGreaterThanOrEqual(1);
+    const { data: apps } = await service.from("applications").select("id, status").in("id", [waiting, filling, submitted]);
+    const status = Object.fromEntries(apps!.map((a) => [a.id, a.status]));
+    expect(status).toEqual({ [waiting]: "expired", [filling]: "approved", [submitted]: "submitted" });
+
+    Object.assign(listings, saved);
+    await discover();
   });
 
   it("records a failing board without failing the others or closing its jobs", async () => {
