@@ -6,10 +6,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadMatchingHealth } from "@/server/modules/matching/matching.service";
 import { formatMinutes, loadDiscoveryHealth, loadWorkerHealth, type WorkerHealth } from "@/server/modules/runs/runs.service";
+import { serverEnv } from "@/shared/env";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
+import { LiveRefresh } from "../../_components/live-refresh";
+import { RunNow } from "./run-now";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -48,6 +51,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
     loadMatchingHealth(db, owner.id, now),
     searchParams,
   ]);
+  const canRun = !!serverEnv().RAILWAY_TOKEN;
   const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
   const problems = [
     ...workers.filter((w) => w.problem).map((w) => `The ${w.name} worker ${w.problem}.`),
@@ -75,7 +79,8 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
         <CardHeader>
           <CardTitle>Workers</CardTitle>
           <CardDescription>
-            Each runs on its own Railway schedule (UTC) and is flagged after two missed runs. Claude spend this month: $
+            Each runs on its own Railway schedule (UTC) and is flagged after two missed runs. Run now starts one off schedule
+            (notify also checks the job inbox). Claude spend this month: $
             {matching.spend.spent.toFixed(2)} of ${matching.spend.cap.toFixed(2)}.
           </CardDescription>
         </CardHeader>
@@ -87,6 +92,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
                 <TableHead>Every</TableHead>
                 <TableHead>Last run</TableHead>
                 <TableHead>What it did</TableHead>
+                <TableHead className="w-0"><span className="sr-only">Run</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -110,6 +116,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
                   <TableCell className={w.lastRun?.ok === false ? "whitespace-normal text-destructive" : "whitespace-normal text-muted-foreground"}>
                     {runSummary(w) || "—"}
                   </TableCell>
+                  <TableCell className="align-top"><RunNow worker={w.name} enabled={canRun} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -172,6 +179,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
 export default function HealthPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">
+      <LiveRefresh />
       <h1 className="text-2xl font-semibold tracking-tight">Health</h1>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <Health searchParams={searchParams} />

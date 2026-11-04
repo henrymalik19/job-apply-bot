@@ -1,11 +1,16 @@
 import { z } from "zod";
 
+// A variable left blank (as copied from .env.example) counts as unset.
+const blank = (v: unknown) => (v === "" ? undefined : v);
+
 // Server-only environment. Never import this from a client component.
+// RAILWAY_TOKEN, a Railway project token for production, lets Health start a worker now.
 const serverSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   OWNER_USER_ID: z.string().uuid(),
+  RAILWAY_TOKEN: z.preprocess(blank, z.string().min(1).optional()),
 });
 
 // Workers (Railway) only need the service-role connection.
@@ -14,8 +19,6 @@ const workerSchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_SERVICE_RO
 // The local apply runner signs in as the user, so it needs only the public URL and anon key.
 // With the job inbox's password it also reads the security code a form emails you, over IMAP
 // (Purelymail by default; the address is your job_inbox setting unless APPLY_IMAP_USER says otherwise).
-// A variable left blank (as copied from .env.example) counts as unset.
-const blank = (v: unknown) => (v === "" ? undefined : v);
 const applySchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_ANON_KEY: true }).extend({
   JOB_INBOX_PASSWORD: z.preprocess(blank, z.string().min(1).optional()),
   APPLY_IMAP_HOST: z.preprocess(blank, z.string().min(1).default("imap.purelymail.com")),

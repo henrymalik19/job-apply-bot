@@ -74,6 +74,8 @@ When changing the discover cron, also set `settings.discover_interval_minutes` (
 `SUPABASE_SERVICE_ROLE_KEY`, plus `ANTHROPIC_API_KEY` for matching and prepare and `RESEND_API_KEY` for
 notify (Railway blocks SMTP, so it sends through Resend; locally `JOB_INBOX_PASSWORD` over SMTP also works).
 A stage whose variable is missing is skipped.
+To start a worker off schedule, use **Run now** on `/admin/health`. It needs `RAILWAY_TOKEN` on Vercel: a project
+token for the production environment (Railway > project Settings > Tokens). Without it the buttons stay disabled.
 Railway logs are private; GitHub Actions only runs CI. Board failures are recorded per board and shown
 on `/admin/health`; a board that fails twice in a row is retried at most every 2 hours.
 
