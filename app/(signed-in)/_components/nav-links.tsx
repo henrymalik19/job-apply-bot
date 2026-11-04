@@ -37,13 +37,17 @@ export function NavLinks() {
   return <NavList pathname={usePathname()} />;
 }
 
-/** The nav itself, given the current path ("" highlights nothing, e.g. as a Suspense fallback). */
-export function NavList({ pathname }: { pathname: string }) {
+/**
+ * The nav itself, given the current path ("" highlights nothing, e.g. as a Suspense fallback).
+ *
+ * @param vertical - Stacked with section titles at every width (the phone menu).
+ */
+export function NavList({ pathname, vertical = false }: { pathname: string; vertical?: boolean }) {
   return (
-    <nav className="flex gap-1 overflow-x-auto md:flex-col md:gap-5 md:overflow-visible">
+    <nav className={cn("flex flex-col gap-5", !vertical && "hidden md:flex")}>
       {SECTIONS.map((section) => (
-        <div key={section.title} className="flex gap-1 md:flex-col">
-          <div className="hidden px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground md:block">
+        <div key={section.title} className="flex flex-col gap-1">
+          <div className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {section.title}
           </div>
           {section.items.map(({ href, label, icon: Icon }) => {
