@@ -14,7 +14,7 @@ import {
   type ApplicationWithDetails,
 } from "@/server/modules/applications/applications.service";
 import { canRetry } from "@/server/modules/apply/apply.service";
-import { listApplyRuns } from "@/server/modules/apply/apply-runs";
+import { countApplyRuns } from "@/server/modules/apply/apply-runs";
 import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { getApplicationResume, signedPdfUrl, type Resume, type ResumeDoc } from "@/server/modules/resumes/resumes.service";
 import { cn } from "@/shared/cn";
@@ -25,7 +25,6 @@ import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
-import { RunnerLog } from "../runner-log";
 import { EmailsCard } from "../emails-card";
 import { listApplicationEmails } from "@/server/modules/tracking/tracking.service";
 import { DetailSkeleton } from "../../../_components/skeletons";
@@ -318,7 +317,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const [match, resume, runs, emails] = await Promise.all([
     getJobMatch(db, owner.id, app.job.id),
     getApplicationResume(db, app.id),
-    listApplyRuns(db, app.id),
+    countApplyRuns(db, app.id),
     listApplicationEmails(db, owner.id, app.id),
   ]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
@@ -428,12 +427,16 @@ async function ApplicationDetail({ params }: { params: Params }) {
             collapsible
           />
           <EmailsCard emails={emails} now={now} />
-          <RunnerLog runs={runs} now={now} />
         </div>
         <aside className="flex flex-col gap-6 lg:sticky lg:top-32">
           {editable && <Decide app={app} />}
           <MatchCard match={match} stacked showThreshold={false} />
           <ResumeCard resume={resume} url={url} />
+          {runs > 0 && (
+            <Link href={`/admin/runs?application=${app.id}`} className="self-start text-xs text-muted-foreground hover:text-foreground hover:underline">
+              Runner log ({runs} {runs === 1 ? "attempt" : "attempts"})
+            </Link>
+          )}
         </aside>
       </div>
     </div>

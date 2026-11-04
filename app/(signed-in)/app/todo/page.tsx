@@ -106,9 +106,9 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
     <Card className={scrollingTable.card}>
       <CardHeader>
         <CardDescription>
-          Replies in the job inbox that would move an application, but name a company you applied to more than once, or none
-          tracking could find. Pick the application and it moves as if matched (a rejection to Closed, an interview to
-          Interviewing); dismiss one that isn&apos;t about an application.
+          Emails in the job inbox that email tracking couldn&apos;t place on its own: ones it couldn&apos;t tell the application
+          for, and ones it couldn&apos;t tell what they say. Link one and the application moves as if tracking had caught it (a
+          rejection to Closed, an interview to Interviewing); dismiss one that isn&apos;t about an application.
         </CardDescription>
       </CardHeader>
       <CardContent className={scrollingTable.content}>

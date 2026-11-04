@@ -14,6 +14,8 @@ export type RunFile = { name: string; bytes: Uint8Array };
 /** One run as the application's page shows it. */
 export type ApplyRunView = {
   id: string;
+  /** The application and its job, to link to. */
+  application: { id: string; title: string; company: string };
   startedAt: string;
   outcome: string;
   /** The step log, or null if it wasn't uploaded. */
@@ -71,17 +73,25 @@ export async function saveApplyRun(
   return id;
 }
 
-/** An application's latest runs, newest first, with the log text and links to the screenshots. */
-export async function listApplyRuns(db: Db, applicationId: string, limit = 5): Promise<ApplyRunView[]> {
-  const rows = unwrap(
-    await db
-      .from("apply_runs")
-      .select("id, started_at, outcome, folder, files")
-      .eq("application_id", applicationId)
-      .order("started_at", { ascending: false })
-      .limit(limit),
-    "list apply runs",
-  );
+/** How many runs an application has recorded. */
+export async function countApplyRuns(db: Db, applicationId: string): Promise<number> {
+  const res = await db.from("apply_runs").select("id", { count: "exact", head: true }).eq("application_id", applicationId);
+  if (res.error) unwrap(res, "count apply runs");
+  return res.count ?? 0;
+}
+
+/**
+ * The latest runs, newest first (one application's with `applicationId`), with the log text and
+ * links to the screenshots. The owner sees everyone's; anyone else, their own.
+ */
+export async function listApplyRuns(db: Db, opts: { applicationId?: string; limit?: number } = {}): Promise<ApplyRunView[]> {
+  let query = db
+    .from("apply_runs")
+    .select("id, started_at, outcome, folder, files, applications!inner(id, jobs!inner(title, company_name))")
+    .order("started_at", { ascending: false })
+    .limit(opts.limit ?? 20);
+  if (opts.applicationId) query = query.eq("application_id", opts.applicationId);
+  const rows = unwrap(await query, "list apply runs");
   const bucket = db.storage.from(APPLY_RUNS_BUCKET);
   return Promise.all(
     rows.map(async (r) => {
@@ -93,7 +103,16 @@ export async function listApplyRuns(db: Db, applicationId: string, limit = 5): P
         r.files.includes("form.html") ? bucket.createSignedUrl(at("form.html"), 3600).then((res) => res.data?.signedUrl ?? null) : null,
       ]);
       const shots = pngs.flatMap((name, i) => (signed[i]?.signedUrl ? [{ name, url: signed[i].signedUrl }] : []));
-      return { id: r.id, startedAt: r.started_at, outcome: r.outcome, log, shots, formUrl: form };
+      const app = r.applications;
+      return {
+        id: r.id,
+        application: { id: app.id, title: app.jobs.title, company: app.jobs.company_name },
+        startedAt: r.started_at,
+        outcome: r.outcome,
+        log,
+        shots,
+        formUrl: form,
+      };
     }),
   );
 }

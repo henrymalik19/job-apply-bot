@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Building2, ClipboardCheck, HeartPulse, LayoutDashboard, Send, Settings, SlidersHorizontal, UserRound } from "lucide-react";
+import { Briefcase, Building2, ClipboardCheck, HeartPulse, LayoutDashboard, ScrollText, Send, Settings, SlidersHorizontal, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/cn";
@@ -22,6 +22,7 @@ const SECTIONS = [
     title: "Admin",
     items: [
       { href: "/admin/health", label: "Health", icon: HeartPulse },
+      { href: "/admin/runs", label: "Runs", icon: ScrollText },
       { href: "/admin/companies", label: "Companies", icon: Building2 },
     ],
   },

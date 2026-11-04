@@ -30,3 +30,8 @@ create policy apply_runs_own_read on storage.objects for select to authenticated
   using (bucket_id = 'apply-runs' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy apply_runs_own_write on storage.objects for insert to authenticated
   with check (bucket_id = 'apply-runs' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- The owner (who runs this app and helps people use it) reads everyone's runs on Admin > Runs.
+create policy owner_read on apply_runs for select using (is_owner());
+create policy apply_runs_owner_read on storage.objects for select to authenticated
+  using (bucket_id = 'apply-runs' and is_owner());

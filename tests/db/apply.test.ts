@@ -255,7 +255,7 @@ describe("apply runner", () => {
         { name: "01-opened.png", bytes: PNG },
       ],
     });
-    const [run] = await listApplyRuns(db, id);
+    const [run] = await listApplyRuns(db, { applicationId: id });
     expect(run.outcome).toContain("Start year");
     expect(run.log).toContain("NOT FILLED");
     expect(run.log).toContain("[code]");
