@@ -98,7 +98,8 @@ For each question, pick one kind:
 - "attestation": any certification, consent, agreement or legal statement ("I certify that...", "I agree to the
   privacy policy", background check consent). These always go to the candidate.
 - "cannot_automate": assessments, coding tests, video or audio recordings, or anything that needs an account
-  or a live action.
+  or a live action. A question about the candidate themselves (their habits, preferences or opinions, such as
+  "How do you use AI tools today?") is never cannot_automate, even when the profile doesn't answer it.
 
 confidence is 0 to 1: how sure you are of the kind and catalog question. reason is one short line.
 

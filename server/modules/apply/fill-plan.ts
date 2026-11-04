@@ -142,15 +142,43 @@ export function educationSteps(school: Schooling): FillStep[] {
   return steps;
 }
 
+/** Your most recent job, from the profile's work history (dates as YYYY-MM-DD). */
+export type WorkRole = { employer: string; title: string; startDate: string; endDate: string | null; isCurrent: boolean };
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/**
+ * Greenhouse's Employment section for one job: company, title, start month and year,
+ * then "Current role" ticked or the end month and year.
+ */
+export function employmentSteps(role: WorkRole): FillStep[] {
+  const step = (fieldName: string, label: string) => ({ fieldName, label, required: false });
+  const date = (iso: string, which: "start" | "end", label: string): FillStep[] => {
+    const [year, month] = iso.split("-").map(Number);
+    const steps: FillStep[] = [];
+    if (month >= 1 && month <= 12) steps.push({ kind: "select", ...step(`${which}-date-month-0`, `${label} month`), value: [MONTHS[month - 1]] });
+    if (year) steps.push({ kind: "text", ...step(`${which}-date-year-0`, `${label} year`), value: String(year) });
+    return steps;
+  };
+  const steps: FillStep[] = [
+    { kind: "text", ...step("company-name-0", "Company name"), value: role.employer },
+    { kind: "text", ...step("title-0", "Title"), value: role.title },
+    ...date(role.startDate, "start", "Start date"),
+  ];
+  if (role.isCurrent || !role.endDate) steps.push({ kind: "check", ...step("current-role-0", "Current role"), value: true });
+  else steps.push(...date(role.endDate, "end", "End date"));
+  return steps;
+}
+
 /**
  * Greenhouse fields that aren't in the job's question list: the phone's Country,
  * "Location (City)", the consent to processing the demographic answers (you
  * agreed to have it ticked), and the self-identification (EEOC) questions, declined
  * (for forms prepared before those were read; Race only shows once Hispanic/Latino is
- * "No", so after a decline it isn't there), and your first education. Not required here: a form without them
+ * "No", so after a decline it isn't there), your first education and your most recent job. Not required here: a form without them
  * skips them, and a form that needs them shows the gap when it is checked before submitting.
  */
-export function greenhouseExtras(home: HomePlace, school: Schooling | null = null): FillStep[] {
+export function greenhouseExtras(home: HomePlace, school: Schooling | null = null, role: WorkRole | null = null): FillStep[] {
   const steps: FillStep[] = [{ kind: "select", fieldName: "country", label: "Country", required: false, value: [home.country] }];
   if (home.city) {
     const value = home.stateName ? `${home.city}, ${home.stateName}` : home.city;
@@ -159,6 +187,7 @@ export function greenhouseExtras(home: HomePlace, school: Schooling | null = nul
   steps.push({ kind: "check", fieldName: "gdpr_demographic_data_consent_given", label: "Demographic data consent", required: false, value: true });
   for (const [fieldName, label] of EEOC_FIELDS) steps.push({ kind: "decline", fieldName, label, required: false });
   if (school) steps.push(...educationSteps(school));
+  if (role) steps.push(...employmentSteps(role));
   return steps;
 }
 

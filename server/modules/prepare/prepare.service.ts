@@ -368,7 +368,10 @@ async function applyClassification(
     case "attestation":
       return { bucket: "needs_user", reason: "attestations are always answered by you" };
     case "cannot_automate":
-      return { bucket: "cannot_automate", reason: c.reason };
+      // A question with options to pick can always be answered, by you if not from the profile.
+      return q.options.length > 0
+        ? { bucket: "needs_user", reason: c.reason }
+        : { bucket: "cannot_automate", reason: c.reason };
     case "qualification": {
       const supported = c.qualification_answer === "yes" && c.supporting_facts.some((n) => n >= 1 && n <= ctx.facts.length);
       const shaped = supported ? shapeAnswer(q, true) : null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFillPlan, changedFields, educationSteps, greenhouseDegree, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
+import { buildFillPlan, changedFields, educationSteps, employmentSteps, greenhouseDegree, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
 
 const q = (over: Partial<PlanQuestion>): PlanQuestion => ({
   question: "Q",
@@ -130,6 +130,25 @@ describe("education", () => {
       ["end-year--0", "2016"],
     ]);
     expect(educationSteps({ institution: "Self-taught", degree: null, fieldOfStudy: null, startYear: null, endYear: null }).map((s) => s.fieldName)).toEqual(["school--0"]);
+  });
+});
+
+describe("employmentSteps", () => {
+  const shown = (steps: FillStep[]) => steps.map((s) => [s.fieldName, "value" in s ? s.value : null]);
+  it("fills a current job with its start date and ticks Current role", () => {
+    expect(shown(employmentSteps({ employer: "Acme", title: "Senior Engineer", startDate: "2021-03-01", endDate: null, isCurrent: true }))).toEqual([
+      ["company-name-0", "Acme"],
+      ["title-0", "Senior Engineer"],
+      ["start-date-month-0", ["March"]],
+      ["start-date-year-0", "2021"],
+      ["current-role-0", true],
+    ]);
+  });
+  it("fills a past job's end date instead", () => {
+    expect(shown(employmentSteps({ employer: "Beta", title: "Engineer", startDate: "2018-06-15", endDate: "2021-02-28", isCurrent: false })).slice(4)).toEqual([
+      ["end-date-month-0", ["February"]],
+      ["end-date-year-0", "2021"],
+    ]);
   });
 });
 
