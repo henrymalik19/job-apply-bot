@@ -27,12 +27,15 @@ export const scoreOutputSchema = z.object({
   summary: z.string(),
 });
 
-/** The validated result: score 0–100 and at most five fits and gaps. */
+// Longer lists or text than asked for are trimmed, not rejected: a sixth fit isn't worth losing the score over.
+const points = z.array(z.string()).transform((list) => list.slice(0, 5).map((s) => s.slice(0, 300)));
+
+/** The validated result: score 0–100 (strict), and at most five fits and gaps (trimmed to fit). */
 export const scoreResultSchema = z.object({
   score: z.number().int().min(0).max(100),
-  fits: z.array(z.string().max(300)).max(5),
-  gaps: z.array(z.string().max(300)).max(5),
-  summary: z.string().max(400),
+  fits: points,
+  gaps: points,
+  summary: z.string().transform((s) => s.slice(0, 400)),
 });
 
 /** A validated score. */

@@ -68,7 +68,13 @@ describe("scoreResultSchema", () => {
   it("rejects out-of-range scores and too many items", () => {
     expect(scoreResultSchema.safeParse({ score: 101, fits: [], gaps: [], summary: "" }).success).toBe(false);
     expect(scoreResultSchema.safeParse({ score: 80.5, fits: [], gaps: [], summary: "" }).success).toBe(false);
-    expect(scoreResultSchema.safeParse({ score: 80, fits: Array(6).fill("x"), gaps: [], summary: "" }).success).toBe(false);
+    // More than five fits (or overlong text) is trimmed rather than thrown away with the score.
+    expect(scoreResultSchema.parse({ score: 80, fits: Array(7).fill("x"), gaps: ["y".repeat(350)], summary: "z".repeat(450) })).toEqual({
+      score: 80,
+      fits: Array(5).fill("x"),
+      gaps: ["y".repeat(300)],
+      summary: "z".repeat(400),
+    });
     expect(scoreResultSchema.safeParse({ score: 80, fits: ["a"], gaps: ["b"], summary: "ok" }).success).toBe(true);
   });
 });

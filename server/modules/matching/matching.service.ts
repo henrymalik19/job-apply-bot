@@ -28,7 +28,16 @@ import { failInterruptedRuns, finishRun, latestWorkerRun, startRun } from "@/ser
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { hardFilter } from "./hard-filters";
 import { DEFAULT_PAGE_SIZE, pageOf, type Page } from "@/shared/paginate";
-import { insertMatch, listMatchedJobIds, matchCounts, matchesForJobs, searchMatchedJobs } from "./matches.repository";
+import {
+  insertMatch,
+  listMatchedJobIds,
+  listRetryableFailures,
+  matchCounts,
+  matchesForJobs,
+  replaceFailedMatch,
+  searchMatchedJobs,
+  type NewMatch,
+} from "./matches.repository";
 import {
   buildScoringPrompt,
   scoreOutputSchema,
@@ -117,7 +126,9 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
       getTitleFilter(db, userId),
       getJobFilter(db, userId),
     ]);
-    const done = await listMatchedJobIds(db, userId);
+    // A failed score gets another try (up to MAX_SCORE_ATTEMPTS), so it counts as not done yet.
+    const [done, retry] = await Promise.all([listMatchedJobIds(db, userId), listRetryableFailures(db, userId)]);
+    for (const jobId of retry.keys()) done.delete(jobId);
     const only = deps.onlyJobIds ? new Set(deps.onlyJobIds) : null;
     const todo = jobs.filter((j) => !done.has(j.id) && (!only || only.has(j.id)));
     counts.candidates = todo.length;
@@ -146,7 +157,10 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
         toScore.push(job);
         continue;
       }
-      await insertMatch(db, { ...base, job_id: job.id, hard_filter_passed: false, hard_filter_reason: reason, score: null, reasons: null, model: null, status: "filtered", error: null });
+      // A failed job your filters now rule out is filtered, not left failed.
+      const filtered: NewMatch & { user_id: string } = { ...base, job_id: job.id, hard_filter_passed: false, hard_filter_reason: reason, score: null, reasons: null, model: null, status: "filtered", error: null };
+      const tried = retry.get(job.id);
+      await (tried ? replaceFailedMatch(db, filtered, tried) : insertMatch(db, filtered));
       counts.filtered++;
     }
 
@@ -157,12 +171,14 @@ export async function runMatch(deps: MatchDeps): Promise<{ runId: string; counts
         if (counts.scored + counts.failed >= maxScored || budget.spent + spend.cost >= budget.cap) return;
         const job = toScore[next++];
         const outcome = await scoreJob(deps, job, context, spend);
+        const tried = retry.get(job.id);
+        const save = (match: NewMatch & { user_id: string }) => (tried ? replaceFailedMatch(db, match, tried + 1) : insertMatch(db, match));
         if ("result" in outcome) {
           const { score, fits, gaps, summary } = outcome.result;
-          await insertMatch(db, { ...base, job_id: job.id, hard_filter_passed: true, hard_filter_reason: null, score, reasons: { fits, gaps, summary } as Json, model: outcome.model, status: "scored", error: null });
+          await save({ ...base, job_id: job.id, hard_filter_passed: true, hard_filter_reason: null, score, reasons: { fits, gaps, summary } as Json, model: outcome.model, status: "scored", error: null });
           counts.scored++;
         } else {
-          await insertMatch(db, { ...base, job_id: job.id, hard_filter_passed: true, hard_filter_reason: null, score: null, reasons: null, model: outcome.model || null, status: "failed", error: outcome.error.slice(0, 500) });
+          await save({ ...base, job_id: job.id, hard_filter_passed: true, hard_filter_reason: null, score: null, reasons: null, model: outcome.model || null, status: "failed", error: outcome.error.slice(0, 500) });
           counts.failed++;
           log(`failed ${job.id}: ${outcome.error}`);
         }

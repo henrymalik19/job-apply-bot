@@ -413,14 +413,14 @@ isOneToOne: true
                   ]
                 },"matches": {
                   Row: {
-                    "created_at": string,"error": string | null,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null,"status": string,"updated_at": string,"user_id": string
+                    "attempts": number,"created_at": string,"error": string | null,"hard_filter_passed": boolean,"hard_filter_reason": string | null,"id": string,"job_id": string,"model": string | null,"reasons": Json | null,"score": number | null,"status": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"error"?: string | null,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string,"user_id"?: string
+                    "attempts"?: number,"created_at"?: string,"error"?: string | null,"hard_filter_passed": boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id": string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"error"?: string | null,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string,"user_id"?: string
+                    "attempts"?: number,"created_at"?: string,"error"?: string | null,"hard_filter_passed"?: boolean,"hard_filter_reason"?: string | null,"id"?: string,"job_id"?: string,"model"?: string | null,"reasons"?: Json | null,"score"?: number | null,"status"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {

@@ -146,10 +146,13 @@ describe("matching", () => {
     expect(prompts[0]).not.toContain(`Ignore fintech ${tag}`);
   });
 
-  it("keeps one match per job: re-runs and criteria changes don't rescore", async () => {
+  it("keeps one match per job: re-runs and criteria changes don't rescore, and a failure gets 3 tries", async () => {
     expect((await matchRows()).length).toBe(4);
+    // Only the failed job is tried again, for its third and last time; then nothing is.
     const again = await match();
-    expect(again.counts.candidates).toBe(0);
+    expect(again.counts.candidates).toBe(1);
+    expect((await matchRows()).find((r) => r.job_id === jobIds.garbage)).toMatchObject({ status: "failed", attempts: 3 });
+    expect((await match()).counts.candidates).toBe(0);
 
     const unchanged = await saveMatchCriteria(db, ownerId, criteriaInput(`Excluded ${tag}`));
     expect(unchanged.changed).toBe(false);

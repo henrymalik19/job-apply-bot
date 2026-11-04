@@ -11,6 +11,29 @@ export type NewMatch = Pick<
   "user_id" | "job_id" | "hard_filter_passed" | "hard_filter_reason" | "score" | "reasons" | "model" | "status" | "error"
 >;
 
+/** Tries at scoring a job before its "failed" stays. */
+export const MAX_SCORE_ATTEMPTS = 3;
+
+/** Jobs whose scoring failed and get another try, with how many tries they've had. */
+export async function listRetryableFailures(db: Db, userId: string): Promise<Map<string, number>> {
+  const rows = unwrap(
+    await db.from("matches").select("job_id, attempts").eq("user_id", userId).eq("status", "failed").lt("attempts", MAX_SCORE_ATTEMPTS),
+    "list failed matches",
+  );
+  return new Map(rows.map((r) => [r.job_id, r.attempts]));
+}
+
+/**
+ * Records another try at scoring a job that failed before: the new outcome replaces
+ * the failed one, counting the try.
+ */
+export async function replaceFailedMatch(db: Db, match: NewMatch & { user_id: string }, attempts: number): Promise<void> {
+  check(
+    await db.from("matches").update({ ...match, attempts }).eq("user_id", match.user_id).eq("job_id", match.job_id).eq("status", "failed"),
+    "retry match",
+  );
+}
+
 /** Ids of jobs that already have a match for a user. */
 export async function listMatchedJobIds(db: Db, userId: string): Promise<Set<string>> {
   const ids = new Set<string>();
