@@ -1,7 +1,7 @@
 import type { BoardAts } from "@/server/integrations/ats/boards";
 import { BOARD_ATS } from "@/server/integrations/ats/boards";
 import type { Db, Insert, Row } from "@/server/db/types";
-import { check, unwrap } from "@/server/core/errors";
+import { check, unwrap, ValidationError } from "@/server/core/errors";
 
 /** A row of `companies`. */
 export type Company = Row<"companies">;
@@ -69,6 +69,19 @@ export async function followCompanies(db: Db, userId: string, companyIds: string
     "follow companies",
   );
   return rows.length;
+}
+
+/** Moves a company to another board and closes its open jobs from the old one. */
+export async function switchBoard(db: Db, id: string, board: { ats: string; board_token: string }): Promise<{ closed: number }> {
+  const company = unwrap(await db.from("companies").select("ats, board_token").eq("id", id).single(), "get company");
+  const taken = unwrap(await db.from("companies").select("id").eq("ats", board.ats).eq("board_token", board.board_token).neq("id", id), "find board");
+  if (taken.length) throw new ValidationError("Another company already has that board; turn this one off instead.");
+  check(await db.from("companies").update({ ats: board.ats, board_token: board.board_token, active: true }).eq("id", id), "switch board");
+  const closed = unwrap(
+    await db.from("jobs").update({ closed_at: new Date().toISOString() }).eq("company_id", id).eq("source", company.ats).is("closed_at", null).select("id"),
+    "close old board's jobs",
+  );
+  return { closed: closed.length };
 }
 
 /** Pauses (`false`) or resumes (`true`) a company's board. */

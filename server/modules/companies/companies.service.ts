@@ -102,6 +102,13 @@ export async function findBoards(query: string, fetchFn?: typeof fetch): Promise
   const candidates = fromUrl
     ? [fromUrl]
     : guessTokens(query).flatMap((board_token) => BOARD_ATS.map((ats) => ({ ats, board_token })));
+  const found = await checkBoards(candidates, fetchFn);
+  // A name's first word alone can hit an unrelated company's empty board; keep boards with jobs.
+  return found.filter((b) => fromUrl != null || b.count > 0);
+}
+
+/** Fetches each board once; the ones that answered, most jobs first. */
+async function checkBoards(candidates: { ats: BoardAts; board_token: string }[], fetchFn?: typeof fetch): Promise<FoundBoard[]> {
   const found = await Promise.all(
     candidates.map(async ({ ats, board_token }) => {
       try {
@@ -112,8 +119,45 @@ export async function findBoards(query: string, fetchFn?: typeof fetch): Promise
       }
     }),
   );
-  // A name's first word alone can hit an unrelated company's empty board; keep boards with jobs.
-  return found.filter((b): b is FoundBoard => b != null && (fromUrl != null || b.count > 0)).sort((a, b) => b.count - a.count);
+  return found.filter((b): b is FoundBoard => b != null).sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Where a company's board went when its own is gone (a 404): the same token on the other
+ * ATSes, then boards found by its name. Companies switch ATS now and then (Doctolib went
+ * from Greenhouse to Ashby).
+ *
+ * @returns The board with the most open jobs that isn't the current one, or null.
+ */
+export async function findMovedBoard(
+  company: { name: string; ats: string; board_token: string },
+  fetchFn?: typeof fetch,
+): Promise<FoundBoard | null> {
+  const isCurrent = (b: { ats: string; board_token: string }) => b.ats === company.ats && b.board_token === company.board_token;
+  const sameToken = BOARD_ATS.map((ats) => ({ ats, board_token: company.board_token }));
+  const byName = guessTokens(company.name).flatMap((board_token) => BOARD_ATS.map((ats) => ({ ats, board_token })));
+  const seen = new Set<string>();
+  const candidates = [...sameToken, ...byName].filter((b) => {
+    const key = `${b.ats}:${b.board_token}`;
+    if (isCurrent(b) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return (await checkBoards(candidates, fetchFn)).find((b) => b.count > 0) ?? null;
+}
+
+/**
+ * Points a company at its new board after it moved ATS. Its jobs from the old board are
+ * closed (that board is gone), so applications not yet sent for them expire as usual;
+ * discovery reads the new board on its next run.
+ *
+ * @throws {@link ValidationError} for a bad board, one that doesn't answer, or one another company already has.
+ */
+export async function switchBoard(db: Db, companyId: string, input: BoardInput): Promise<{ closed: number }> {
+  const id = z.string().uuid().parse(companyId);
+  const board = validate(boardInput, input);
+  await testBoard(board);
+  return companies.switchBoard(db, id, board);
 }
 
 /**

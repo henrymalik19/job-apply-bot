@@ -12,10 +12,14 @@ import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { LiveRefresh } from "../../_components/live-refresh";
+import { MovedBoard } from "./moved-board";
 import { RunNow } from "./run-now";
 import { TableSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** A board fetch that failed because the board no longer exists (it may have moved to another ATS). */
+const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString();
 
@@ -158,7 +162,15 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
                     <TableCell>{ago(b.status?.last_success_at, now)}</TableCell>
                     <TableCell className="whitespace-normal">
                       {b.status?.last_ok === false ? (
-                        <span className="text-destructive">{b.status.last_error}</span>
+                        <>
+                          <span className="text-destructive">{b.status.last_error}</span>
+                          {/* A board that's gone may have moved to another ATS. */}
+                          {boardGone(b.status.last_error) && b.board_token && (
+                            <Suspense fallback={<span className="mt-1 block text-xs text-muted-foreground">Looking for a new board…</span>}>
+                              <MovedBoard company={{ id: b.id, name: b.name, ats: b.ats, board_token: b.board_token }} />
+                            </Suspense>
+                          )}
+                        </>
                       ) : (
                         <RunCounts counts={b.status?.last_counts} />
                       )}
