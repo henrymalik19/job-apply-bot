@@ -87,6 +87,9 @@ describe("shapeAnswer", () => {
 
   it("matches text to an option exactly or by US state", () => {
     expect(shapeAnswer(select("Alabama", "Texas", "N/A - I do not reside in the above states"), "Houston, TX")?.answer).toBe("Texas");
+    // No state among the options: the one naming the same country (Upstart: US vs Canada outside Quebec).
+    expect(shapeAnswer(select("United States", "Canada (outside of Quebec)"), "Atlanta, GA")?.answer).toBe("United States");
+    expect(shapeAnswer(select("United States - East", "United States - West"), "Atlanta, GA")).toBeNull();
     expect(shapeAnswer(select("Email", "LinkedIn"), "linkedin")?.answer).toBe("LinkedIn");
     expect(shapeAnswer(select("A friend", "A recruiter"), "Company careers page")).toBeNull();
   });

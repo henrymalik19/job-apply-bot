@@ -118,6 +118,10 @@ const questionKey = (label: string) => normalize(label).replace(/ /g, "_").slice
  */
 async function saveForReuse(db: Db, userId: string, q: ApplicationQuestion, answer: string): Promise<{ questionId: string | null; note: string }> {
   const catalog = q.question_id ? (await listQuestions(db)).find((c) => c.id === q.question_id) : undefined;
+  // A pick from the form's own list ("United States") is this form's wording, not a profile value like "Atlanta, GA".
+  if (catalog?.answer_source === "profile" && q.field_type !== "text" && q.field_type !== "textarea") {
+    return { questionId: catalog.id, note: "Answered here; your profile is unchanged, since this was picked from the form's list." };
+  }
   if (catalog?.answer_source === "profile") {
     return (await saveProfileAnswer(db, userId, catalog.key, answer))
       ? { questionId: catalog.id, note: "Saved to your profile." }

@@ -107,6 +107,16 @@ function pickByText(options: FormOption[], text: string): FormOption | undefined
     });
     if (byState.length === 1) return byState[0];
   }
+  // Or the one option naming the same country ("United States" vs "Canada (outside of Quebec)" for "Atlanta, GA").
+  const countries = resolvePlace(text).countries;
+  if (countries.size === 1) {
+    const [country] = countries;
+    const byCountry = options.filter((o) => {
+      const c = resolvePlace(o.label).countries;
+      return c.size === 1 && c.has(country);
+    });
+    if (byCountry.length === 1) return byCountry[0];
+  }
   return undefined;
 }
 
