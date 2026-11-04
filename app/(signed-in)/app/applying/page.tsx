@@ -56,6 +56,22 @@ function cardNote(app: ApplicationWithDetails, now: Date, loose: UnmatchedEmail[
       tone: "warning",
     };
   }
+  // Both sit in the Submitted lane; confirmed means the employer's receipt arrived, so it surely went through.
+  if (app.status === "confirmed") {
+    const at = app.confirmed_at ?? app.last_status_at;
+    return {
+      text: `✓ Confirmed · ${ago(at, now)}`,
+      detail: `The employer's receipt email arrived ${new Date(at).toLocaleString()}.${app.submitted_at ? ` Submitted ${ago(app.submitted_at, now)}.` : ""}`,
+      tone: "success",
+    };
+  }
+  if (app.status === "submitted") {
+    return {
+      text: "Sent · waiting for the receipt",
+      detail: `Submitted ${ago(app.submitted_at ?? app.last_status_at, now)}. Email tracking marks it confirmed when the employer's receipt arrives, usually within minutes.`,
+      tone: "muted",
+    };
+  }
   const tone = app.status === "offer" || app.status === "interviewing" ? "success" : "muted";
   return { text: ago(app.last_status_at, now), detail: `${statusInfo(app.status).label} since ${new Date(app.last_status_at).toLocaleDateString()}`, tone, since: true };
 }
