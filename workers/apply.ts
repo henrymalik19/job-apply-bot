@@ -20,10 +20,10 @@ import type { Db } from "@/server/db/types";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { codeInbox } from "@/server/integrations/email/code-inbox";
-import { clearStaleSteps, listReadyToApply } from "@/server/modules/apply/apply.repository";
+import { listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { greenhouseExtras, type HomePlace, type Schooling, type WorkRole } from "@/server/modules/apply/fill-plan";
 import { usStateName } from "@/server/modules/criteria/places";
-import { APPLY_ATS, applyOne } from "@/server/modules/apply/apply.service";
+import { APPLY_ATS, applyOne, handBackUnfinished } from "@/server/modules/apply/apply.service";
 import { parseApplyEnv } from "@/shared/env";
 
 const DATA = path.resolve("data");
@@ -114,8 +114,8 @@ async function main() {
   });
   const userId = await signIn(db);
   const { name, home, school, role } = await profileBasics(db, userId);
-  const stale = await clearStaleSteps(db, userId);
-  if (stale) log(`cleared ${stale} application(s) left mid-way by an earlier run`);
+  const stale = await handBackUnfinished(db, userId);
+  if (stale) log(`moved ${stale} application(s) an earlier run left mid-way to Runner stuck`);
 
   let browser: BrowserContext | null = null;
   /** Chrome, opened if it isn't (closed by the runner, by you, or with its last tab, it opens again). */
@@ -148,10 +148,24 @@ async function main() {
   };
 
   let stopping = false;
-  const stop = () => {
+  // Stopping hands back the open application right away (it may be waiting up to an hour for you),
+  // closes Chrome and exits; a second Ctrl+C exits without waiting.
+  const stop = async () => {
+    if (stopping) process.exit(130);
     stopping = true;
+    log("stopping: moving the open application to Runner stuck");
+    const moved = await handBackUnfinished(db, userId).catch((err) => {
+      log(`couldn't hand back: ${(err as Error).message}`);
+      return 0;
+    });
+    if (moved) log(`moved ${moved} application(s) to Runner stuck`);
+    await rm(files, { recursive: true, force: true }).catch(() => undefined);
+    await (browser as BrowserContext | null)?.close().catch(() => undefined);
+    log("apply runner stopped");
+    process.exit(0);
   };
-  process.on("SIGINT", stop);
+  // SIGBREAK is Ctrl+Break on Windows; SIGHUP is the terminal window closing.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(signal, () => void stop());
   // With the job inbox's password, the security code a form emails is read and entered for you.
   const inboxUser = env.APPLY_IMAP_USER ?? (await jobInboxAddress(db, userId));
   const inbox = inboxUser && env.JOB_INBOX_PASSWORD

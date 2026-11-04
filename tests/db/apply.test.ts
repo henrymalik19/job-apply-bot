@@ -13,8 +13,8 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server/modules/applications/applications.service";
-import { listReadyToApply } from "@/server/modules/apply/apply.repository";
-import { applyOne, retryApply, setPlatformMode, type FormDriver } from "@/server/modules/apply/apply.service";
+import { listReadyToApply, setApplyStep } from "@/server/modules/apply/apply.repository";
+import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver } from "@/server/modules/apply/apply.service";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import type {} from "./setup";
 import { testUser } from "./users";
@@ -227,6 +227,18 @@ describe("apply runner", () => {
     await expect(moveApplication(db, userId, id, "responded")).rejects.toBeInstanceOf(IllegalTransitionError);
     await expect(moveApplication(db, userId, id, "approved")).rejects.toThrow(/can only be moved/);
     expect((await listUserMoves(db)).submitted).toEqual(expect.arrayContaining(["responded", "interviewing", "offer", "rejected"]));
+  });
+
+  it("moves the application it was stopped in the middle of to Runner stuck, and can retry it", async () => {
+    const id = await addApproved("stopped");
+    const idle = await addApproved("idle");
+    await setApplyStep(db, id, "waiting_for_you", "Filled. Check the Chrome window and click Submit.");
+    // Earlier cases may leave others mid-way; this one must be among them.
+    expect(await handBackUnfinished(db, userId)).toBeGreaterThanOrEqual(1);
+    expect(await app(id)).toEqual({ status: "manual", apply_step: null, apply_note: STOPPED_NOTE });
+    expect((await app(idle)).status).toBe("approved");
+    await retryApply(db, userId, id);
+    expect((await app(id)).status).toBe("approved");
   });
 
   it("refuses auto mode until the streak is earned", async () => {

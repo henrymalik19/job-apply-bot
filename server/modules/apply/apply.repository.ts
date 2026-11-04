@@ -52,18 +52,13 @@ export async function setApplyStep(db: Db, applicationId: string, step: ApplySte
   check(await db.from("applications").update({ apply_step: step, apply_note: note }).eq("id", applicationId), "set apply step");
 }
 
-/** Clears progress left by a runner that stopped mid-application; returns how many. */
-export async function clearStaleSteps(db: Db, userId: string): Promise<number> {
+/** Approved applications the apply runner was in the middle of (a step is set). */
+export async function listUnfinished(db: Db, userId: string): Promise<string[]> {
   const rows = unwrap(
-    await db
-      .from("applications")
-      .update({ apply_step: null, apply_note: "The apply runner stopped before finishing; it will try again." })
-      .eq("user_id", userId)
-      .not("apply_step", "is", null)
-      .select("id"),
-    "clear stale apply steps",
+    await db.from("applications").select("id").eq("user_id", userId).eq("status", "approved").not("apply_step", "is", null),
+    "list unfinished applications",
   );
-  return rows.length;
+  return rows.map((r) => r.id);
 }
 
 /** Downloads a resume PDF the user owns. */

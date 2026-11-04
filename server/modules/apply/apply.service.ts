@@ -8,6 +8,7 @@ import { getApplication, transition } from "@/server/modules/applications/applic
 import {
   addEvidence,
   downloadResume,
+  listUnfinished,
   getPlatform,
   listPlatforms,
   setApplyStep,
@@ -280,6 +281,26 @@ export async function retryApply(db: Db, userId: string, applicationId: string):
   }
   await setApplyStep(db, app.id, null, null);
   await transition(db, app.id, "approved", "user:retry_apply");
+}
+
+/** The note on an application the runner was stopped in the middle of. */
+export const STOPPED_NOTE =
+  "The apply runner was stopped before this was submitted. Retry it, or move it to Submitted if you submitted it yourself.";
+
+/**
+ * Hands back every application the runner was in the middle of: when it's stopped (Ctrl+C,
+ * the terminal closed), and at start-up for any a crash left behind. They go to Runner stuck
+ * rather than back to Approved, since you may have submitted the open form yourself.
+ *
+ * @returns How many were handed back.
+ */
+export async function handBackUnfinished(db: Db, userId: string): Promise<number> {
+  const ids = await listUnfinished(db, userId);
+  for (const id of ids) {
+    await setApplyStep(db, id, null, STOPPED_NOTE);
+    await transition(db, id, "manual", "worker:stopped", { reason: STOPPED_NOTE });
+  }
+  return ids.length;
 }
 
 /** Whether "Try the runner again" applies: a runner site and a hand-back reason from the runner. */
