@@ -112,13 +112,20 @@ async function jobInboxAddress(db: Db, userId: string): Promise<string | null> {
  * Uploads a run record (its log, screenshots and the form's HTML) for the application's page.
  * Best effort: the local copy stays either way.
  */
-async function uploadRunWith(db: Db, userId: string, dir: string, applicationId: string, startedAt: Date, outcome: string) {
+async function uploadRunWith(
+  db: Db,
+  who: { userId: string; userName: string },
+  dir: string,
+  app: { id: string; job: { title: string; company_name: string } },
+  startedAt: Date,
+  outcome: string,
+) {
   try {
     const names = (await readdir(dir)).sort();
     const files: RunFile[] = await Promise.all(names.map(async (name) => ({ name, bytes: new Uint8Array(await readFile(path.join(dir, name))) })));
-    await saveApplyRun(db, { userId, applicationId, startedAt, outcome, files });
+    await saveApplyRun(db, { ...who, applicationId: app.id, jobTitle: app.job.title, companyName: app.job.company_name, startedAt, outcome, files });
   } catch (err) {
-    log(`${applicationId}: couldn't upload the run record: ${(err as Error).message}`);
+    log(`${app.id}: couldn't upload the run record: ${(err as Error).message}`);
   }
 }
 
@@ -129,8 +136,8 @@ async function main() {
   });
   const userId = await signIn(db);
   const { name, home, school, role } = await profileBasics(db, userId);
-  const uploadRun = (dir: string, applicationId: string, startedAt: Date, outcome: string) =>
-    uploadRunWith(db, userId, dir, applicationId, startedAt, outcome);
+  const uploadRun = (dir: string, app: { id: string; job: { title: string; company_name: string } }, startedAt: Date, outcome: string) =>
+    uploadRunWith(db, { userId, userName: name }, dir, app, startedAt, outcome);
   const stale = await handBackUnfinished(db, userId);
   if (stale) log(`moved ${stale} application(s) an earlier run left mid-way to Runner stuck`);
 
@@ -217,7 +224,7 @@ async function main() {
         const dir = await record.finish(outcome);
         log(`${app.id}: run record in ${path.relative(process.cwd(), dir)}`);
         // Also to the app, so the application's page shows it (and anyone helping you can see it).
-        await uploadRun(dir, app.id, record.startedAt, outcome);
+        await uploadRun(dir, app, record.startedAt, outcome);
         // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
         if (closeTab) await page.close().catch(() => undefined);
       }

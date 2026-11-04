@@ -6,6 +6,11 @@ create table apply_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   application_id uuid not null references applications(id) on delete cascade,
+  -- Who and what, kept on the run: Admin > Runs lists everyone's, and the owner can't read other
+  -- people's profiles or applications.
+  user_name text not null default '',
+  job_title text not null default '',
+  company_name text not null default '',
   started_at timestamptz not null,
   finished_at timestamptz not null default now(),
   -- "submitted", or "handed back: <reason>".
@@ -17,6 +22,7 @@ create table apply_runs (
   created_at timestamptz not null default now()
 );
 create index apply_runs_application on apply_runs (application_id, started_at desc);
+create index apply_runs_recent on apply_runs (started_at desc);
 alter table apply_runs enable row level security;
 create policy own_rows on apply_runs for all
   using (user_id = auth.uid() and is_member()) with check (user_id = auth.uid() and is_member());

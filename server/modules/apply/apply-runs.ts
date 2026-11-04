@@ -14,7 +14,9 @@ export type RunFile = { name: string; bytes: Uint8Array };
 /** One run as the application's page shows it. */
 export type ApplyRunView = {
   id: string;
-  /** The application and its job, to link to. */
+  /** Whose run it was. */
+  user: { id: string; name: string };
+  /** The application and its job (as they were when the run was saved). */
   application: { id: string; title: string; company: string };
   startedAt: string;
   outcome: string;
@@ -48,7 +50,16 @@ export function redactCodes(log: string): string {
  */
 export async function saveApplyRun(
   db: Db,
-  run: { userId: string; applicationId: string; startedAt: Date; outcome: string; files: RunFile[] },
+  run: {
+    userId: string;
+    userName: string;
+    applicationId: string;
+    jobTitle: string;
+    companyName: string;
+    startedAt: Date;
+    outcome: string;
+    files: RunFile[];
+  },
 ): Promise<string> {
   const id = randomUUID();
   const folder = `${run.userId}/${run.applicationId}/${id}`;
@@ -62,7 +73,10 @@ export async function saveApplyRun(
     await db.from("apply_runs").insert({
       id,
       user_id: run.userId,
+      user_name: run.userName,
       application_id: run.applicationId,
+      job_title: run.jobTitle,
+      company_name: run.companyName,
       started_at: run.startedAt.toISOString(),
       outcome: run.outcome.slice(0, 1000),
       folder,
@@ -80,16 +94,42 @@ export async function countApplyRuns(db: Db, applicationId: string): Promise<num
   return res.count ?? 0;
 }
 
+/** A person and a job to filter Admin > Runs by, with how many runs each has. */
+export type RunFilters = {
+  people: { id: string; name: string; runs: number }[];
+  jobs: { applicationId: string; userId: string; title: string; company: string; runs: number }[];
+};
+
+/** Everyone and every job with runs (the latest 500 runs), most runs first. */
+export async function listRunFilters(db: Db): Promise<RunFilters> {
+  const rows = unwrap(
+    await db.from("apply_runs").select("user_id, user_name, application_id, job_title, company_name").order("started_at", { ascending: false }).limit(500),
+    "list run filters",
+  );
+  const people = new Map<string, RunFilters["people"][number]>();
+  const jobs = new Map<string, RunFilters["jobs"][number]>();
+  for (const r of rows) {
+    const person = people.get(r.user_id) ?? { id: r.user_id, name: r.user_name || "Someone", runs: 0 };
+    person.runs++;
+    people.set(r.user_id, person);
+    const job = jobs.get(r.application_id) ?? { applicationId: r.application_id, userId: r.user_id, title: r.job_title, company: r.company_name, runs: 0 };
+    job.runs++;
+    jobs.set(r.application_id, job);
+  }
+  return { people: [...people.values()], jobs: [...jobs.values()] };
+}
+
 /**
- * The latest runs, newest first (one application's with `applicationId`), with the log text and
- * links to the screenshots. The owner sees everyone's; anyone else, their own.
+ * The latest runs, newest first: everyone's, one person's (`userId`) or one application's,
+ * with the log text and links to the screenshots. The owner sees everyone's; anyone else, their own.
  */
-export async function listApplyRuns(db: Db, opts: { applicationId?: string; limit?: number } = {}): Promise<ApplyRunView[]> {
+export async function listApplyRuns(db: Db, opts: { userId?: string; applicationId?: string; limit?: number } = {}): Promise<ApplyRunView[]> {
   let query = db
     .from("apply_runs")
-    .select("id, started_at, outcome, folder, files, applications!inner(id, jobs!inner(title, company_name))")
+    .select("id, user_id, user_name, application_id, job_title, company_name, started_at, outcome, folder, files")
     .order("started_at", { ascending: false })
     .limit(opts.limit ?? 20);
+  if (opts.userId) query = query.eq("user_id", opts.userId);
   if (opts.applicationId) query = query.eq("application_id", opts.applicationId);
   const rows = unwrap(await query, "list apply runs");
   const bucket = db.storage.from(APPLY_RUNS_BUCKET);
@@ -103,10 +143,10 @@ export async function listApplyRuns(db: Db, opts: { applicationId?: string; limi
         r.files.includes("form.html") ? bucket.createSignedUrl(at("form.html"), 3600).then((res) => res.data?.signedUrl ?? null) : null,
       ]);
       const shots = pngs.flatMap((name, i) => (signed[i]?.signedUrl ? [{ name, url: signed[i].signedUrl }] : []));
-      const app = r.applications;
       return {
         id: r.id,
-        application: { id: app.id, title: app.jobs.title, company: app.jobs.company_name },
+        user: { id: r.user_id, name: r.user_name || "Someone" },
+        application: { id: r.application_id, title: r.job_title, company: r.company_name },
         startedAt: r.started_at,
         outcome: r.outcome,
         log,

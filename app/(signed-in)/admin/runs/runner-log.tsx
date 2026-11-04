@@ -12,25 +12,31 @@ const PROBLEM = /NOT FILLED|threw:|form shows|failed:|handed back|error:/i;
 const NOISE = /^\S+ (console\.(error|warning)|request failed|HTTP 4\d\d|page error)/;
 
 /**
- * The apply runner's attempts, newest first: how each ended, its step log (problems
+ * One person's attempts at one job, newest first: how each ended, its step log (problems
  * highlighted, page noise hidden) and screenshots.
  *
- * @param showJob - Name each run's job (off when listing one application's runs).
+ * @param canOpen - Link to the application (only your own open in the app).
  */
-export function RunnerLog({ runs, now, showJob = true }: { runs: ApplyRunView[]; now: Date; showJob?: boolean }) {
+export function RunGroup({ runs, now, canOpen }: { runs: ApplyRunView[]; now: Date; canOpen: boolean }) {
+  const { user, application } = runs[0];
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Latest attempts</CardTitle>
-        <CardDescription>
-          What the apply runner did on each attempt: every field it filled or couldn&apos;t, and screenshots of the form. Uploaded
-          when each run ends.
+        <CardTitle className="flex flex-wrap items-baseline gap-x-2">
+          <span>{application.title || "A job"}</span>
+          <span className="text-sm font-normal text-muted-foreground">at {application.company || "?"}</span>
+        </CardTitle>
+        <CardDescription className="flex flex-wrap items-center gap-x-2">
+          <span className="font-medium text-foreground">{user.name}</span>
+          <span>· {runs.length} {runs.length === 1 ? "attempt" : "attempts"}</span>
+          {canOpen && (
+            <Link href={`/app/applications/${application.id}`} className="hover:text-foreground hover:underline">
+              · Open the application
+            </Link>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {runs.length === 0 && (
-          <p className="text-sm text-muted-foreground">No runs uploaded yet. They show here once the apply runner finishes one.</p>
-        )}
         {runs.map((run, i) => {
           const lines = (run.log ?? "").split("\n").filter((l) => l.trim() && !NOISE.test(l));
           const problems = lines.filter((l) => PROBLEM.test(l)).length;
@@ -41,19 +47,12 @@ export function RunnerLog({ runs, now, showJob = true }: { runs: ApplyRunView[];
                 <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" />
                 <span className={cn("shrink-0 font-medium", submitted ? "text-success" : "text-warning")}>{submitted ? "Submitted" : "Handed back"}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground" title={run.outcome}>
-                  {showJob && <span className="text-foreground">{run.application.title} at {run.application.company}</span>}
-                  {showJob && !submitted && " · "}
                   {submitted ? "" : run.outcome.replace(/^handed back: /, "")}
                 </span>
                 {problems > 0 && <span className="shrink-0 text-xs text-warning">{problems} to look at</span>}
                 <span className="shrink-0 text-xs text-muted-foreground" title={new Date(run.startedAt).toLocaleString()}>{ago(run.startedAt, now)}</span>
               </summary>
               <div className="flex flex-col gap-3 border-t px-3 py-3">
-                {showJob && (
-                  <Link href={`/app/applications/${run.application.id}`} className="self-start text-xs text-muted-foreground hover:text-foreground hover:underline">
-                    Open the application
-                  </Link>
-                )}
                 {run.log == null ? (
                   <p className="text-sm text-muted-foreground">The step log wasn&apos;t uploaded for this run.</p>
                 ) : (

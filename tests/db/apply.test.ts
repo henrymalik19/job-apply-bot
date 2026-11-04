@@ -16,7 +16,7 @@ import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server
 import { listReadyToApply, setApplyStep } from "@/server/modules/apply/apply.repository";
 import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver } from "@/server/modules/apply/apply.service";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
-import { APPLY_RUNS_BUCKET, listApplyRuns, saveApplyRun } from "@/server/modules/apply/apply-runs";
+import { APPLY_RUNS_BUCKET, listApplyRuns, listRunFilters, saveApplyRun } from "@/server/modules/apply/apply-runs";
 import type {} from "./setup";
 import { testUser } from "./users";
 
@@ -247,7 +247,10 @@ describe("apply runner", () => {
     const text = (s: string) => new TextEncoder().encode(s);
     await saveApplyRun(db, {
       userId,
+      userName: "Ada Lovelace",
       applicationId: id,
+      jobTitle: "Engineer runlog",
+      companyName: `ApplyCo ${tag}`,
       startedAt: new Date(),
       outcome: "handed back: Couldn't fill \"Start year\".",
       files: [
@@ -257,6 +260,11 @@ describe("apply runner", () => {
     });
     const [run] = await listApplyRuns(db, { applicationId: id });
     expect(run.outcome).toContain("Start year");
+    expect(run.user.name).toBe("Ada Lovelace");
+    expect(run.application).toEqual({ id, title: "Engineer runlog", company: `ApplyCo ${tag}` });
+    const filters = await listRunFilters(db);
+    expect(filters.jobs.find((j) => j.applicationId === id)).toMatchObject({ userId, title: "Engineer runlog", runs: 1 });
+    expect((await listApplyRuns(db, { userId })).map((r) => r.id)).toContain(run.id);
     expect(run.log).toContain("NOT FILLED");
     expect(run.log).toContain("[code]");
     expect(run.log).not.toContain("aB3dE9fG");
