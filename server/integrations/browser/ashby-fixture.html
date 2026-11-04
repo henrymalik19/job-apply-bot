@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- A stand-in for Ashby's hosted application form (jobs.ashbyhq.com/<org>/<id>/application), with the
+     live form's structure: each question in div[data-field-path], Yes/No buttons, labelled radios and
+     checkboxes, a type-and-pick location box with a listbox, a file input that shows the file's name,
+     and the self-identification survey. ?submit shows the thank-you page on Submit. -->
+<html>
+<head><meta charset="utf-8"><title>Ashby fixture</title></head>
+<body>
+  <form id="form">
+    <div data-field-path="_systemfield_name"><label for="_systemfield_name">Legal Name</label><input type="text" id="_systemfield_name" name="_systemfield_name"></div>
+    <div data-field-path="_systemfield_email"><label for="_systemfield_email">Email</label><input type="email" id="_systemfield_email" name="_systemfield_email"></div>
+    <div data-field-path="_systemfield_location">
+      <label for="_systemfield_location">Where do you plan on working from?</label>
+      <div><input id="loc" placeholder="Start typing..." role="combobox" aria-haspopup="listbox" value=""></div>
+    </div>
+    <div data-field-path="_systemfield_resume">
+      <label for="_systemfield_resume">Resume</label>
+      <input type="file" id="_systemfield_resume"><span class="filename"></span>
+    </div>
+    <div data-field-path="q-years">
+      <label for="q-years">Do you have a minimum of 7 years of experience building software?</label>
+      <div><button type="button" aria-pressed="false" data-option="yes">Yes</button><button type="button" aria-pressed="false" data-option="no">No</button><input type="checkbox" tabindex="-1" name="q-years"></div>
+    </div>
+    <div data-field-path="q-why"><label for="q-why">Why us?</label><textarea id="q-why" name="q-why"></textarea></div>
+    <div data-field-path="q-pronouns"><fieldset>
+      <label for="q-pronouns">What pronouns should we use?</label>
+      <div><input type="radio" id="e_q-pronouns-labeled-radio-0" name="e_q-pronouns"><label for="e_q-pronouns-labeled-radio-0">He/Him</label></div>
+      <div><input type="radio" id="e_q-pronouns-labeled-radio-1" name="e_q-pronouns"><label for="e_q-pronouns-labeled-radio-1">She/Her</label></div>
+    </fieldset></div>
+    <div data-field-path="q-heard"><fieldset>
+      <label for="q-heard">How did you hear about this opportunity? (select all that apply)</label>
+      <div><input type="checkbox" id="e_q-heard-labeled-checkbox-0" name="LinkedIn"><label for="e_q-heard-labeled-checkbox-0">LinkedIn</label></div>
+      <div><input type="checkbox" id="e_q-heard-labeled-checkbox-1" name="Company website"><label for="e_q-heard-labeled-checkbox-1">Company website</label></div>
+    </fieldset></div>
+    <div data-field-path="_systemfield_eeoc_gender"><fieldset>
+      <label for="_systemfield_eeoc_gender">Gender</label>
+      <div><input type="radio" id="s__systemfield_eeoc_gender-labeled-radio-0" name="s__systemfield_eeoc_gender"><label for="s__systemfield_eeoc_gender-labeled-radio-0">Male</label></div>
+      <div><input type="radio" id="s__systemfield_eeoc_gender-labeled-radio-1" name="s__systemfield_eeoc_gender"><label for="s__systemfield_eeoc_gender-labeled-radio-1">Female</label></div>
+      <div><input type="radio" id="s__systemfield_eeoc_gender-labeled-radio-2" name="s__systemfield_eeoc_gender"><label for="s__systemfield_eeoc_gender-labeled-radio-2">Decline to self-identify</label></div>
+    </fieldset></div>
+    <button type="submit">Submit Application</button>
+  </form>
+  <ul role="listbox" id="places" hidden></ul>
+  <script>
+    // Yes/No: pressing one releases the other.
+    for (const b of document.querySelectorAll("button[data-option]")) {
+      b.addEventListener("click", () => {
+        for (const other of b.parentElement.querySelectorAll("button[data-option]")) other.setAttribute("aria-pressed", "false");
+        b.setAttribute("aria-pressed", "true");
+      });
+    }
+    // Location: suggestions for what's typed; picking one fills the box.
+    const loc = document.getElementById("loc");
+    const list = document.getElementById("places");
+    const PLACES = ["Atlanta, Georgia, United States", "Atlantic City, New Jersey, United States", "Austin, Texas, United States"];
+    loc.addEventListener("input", () => {
+      list.innerHTML = "";
+      for (const p of PLACES.filter((p) => loc.value && p.toLowerCase().startsWith(loc.value.toLowerCase()))) {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.textContent = p;
+        li.addEventListener("click", () => { loc.value = p; list.hidden = true; });
+        list.appendChild(li);
+      }
+      list.hidden = list.children.length === 0;
+    });
+    // Resume: show the file's name once attached.
+    document.getElementById("_systemfield_resume").addEventListener("change", (e) => {
+      document.querySelector(".filename").textContent = e.target.files[0]?.name ?? "";
+    });
+    document.getElementById("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (location.search.includes("submit")) document.body.innerHTML = "<h1>Thank you for applying!</h1><p>Your application was successfully submitted.</p>";
+    });
+  </script>
+</body>
+</html>

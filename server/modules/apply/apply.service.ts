@@ -19,7 +19,7 @@ import {
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 
 /** ATSs the runner can fill (by field name). */
-export const APPLY_ATS = ["greenhouse"] as const;
+export const APPLY_ATS = ["greenhouse", "ashby"] as const;
 
 /** What the runner needs from a browser tab with an application form open. */
 export interface FormDriver {
@@ -86,6 +86,9 @@ export function formUrl(job: ApplyJob["job"]): string | null {
     // The embed page serves the form itself; the hosted job page redirects companies with
     // their own careers site (Pinterest, say) to it, where the form sits in an iframe.
     return `https://job-boards.greenhouse.io/embed/job_app?for=${encodeURIComponent(job.board_token)}&token=${encodeURIComponent(job.external_id)}`;
+  }
+  if (job.source === "ashby" && job.board_token) {
+    return `https://jobs.ashbyhq.com/${encodeURIComponent(job.board_token)}/${encodeURIComponent(job.external_id)}/application`;
   }
   return null;
 }

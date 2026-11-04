@@ -17,6 +17,7 @@ import { createClient } from "@supabase/supabase-js";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Database } from "@/server/db/database.types";
 import type { Db } from "@/server/db/types";
+import { ashbyDriver } from "@/server/integrations/browser/ashby-driver";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { codeInbox } from "@/server/integrations/email/code-inbox";
@@ -204,7 +205,9 @@ async function main() {
       for (const app of ready) {
         if (stopping) break;
         const page = await newTab();
-        const record = await recordRun(path.join(DATA, "apply-debug"), app.id, page, greenhouseDriver(page));
+        // One driver per job site; Greenhouse forms also get the fields outside their question list.
+        const ashby = app.job.source === "ashby";
+        const record = await recordRun(path.join(DATA, "apply-debug"), app.id, page, ashby ? ashbyDriver(page) : greenhouseDriver(page));
         const both = (line: string) => {
           log(line);
           record.log(line);
@@ -212,7 +215,7 @@ async function main() {
         let outcome = "error";
         let closeTab = false;
         try {
-          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouseExtras(home, school, role), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
+          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: ashby ? [] : greenhouseExtras(home, school, role), readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
           // ones stay open for you, except a form nobody submitted in time, reopened from the app.
