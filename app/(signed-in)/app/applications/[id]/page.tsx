@@ -52,13 +52,33 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
       </ul>
     );
   } else if (app.status === "manual" && app.apply_note == null) {
+    // Prepare found either no form it can read (an unsupported site) or required questions only you can do.
+    const yours = app.questions.filter((q) => q.required && q.bucket === "cannot_automate");
     title = "Can't be filled automatically";
     body = (
       <>
-        <p>
-          {app.prepare_error ?? "A required question can't be answered automatically."} Approve it to wait in Approved until the
-          apply runner can fill it, or apply on the employer&apos;s site yourself. The resume and answers below are ready to copy.
-        </p>
+        {yours.length > 0 ? (
+          <>
+            <p>The form has {yours.length === 1 ? "a required question" : "required questions"} only you can do:</p>
+            <ul className="list-disc pl-5">
+              {yours.map((q) => (
+                <li key={q.id}>
+                  <a href={`#q-${q.id}`} className="underline underline-offset-2">{q.question}</a>
+                  {q.reason && <span className="text-muted-foreground">: {q.reason}</span>}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">
+              Apply on the employer&apos;s site yourself, then mark it applied. Approving it now only sends it to Runner stuck. The
+              resume and answers below are ready to copy.
+            </p>
+          </>
+        ) : (
+          <p>
+            {app.prepare_error ?? "The apply runner can't read this site's form."} Approve it to wait in Approved until the
+            runner supports this site, or apply on the employer&apos;s site yourself. The resume and answers below are ready to copy.
+          </p>
+        )}
         {(app.job.apply_url ?? app.job.url) && (
           <a href={app.job.apply_url ?? app.job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ size: "sm" }), "mt-2")}>
             <ExternalLink /> Open the application form
