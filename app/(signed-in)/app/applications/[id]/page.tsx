@@ -369,11 +369,20 @@ async function ApplicationDetail({ params }: { params: Params }) {
           <QuestionGroup
             title="Needs your answer"
             hint="Required, and couldn't be answered from your profile or saved answers. Short answers you give here are remembered, so other applications fill them in automatically."
-            questions={yours.filter((q) => q.required)}
+            questions={yours.filter((q) => q.required && q.bucket === "needs_user")}
             app={app}
             editable={editable}
             aiAllowed={aiAllowed}
             tone="warning"
+          />
+          <QuestionGroup
+            title="For you in Chrome"
+            hint="Steps only you can do, like an assessment or a file to attach. The apply runner fills everything else, then leaves these to you in the Chrome window before you click Submit."
+            questions={yours.filter((q) => q.required && q.bucket === "cannot_automate")}
+            app={app}
+            editable={false}
+            aiAllowed={aiAllowed}
+            tone="info"
           />
           <QuestionGroup
             title="Optional, no answer yet"
