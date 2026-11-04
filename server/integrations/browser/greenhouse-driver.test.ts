@@ -76,6 +76,16 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await driver.fill({ kind: "closest", fieldName: "school--0", label: "School", required: false, value: "Stanford University" }, resume)).toBe(false);
   }, 30_000);
 
+  it("ticks options in a multi-select shown as checkboxes", async () => {
+    const driver = greenhouseDriver(page);
+    await driver.open(FIXTURE);
+    const step: FillStep = { kind: "select", fieldName: "question_9[]", label: "Location Preference", required: true, value: ["Remote"] };
+    expect(await driver.fill(step, resume)).toBe(true);
+    expect(await page.isChecked("[id=\"question_9[]_2\"]")).toBe(true);
+    expect(await page.isChecked("[id=\"question_9[]_1\"]")).toBe(false);
+    expect(await driver.fill({ ...step, value: ["Mars"] }, resume)).toBe(false);
+  });
+
   it("tells a field the form has from one it doesn't", async () => {
     const driver = greenhouseDriver(page);
     await driver.open(FIXTURE);

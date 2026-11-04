@@ -24,8 +24,28 @@ const CONFIRMED = /thank you for (applying|your (application|interest))|applicat
 export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
   const form = page.locator("#application-form");
 
-  /** Picks one option of a combobox by its label; false when no option matches. */
+  /**
+   * Ticks one box of a checkbox group (a multi-select shown as a fieldset of checkboxes,
+   * like Upstart's "Location Preference") by its label; false when no box has it.
+   */
+  async function tick(fieldName: string, label: string): Promise<boolean> {
+    const boxes = form.locator(`input[type=checkbox][name=${JSON.stringify(fieldName)}]`);
+    const count = await boxes.count();
+    for (let i = 0; i < count; i++) {
+      const box = boxes.nth(i);
+      const id = await box.getAttribute("id");
+      const text = id ? await form.locator(`label[for=${JSON.stringify(id)}]`).textContent().catch(() => null) : null;
+      if (text != null && norm(text) === norm(label)) {
+        await box.check();
+        return box.isChecked();
+      }
+    }
+    return false;
+  }
+
+  /** Picks one option of a combobox by its label (or ticks it in a checkbox group); false when no option matches. */
   async function pick(fieldName: string, label: string): Promise<boolean> {
+    if ((await form.locator(`fieldset[id=${JSON.stringify(fieldName)}] input[type=checkbox]`).count()) > 0) return tick(fieldName, label);
     const input = page.locator(byId(fieldName));
     await input.click();
     await input.fill(label);
