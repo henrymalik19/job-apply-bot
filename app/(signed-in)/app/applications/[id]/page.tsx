@@ -317,6 +317,8 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const flags = (app.flags as Flag[]) ?? [];
   const salary = formatSalary(app.job.salary_min, app.job.salary_max, app.job.salary_currency);
   const editable = app.status === "queued" || app.status === "needs_input" || app.status === "manual";
+  // An approved application still takes answers to its open questions, for the runner to use, while it isn't filling the form.
+  const answerable = editable || (app.status === "approved" && !app.apply_step);
   const aiAllowed = (q: ApplicationQuestion) =>
     !flags.some((f) => f.kind === "ai_restriction" && (f.where === "posting" || f.where === q.field_name));
   const info = statusInfo(app.status);
@@ -371,7 +373,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
             hint="Required, and couldn't be answered from your profile or saved answers. Short answers you give here are remembered, so other applications fill them in automatically."
             questions={yours.filter((q) => q.required && q.bucket === "needs_user")}
             app={app}
-            editable={editable}
+            editable={answerable}
             aiAllowed={aiAllowed}
             tone="warning"
           />
