@@ -33,6 +33,19 @@ const retryable = (status: number) => status === 429 || status >= 500;
  * @throws {@link HttpError} or the last network error after the final attempt.
  */
 export async function fetchJson(url: string, opts: FetchOptions = {}): Promise<unknown> {
+  return request(url, opts, "application/json", (res) => res.json());
+}
+
+/**
+ * GETs a page as text (HTML), with the same timeout and retries as {@link fetchJson}.
+ *
+ * @throws {@link HttpError} or the last network error after the final attempt.
+ */
+export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
+  return request(url, opts, "text/html", (res) => res.text());
+}
+
+async function request<T>(url: string, opts: FetchOptions, accept: string, read: (res: Response) => Promise<T>): Promise<T> {
   const { fetchFn = fetch, sleep = defaultSleep, attempts = 3, baseDelayMs = 1000, timeoutMs = 30_000, body } = opts;
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -41,14 +54,14 @@ export async function fetchJson(url: string, opts: FetchOptions = {}): Promise<u
       const res = await fetchFn(url, {
         method: body === undefined ? "GET" : "POST",
         headers: {
-          accept: "application/json",
+          accept,
           "user-agent": "job-search-autopilot (personal job search)",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return await read(res);
       lastError = new HttpError(res.status, url);
       if (!retryable(res.status)) break;
     } catch (err) {

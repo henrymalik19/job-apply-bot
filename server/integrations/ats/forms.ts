@@ -3,7 +3,8 @@
 //   Ashby: the public jobs-page GraphQL that its hosted application page uses
 // Lever has no public form API; its jobs are prepared as manual.
 import { z } from "zod";
-import { fetchJson, type FetchOptions } from "./http";
+import { fetchJson, fetchText, type FetchOptions } from "./http";
+import { leverDescriptionHtml, leverPosting, parseLeverForm } from "./lever-form";
 import type { BoardAts } from "./boards";
 
 /** How a question is answered on the form. */
@@ -32,7 +33,7 @@ export type FormQuestion = {
 export type ApplicationForm = { questions: FormQuestion[]; descriptionHtml: string | null };
 
 /** ATSs whose forms we can read. */
-export const FORM_ATS = ["greenhouse", "ashby"] as const satisfies readonly BoardAts[];
+export const FORM_ATS = ["greenhouse", "ashby", "lever"] as const satisfies readonly BoardAts[];
 
 const greenhouseJob = z.object({
   content: z.string().nullish(),
@@ -239,6 +240,15 @@ export async function fetchApplicationForm(
         query: ASHBY_QUERY,
       };
       return parseAshbyForm(await fetchJson("https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting", { ...opts, body }));
+    }
+    case "lever": {
+      // No form API: the apply page itself, plus the posting's text from the postings API.
+      const base = `${encodeURIComponent(boardToken)}/${encodeURIComponent(externalId)}`;
+      const [html, posting] = await Promise.all([
+        fetchText(`https://jobs.lever.co/${base}/apply`, opts),
+        fetchJson(`https://api.lever.co/v0/postings/${base}`, opts).then((b) => leverPosting.parse(b)).catch(() => null),
+      ]);
+      return parseLeverForm(html, posting ? leverDescriptionHtml(posting) : null);
     }
     default:
       return null;

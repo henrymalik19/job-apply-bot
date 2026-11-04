@@ -108,6 +108,13 @@ const STANDARD_FIELDS: Record<string, string> = {
   _systemfield_name: "full_name",
   _systemfield_email: "email",
   _systemfield_location: "current_location",
+  // Lever's standard fields.
+  name: "full_name",
+  location: "current_location",
+  org: "current_company_name",
+  "urls[LinkedIn]": "linkedin_url",
+  "urls[GitHub]": "github_url",
+  "urls[Portfolio]": "website_url",
 };
 
 const isResume = (q: FormQuestion) => q.fieldType === "file" && /resume|cv/i.test(`${q.fieldName} ${q.label}`);

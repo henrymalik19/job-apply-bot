@@ -19,7 +19,7 @@ import {
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 
 /** ATSs the runner can fill (by field name). */
-export const APPLY_ATS = ["greenhouse", "ashby"] as const;
+export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
 
 /** What the runner needs from a browser tab with an application form open. */
 export interface FormDriver {
@@ -86,6 +86,9 @@ export function formUrl(job: ApplyJob["job"]): string | null {
     // The embed page serves the form itself; the hosted job page redirects companies with
     // their own careers site (Pinterest, say) to it, where the form sits in an iframe.
     return `https://job-boards.greenhouse.io/embed/job_app?for=${encodeURIComponent(job.board_token)}&token=${encodeURIComponent(job.external_id)}`;
+  }
+  if (job.source === "lever" && job.board_token) {
+    return `https://jobs.lever.co/${encodeURIComponent(job.board_token)}/${encodeURIComponent(job.external_id)}/apply`;
   }
   if (job.source === "ashby" && job.board_token) {
     return `https://jobs.ashbyhq.com/${encodeURIComponent(job.board_token)}/${encodeURIComponent(job.external_id)}/application`;
@@ -188,7 +191,9 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const plan = buildFillPlan(app.questions);
   const known = new Set(plan.steps.map((s) => s.fieldName));
   // Extras go first (Country before the phone it formats) and aren't checked for your edits.
-  const steps = [...(deps.extraSteps ?? []).filter((s) => !known.has(s.fieldName)), ...plan.steps];
+  // The resume goes first: some forms (Lever) read it and pre-fill other fields, which the rest then overwrite.
+  const ordered = [...(deps.extraSteps ?? []).filter((s) => !known.has(s.fieldName)), ...plan.steps];
+  const steps = [...ordered.filter((s) => s.kind === "resume"), ...ordered.filter((s) => s.kind !== "resume")];
   if (plan.blockers.length) return handBack(deps, app, `Can't fill the form: ${plan.blockers.join("; ")}.`);
   if (!app.resume?.pdf_path) return handBack(deps, app, "No resume PDF was prepared for this application.");
 

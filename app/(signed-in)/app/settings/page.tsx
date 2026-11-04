@@ -48,7 +48,7 @@ async function PublicPageSetting() {
 
 const ATS_LABEL: Record<string, string> = { greenhouse: "Greenhouse", ashby: "Ashby", lever: "Lever" };
 /** Job sites the runner can't fill yet, listed so it's clear what's covered. */
-const COMING = ["ashby", "lever"];
+const COMING: string[] = [];
 
 async function ApplyRunnerSetting() {
   const { db, owner } = await ownerContext();
