@@ -90,6 +90,7 @@ beforeAll(async () => {
   await addApp("appr", `Lateco ${tag}`, "Data Engineer", "approved");
   await addApp("twin1", `Twinco ${tag}`, "Backend Engineer", "submitted");
   await addApp("twin2", `Twinco ${tag}`, "Product Designer", "submitted");
+  await addApp("late", `Pinco ${tag}`, "Ads Engineer", "submitted");
   inbox.push(
     mail("c", `Thank you for applying to Confco ${tag}`, "We have received your application for Backend Engineer."),
     mail("r", `Your application to Rejco ${tag}`, "Thank you for applying. Unfortunately, we have decided to move forward with other candidates."),
@@ -134,5 +135,17 @@ describe("track_email", () => {
   it("reads nothing twice", async () => {
     const { counts } = await runTrackEmail(deps());
     expect(counts).toMatchObject({ read: 6, new: 0, moved: 0 });
+  });
+
+  it("reads again an email saved as other that a rule now places", async () => {
+    // Saved by an earlier run with no rule for its wording and no Claude to sort it.
+    const pin = mail("p", `Your application for Ads Engineer at Pinco ${tag}`, `Thank you for your interest in joining the Pinco ${tag} team!`, { receivedAt: ago(120) });
+    await db.from("emails").insert({ user_id: userId, message_id: pin.messageId, received_at: pin.receivedAt.toISOString(), from_addr: pin.fromAddress, subject: pin.subject, snippet: pin.text, classification: "other", reason: "no Claude to sort it" });
+    inbox.push(pin);
+    const { counts } = await runTrackEmail(deps());
+    expect(counts).toMatchObject({ new: 1, moved: 1 });
+    expect(await status("late")).toBe("confirmed");
+    const { data } = await db.from("emails").select("classification").eq("message_id", pin.messageId);
+    expect(data).toEqual([{ classification: "confirmation" }]);
   });
 });

@@ -137,6 +137,33 @@ async function readSince(db: Db, userId: string, now: Date): Promise<Date> {
 }
 
 /**
+ * Emails saved as "other" in the last two weeks that today's rules can place (a rule added since,
+ * or saved while there was no Claude to sort it) are forgotten, so this run reads them again in full.
+ *
+ * @returns Where reading starts: `since`, or earlier to reach those emails.
+ */
+async function retryUnsorted(db: Db, userId: string, since: Date, now: Date): Promise<Date> {
+  const rows = unwrap(
+    await db
+      .from("emails")
+      .select("id, received_at, from_addr, subject, snippet")
+      .eq("user_id", userId)
+      .eq("classification", "other")
+      .is("application_id", null)
+      .gte("received_at", new Date(now.getTime() - FIRST_RUN_DAYS * 86_400_000).toISOString()),
+    "list unsorted emails",
+  );
+  const placeable = rows.filter((r) => {
+    const fromAddress = /<([^>]+)>/.exec(r.from_addr ?? "")?.[1] ?? r.from_addr ?? "";
+    return classifyByRules({ fromAddress, fromName: "", subject: r.subject ?? "", text: r.snippet ?? "" }) != null;
+  });
+  if (placeable.length === 0) return since;
+  check(await db.from("emails").delete().in("id", placeable.map((r) => r.id)), "forget unsorted emails");
+  const oldest = Math.min(...placeable.map((r) => new Date(r.received_at).getTime())) - 3600_000;
+  return new Date(Math.min(since.getTime(), oldest));
+}
+
+/**
  * Runs email tracking once for one user.
  *
  * @throws Only when the run itself can't proceed (no inbox setting, the inbox or database unreachable).
@@ -155,7 +182,9 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
     const inbox = inboxSchema.parse(inboxRaw);
     const config: InboxConfig = { host: inbox.imap_host, port: inbox.imap_port, user: inbox.address, password: deps.password };
     const [mails, apps, transitions, budget] = await Promise.all([
-      readSince(db, userId, now()).then((since) => readMail(config, since)),
+      readSince(db, userId, now())
+        .then((since) => retryUnsorted(db, userId, since, now()))
+        .then((since) => readMail(config, since)),
       listApplications(db, userId, TRACKED),
       listTransitions(db),
       getMonthlySpend(db, userId, now()),

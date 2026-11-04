@@ -8,6 +8,10 @@ const mail = (subject: string, text: string, fromAddress = "no-reply@us.greenhou
 describe("classifyByRules", () => {
   it("sorts the common ATS mails", () => {
     expect(classifyByRules(mail("Thank you for applying to LaunchDarkly", "We have received your application for Backend Software Engineer."))).toBe("confirmation");
+    // Pinterest's receipt says neither "applying" nor "received".
+    expect(classifyByRules(mail("Your application for Sr Software Engineer at Pinterest", "Hi Malik, Thank you for your interest in joining the Pinterest team! We appreciate the time you took to apply."))).toBe("confirmation");
+    // The same opening on a rejection is still a rejection.
+    expect(classifyByRules(mail("Your application to Pinterest", "Thank you for your interest in joining the Pinterest team. Unfortunately, we have decided to move forward with other candidates."))).toBe("rejection");
     expect(classifyByRules(mail("Your application to Pinterest", "Thank you for applying. Unfortunately, we have decided to move forward with other candidates."))).toBe("rejection");
     expect(classifyByRules(mail("Next steps", "We'd love to schedule a 30 minute phone screen. Please share your availability here: calendly.com/acme"))).toBe("interview");
     expect(classifyByRules(mail("Security code for your application to Pinterest", "Copy and paste this code: aB3dE9fG"))).toBe("code");

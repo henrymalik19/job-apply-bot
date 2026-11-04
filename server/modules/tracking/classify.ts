@@ -18,8 +18,9 @@ const REJECTION =
   /\bunfortunately\b|\bnot (to )?(move|moving) forward\b|\bdecided to (pursue|proceed|move forward|go) with (other|another)\b|\bother candidates\b|\bwill not be (moving|proceeding)\b|\bno longer (being )?considered\b|\bposition has (been|now been) filled\b|\bnot (been )?selected\b|\bregret to inform\b/i;
 const INTERVIEW =
   /\b(schedule|book|set up|arrange)\b.{0,60}\b(interview|call|chat|conversation|phone screen|meeting)\b|\binterview\b.{0,60}\b(invit|availability|schedul)|\bcalendly\.com\b|\bgoodtime\.io\b|\byour availability\b/i;
+// Checked after rejections and interviews, so "thank you for your interest" here is the plain receipt.
 const CONFIRMATION =
-  /\bthank(s| you) for (applying|your application|submitting)\b|\bapplication (has been |was )?(received|submitted)\b|\bwe('ve| have) received your application\b|\byour application (to|for) .{0,80} (is in|has been received)/i;
+  /\bthank(s| you) for (applying|your application|submitting)\b|\bthank(s| you) for your interest in (joining|working|applying|the)\b|\bthe time you took to apply\b|\bapplication (has been |was )?(received|submitted)\b|\bwe('ve| have) received your application\b|\byour application (to|for) .{0,80} (is in|has been received)/i;
 // Job boards mail from subdomains too (match.indeed.com, e.linkedin.com), and their "apply now" pitches
 // can read like interview invites, so anything from one is an alert, never about an application here.
 const JOB_ALERT_SENDER =
