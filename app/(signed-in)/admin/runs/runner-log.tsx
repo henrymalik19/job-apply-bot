@@ -14,10 +14,8 @@ const NOISE = /^\S+ (console\.(error|warning)|request failed|HTTP 4\d\d|page err
 /**
  * One person's attempts at one job, newest first: how each ended, its step log (problems
  * highlighted, page noise hidden) and screenshots.
- *
- * @param canOpen - Link to the application (only your own open in the app).
  */
-export function RunGroup({ runs, now, canOpen }: { runs: ApplyRunView[]; now: Date; canOpen: boolean }) {
+export function RunGroup({ runs, now }: { runs: ApplyRunView[]; now: Date }) {
   const { user, application } = runs[0];
   return (
     <Card>
@@ -27,13 +25,11 @@ export function RunGroup({ runs, now, canOpen }: { runs: ApplyRunView[]; now: Da
           <span className="text-sm font-normal text-muted-foreground">at {application.company || "?"}</span>
         </CardTitle>
         <CardDescription className="flex flex-wrap items-center gap-x-2">
-          <span className="font-medium text-foreground">{user.name}</span>
+          <Link href={`/admin/users/${user.id}`} className="font-medium text-foreground hover:underline">{user.name}</Link>
           <span>· {runs.length} {runs.length === 1 ? "attempt" : "attempts"}</span>
-          {canOpen && (
-            <Link href={`/app/applications/${application.id}`} className="hover:text-foreground hover:underline">
-              · Open the application
-            </Link>
-          )}
+          <Link href={`/admin/applications/${application.id}`} className="hover:text-foreground hover:underline">
+            · Open the application
+          </Link>
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

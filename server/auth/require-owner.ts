@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { createServiceClient } from "@/server/db/service-client";
 import { createUserClient } from "@/server/db/user-client";
 import type { Db } from "@/server/db/types";
 import { serverEnv } from "@/shared/env";
@@ -32,4 +33,15 @@ export async function ownerContext(): Promise<OwnerContext> {
 /** Like {@link ownerContext} when only the owner (not the client) is needed. */
 export async function requireOwner(): Promise<Owner> {
   return (await ownerContext()).owner;
+}
+
+/**
+ * For admin pages that look at any user's data: the owner check first, then a client
+ * that reads every user's rows (service role, bypassing RLS). Read only: changes go
+ * through the user's own pages. Never use it outside /admin, where regular pages rely
+ * on reading only the owner's rows.
+ */
+export async function adminContext(): Promise<OwnerContext & { admin: Db }> {
+  const ctx = await ownerContext();
+  return { ...ctx, admin: createServiceClient(serverEnv()) };
 }

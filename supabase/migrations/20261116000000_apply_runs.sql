@@ -6,8 +6,7 @@ create table apply_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   application_id uuid not null references applications(id) on delete cascade,
-  -- Who and what, kept on the run: Admin > Runs lists everyone's, and the owner can't read other
-  -- people's profiles or applications.
+  -- Who and what, kept on the run so Admin > Runs can list and filter without joining.
   user_name text not null default '',
   job_title text not null default '',
   company_name text not null default '',
@@ -36,8 +35,3 @@ create policy apply_runs_own_read on storage.objects for select to authenticated
   using (bucket_id = 'apply-runs' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy apply_runs_own_write on storage.objects for insert to authenticated
   with check (bucket_id = 'apply-runs' and (storage.foldername(name))[1] = auth.uid()::text);
-
--- The owner (who runs this app and helps people use it) reads everyone's runs on Admin > Runs.
-create policy owner_read on apply_runs for select using (is_owner());
-create policy apply_runs_owner_read on storage.objects for select to authenticated
-  using (bucket_id = 'apply-runs' and is_owner());

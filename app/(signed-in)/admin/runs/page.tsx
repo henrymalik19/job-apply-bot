@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ownerContext } from "@/server/auth/require-owner";
+import { adminContext } from "@/server/auth/require-owner";
 import { listApplyRuns, listRunFilters, type ApplyRunView } from "@/server/modules/apply/apply-runs";
 import { TableSkeleton } from "../../_components/skeletons";
 import { RunFiltersBar } from "./run-filters";
@@ -10,12 +10,13 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 
 async function Runs({ searchParams }: { searchParams: SearchParams }) {
-  const [{ db, owner }, params] = await Promise.all([ownerContext(), searchParams]);
+  // Everyone's runs: read with the admin client.
+  const [{ admin }, params] = await Promise.all([adminContext(), searchParams]);
   const userId = one(params.user);
   const applicationId = one(params.application);
   const [filters, runs] = await Promise.all([
-    listRunFilters(db),
-    listApplyRuns(db, { userId: userId || undefined, applicationId: applicationId || undefined, limit: applicationId ? 10 : 30 }),
+    listRunFilters(admin),
+    listApplyRuns(admin, { userId: userId || undefined, applicationId: applicationId || undefined, limit: applicationId ? 10 : 30 }),
   ]);
   // One card per person and job, in order of their latest attempt.
   const groups = new Map<string, ApplyRunView[]>();
@@ -28,7 +29,7 @@ async function Runs({ searchParams }: { searchParams: SearchParams }) {
         <p className="text-sm text-muted-foreground">No runs uploaded yet. They show here once the apply runner finishes one.</p>
       )}
       {[...groups.values()].map((group) => (
-        <RunGroup key={group[0].application.id} runs={group} now={now} canOpen={group[0].user.id === owner.id} />
+        <RunGroup key={group[0].application.id} runs={group} now={now} />
       ))}
     </>
   );
