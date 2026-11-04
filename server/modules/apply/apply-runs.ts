@@ -2,8 +2,9 @@
 // run ends so the application's page can show why a field wasn't filled. The runner keeps its local copy
 // in data/apply-debug too, so a failed upload loses nothing.
 import { randomUUID } from "node:crypto";
-import type { Db } from "@/server/db/types";
+import type { Db, Json } from "@/server/db/types";
 import { check, unwrap } from "@/server/core/errors";
+import { parseRunLog, type FillResult } from "./run-log";
 
 /** The private Storage bucket for run records, one folder per user. */
 export const APPLY_RUNS_BUCKET = "apply-runs";
@@ -64,8 +65,10 @@ export async function saveApplyRun(
   const id = randomUUID();
   const folder = `${run.userId}/${run.applicationId}/${id}`;
   const saved: string[] = [];
+  let counts: Record<FillResult, number> | null = null;
   for (const file of run.files) {
     const bytes = file.name === "run.log" ? new TextEncoder().encode(redactCodes(new TextDecoder().decode(file.bytes))) : file.bytes;
+    if (file.name === "run.log") counts = parseRunLog(new TextDecoder().decode(bytes)).counts;
     const up = await db.storage.from(APPLY_RUNS_BUCKET).upload(`${folder}/${file.name}`, bytes, { contentType: contentType(file.name) });
     if (!up.error) saved.push(file.name);
   }
@@ -81,6 +84,7 @@ export async function saveApplyRun(
       outcome: run.outcome.slice(0, 1000),
       folder,
       files: saved,
+      counts: counts as Json,
     }),
     "save apply run",
   );
@@ -155,4 +159,73 @@ export async function listApplyRuns(db: Db, opts: { userId?: string; application
       };
     }),
   );
+}
+
+/** One run as a row of the Admin > Runs table: no files, just what happened. */
+export type RunRow = {
+  id: string;
+  user: { id: string; name: string };
+  application: { id: string; title: string; company: string };
+  startedAt: string;
+  outcome: string;
+  /** Fields filled, couldn't fill, not on the form, errors; null for runs saved before it was counted. */
+  counts: Record<FillResult, number> | null;
+};
+
+/** Filters for the runs table. */
+export type RunQuery = { userId?: string; applicationId?: string; result?: "submitted" | "handed_back"; page?: number; pageSize?: number };
+
+/** The runs table, newest first, one page of it with the total. */
+export async function listRunRows(db: Db, query: RunQuery = {}): Promise<{ rows: RunRow[]; total: number }> {
+  const size = query.pageSize ?? 25;
+  const from = (Math.max(1, query.page ?? 1) - 1) * size;
+  let q = db
+    .from("apply_runs")
+    .select("id, user_id, user_name, application_id, job_title, company_name, started_at, outcome, counts", { count: "exact" })
+    .order("started_at", { ascending: false })
+    .range(from, from + size - 1);
+  if (query.userId) q = q.eq("user_id", query.userId);
+  if (query.applicationId) q = q.eq("application_id", query.applicationId);
+  if (query.result === "submitted") q = q.eq("outcome", "submitted");
+  if (query.result === "handed_back") q = q.neq("outcome", "submitted");
+  const res = await q;
+  const rows = unwrap(res, "list run rows");
+  return {
+    total: res.count ?? rows.length,
+    rows: rows.map((r) => ({
+      id: r.id,
+      user: { id: r.user_id, name: r.user_name || "Someone" },
+      application: { id: r.application_id, title: r.job_title, company: r.company_name },
+      startedAt: r.started_at,
+      outcome: r.outcome,
+      counts: (r.counts as Record<FillResult, number> | null) ?? null,
+    })),
+  };
+}
+
+/** One run with its log and links to its files, or null. */
+export async function getApplyRun(db: Db, id: string): Promise<ApplyRunView | null> {
+  const row = unwrap(
+    await db.from("apply_runs").select("id, user_id, user_name, application_id, job_title, company_name, started_at, outcome, folder, files").eq("id", id).limit(1),
+    "get apply run",
+  )[0];
+  if (!row) return null;
+  const bucket = db.storage.from(APPLY_RUNS_BUCKET);
+  const at = (name: string) => `${row.folder}/${name}`;
+  const pngs = row.files.filter((f) => f.endsWith(".png"));
+  const [log, signed, form] = await Promise.all([
+    row.files.includes("run.log") ? bucket.download(at("run.log")).then((res) => (res.data ? res.data.text() : null)) : null,
+    pngs.length ? bucket.createSignedUrls(pngs.map(at), 3600).then((res) => res.data ?? []) : [],
+    row.files.includes("form.html") ? bucket.createSignedUrl(at("form.html"), 3600).then((res) => res.data?.signedUrl ?? null) : null,
+  ]);
+  return {
+    id: row.id,
+    user: { id: row.user_id, name: row.user_name || "Someone" },
+    application: { id: row.application_id, title: row.job_title, company: row.company_name },
+    startedAt: row.started_at,
+    outcome: row.outcome,
+    log,
+    shots: pngs.flatMap((name, i) => (signed[i]?.signedUrl ? [{ name, url: signed[i].signedUrl }] : [])),
+    formUrl: form,
+  };
 }

@@ -143,14 +143,14 @@ isOneToOne: false
                   ]
                 },"apply_runs": {
                   Row: {
-                    "application_id": string,"company_name": string,"created_at": string,"files": (string)[],"finished_at": string,"folder": string,"id": string,"job_title": string,"outcome": string,"started_at": string,"user_id": string,"user_name": string
+                    "application_id": string,"company_name": string,"counts": Json | null,"created_at": string,"files": (string)[],"finished_at": string,"folder": string,"id": string,"job_title": string,"outcome": string,"started_at": string,"user_id": string,"user_name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id": string,"company_name"?: string,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder": string,"id"?: string,"job_title"?: string,"outcome": string,"started_at": string,"user_id": string,"user_name"?: string
+                    "application_id": string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder": string,"id"?: string,"job_title"?: string,"outcome": string,"started_at": string,"user_id": string,"user_name"?: string
                   }
                   Update: {
-                    "application_id"?: string,"company_name"?: string,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder"?: string,"id"?: string,"job_title"?: string,"outcome"?: string,"started_at"?: string,"user_id"?: string,"user_name"?: string
+                    "application_id"?: string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder"?: string,"id"?: string,"job_title"?: string,"outcome"?: string,"started_at"?: string,"user_id"?: string,"user_name"?: string
                   }
                   Relationships: [
                     {
