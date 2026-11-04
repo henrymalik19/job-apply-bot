@@ -8,6 +8,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildFillPlan, type FillStep } from "@/server/modules/apply/fill-plan";
 import { greenhouseDriver } from "./greenhouse-driver";
+import { INSTANT } from "./human";
 
 const FIXTURE = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "greenhouse-fixture.html")).href;
 const browser: Browser | null = await chromium.launch({ channel: "chrome", headless: true }).catch(() => null);
@@ -37,7 +38,7 @@ const plan = buildFillPlan([
 
 describe.skipIf(!browser)("greenhouseDriver", () => {
   it("fills text, picks options, attaches the resume and reads the values back", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     expect(await driver.open(FIXTURE)).toBe("ok");
     for (const step of plan.steps) expect(await driver.fill(step, resume), step.label).toBe(true);
     expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
@@ -47,14 +48,14 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
   });
 
   it("attaches the resume again when the page's uploader wasn't ready", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     expect(await driver.open(`${FIXTURE}?flaky`)).toBe("ok");
     expect(await driver.fill({ kind: "resume", fieldName: "resume", label: "Resume/CV", required: true }, resume)).toBe(true);
     expect(await page.locator(".filename").textContent()).toBe("driver-test-resume.pdf");
   }, 20_000);
 
   it("finds demographic selects by their number, picks a city and ticks the consent box", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     const steps: FillStep[] = [
       { kind: "select", fieldName: "demographic_29783", label: "Gender", required: true, value: ["I don't wish to answer"] },
@@ -77,7 +78,7 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
   }, 30_000);
 
   it("ticks options in a multi-select shown as checkboxes", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     const step: FillStep = { kind: "select", fieldName: "question_9[]", label: "Location Preference", required: true, value: ["Remote"] };
     expect(await driver.fill(step, resume)).toBe(true);
@@ -87,7 +88,7 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
   });
 
   it("tells a field the form has from one it doesn't", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     expect(await driver.has!("first_name")).toBe(true);
     expect(await driver.has!("resume")).toBe(true);
@@ -96,14 +97,14 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
   });
 
   it("reports an option that isn't on the form", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     expect(await driver.fill({ kind: "select", fieldName: "question_2", label: "Sponsorship?", required: true, value: ["Maybe"] }, resume)).toBe(false);
     expect(await driver.fill({ kind: "text", fieldName: "question_404", label: "Gone", required: true, value: "x" }, resume)).toBe(false);
   });
 
   it("notices the form asking for a code it emailed", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(`${FIXTURE}?code`);
     expect(await driver.emailCode()).toBe(false);
     await driver.submit();
@@ -114,7 +115,7 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
   });
 
   it("sees the thank-you page after submit", async () => {
-    const driver = greenhouseDriver(page);
+    const driver = greenhouseDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     expect(await driver.emailCode()).toBe(false);
     await driver.submit();

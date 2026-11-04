@@ -7,6 +7,7 @@ import type { Page } from "playwright-core";
 import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
+import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 
 /** The element id of a form field: demographic questions use their bare number. */
 const domId = (fieldName: string) => fieldName.replace(/^demographic_(?=\d+$)/, "");
@@ -20,8 +21,9 @@ const CONFIRMED = /thank you for (applying|your (application|interest))|applicat
  * A FormDriver for one Greenhouse tab.
  *
  * @param formTimeoutMs - How long to wait for the form before calling the page formless.
+ * @param pace - How fast to type and move between fields (a person's pace unless a test says otherwise).
  */
-export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
+export function greenhouseDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUMAN): FormDriver {
   const form = page.locator("#application-form");
 
   /**
@@ -47,8 +49,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
   async function pick(fieldName: string, label: string): Promise<boolean> {
     if ((await form.locator(`fieldset[id=${JSON.stringify(fieldName)}] input[type=checkbox]`).count()) > 0) return tick(fieldName, label);
     const input = page.locator(byId(fieldName));
-    await input.click();
-    await input.fill(label);
+    await typeSearch(input, label, pace);
     const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
     await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
     const texts = await options.allTextContents();
@@ -79,8 +80,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
       return shared / Math.max(words.length, have.size);
     };
     for (const query of queries) {
-      await input.click();
-      await input.fill(query);
+      await typeSearch(input, query, pace);
       await options.first().waitFor({ timeout: 3000 }).catch(() => undefined);
       const texts = await options.allTextContents();
       const best = texts.map((t, i) => ({ i, s: score(t) })).sort((a, b) => b.s - a.s)[0];
@@ -116,8 +116,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
    */
   async function pickPlace(fieldName: string, place: string): Promise<boolean> {
     const input = form.locator(byId(fieldName));
-    await input.click();
-    await input.fill(place.split(",")[0].trim());
+    await typeSearch(input, place.split(",")[0].trim(), pace);
     const options = page.locator(`[id=${JSON.stringify(`react-select-${domId(fieldName)}-listbox`)}] [role=option]`);
     await options.first().waitFor({ timeout: 5000 }).catch(() => undefined);
     const i = (await options.allTextContents()).findIndex((t) => norm(t).startsWith(norm(place)));
@@ -162,9 +161,10 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
     async fill(step: FillStep, resumePath: string) {
       const el = form.locator(byId(step.fieldName));
       if ((await el.count()) === 0) return false;
+      await pause(page, pace);
       if (step.kind === "resume") return attach(step.fieldName, resumePath);
       if (step.kind === "text") {
-        await el.fill(step.value);
+        await typeInto(el, step.value, pace);
         return sameText(await el.inputValue(), step.value);
       }
       if (step.kind === "location") return pickPlace(step.fieldName, step.value);

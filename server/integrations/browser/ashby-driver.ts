@@ -9,6 +9,7 @@ import type { Locator, Page } from "playwright-core";
 import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
+import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const CONFIRMED = /thank(s| you) for (applying|your (application|interest))|application (has been |was )?(successfully )?(received|submitted)/i;
@@ -17,8 +18,9 @@ const CONFIRMED = /thank(s| you) for (applying|your (application|interest))|appl
  * A FormDriver for one Ashby tab.
  *
  * @param formTimeoutMs - How long to wait for the form before calling the page formless.
+ * @param pace - How fast to type and move between fields (a person's pace unless a test says otherwise).
  */
-export function ashbyDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
+export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUMAN): FormDriver {
   const fields = page.locator("[data-field-path]");
   const box = (fieldName: string) => page.locator(`[data-field-path=${JSON.stringify(fieldName)}]`).first();
 
@@ -60,10 +62,8 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
    */
   async function pick(container: Locator, value: string): Promise<boolean> {
     const input = container.locator("[role=combobox]").first();
-    await input.click();
-    await input.fill("");
     // The search runs on keystrokes; pasting the whole value at once finds nothing.
-    await input.pressSequentially(value.split(",")[0].trim(), { delay: 40 });
+    await typeSearch(input, value.split(",")[0].trim(), pace);
     const options = page.locator("[role=listbox] [role=option]");
     await options.first().waitFor({ timeout: 5000 }).catch(() => undefined);
     const texts = await options.allTextContents();
@@ -109,6 +109,8 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
     async fill(step: FillStep, resumePath: string) {
       const container = box(step.fieldName);
       if ((await container.count()) === 0) return false;
+      await container.scrollIntoViewIfNeeded().catch(() => undefined);
+      await pause(page, pace);
       if (step.kind === "resume") return attach(container, resumePath);
       if (step.kind === "decline") return choose(container, (label) => DECLINE.test(label));
       if (step.kind === "check") return choose(container, () => true);
@@ -122,7 +124,7 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000): FormDriver {
       if ((await container.locator("[role=combobox]").count()) > 0) return pick(container, step.value);
       const input = container.locator("input:not([type=radio]):not([type=checkbox]):not([type=file]), textarea").first();
       if ((await input.count()) === 0) return false;
-      await input.fill(step.value);
+      await typeInto(input, step.value, pace);
       return sameText(await input.inputValue(), step.value);
     },
 

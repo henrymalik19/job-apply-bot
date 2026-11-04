@@ -8,6 +8,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import { ashbyDriver } from "./ashby-driver";
+import { INSTANT } from "./human";
 
 const FIXTURE = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "ashby-fixture.html")).href;
 const browser: Browser | null = await chromium.launch({ channel: "chrome", headless: true }).catch(() => null);
@@ -25,7 +26,7 @@ const step = (s: Partial<FillStep> & Pick<FillStep, "kind" | "fieldName">): Fill
 
 describe.skipIf(!browser)("ashbyDriver", () => {
   it("fills text, presses Yes/No, chooses radios and checkboxes, picks a place and attaches the resume", async () => {
-    const driver = ashbyDriver(page);
+    const driver = ashbyDriver(page, 15_000, INSTANT);
     expect(await driver.open(FIXTURE)).toBe("ok");
     const steps: FillStep[] = [
       step({ kind: "text", fieldName: "_systemfield_name", value: "Ada Lovelace" }),
@@ -54,7 +55,7 @@ describe.skipIf(!browser)("ashbyDriver", () => {
   }, 30_000);
 
   it("reports what isn't there instead of guessing", async () => {
-    const driver = ashbyDriver(page);
+    const driver = ashbyDriver(page, 15_000, INSTANT);
     await driver.open(FIXTURE);
     expect(await driver.fill(step({ kind: "select", fieldName: "q-pronouns", value: ["Xe/Xem"] }), resume)).toBe(false);
     expect(await driver.fill(step({ kind: "select", fieldName: "q-years", value: ["Maybe"] }), resume)).toBe(false);
@@ -65,7 +66,7 @@ describe.skipIf(!browser)("ashbyDriver", () => {
   }, 30_000);
 
   it("submits and reads the thank-you page", async () => {
-    const driver = ashbyDriver(page);
+    const driver = ashbyDriver(page, 15_000, INSTANT);
     await driver.open(`${FIXTURE}?submit`);
     expect(await driver.confirmation()).toBeNull();
     await driver.submit();

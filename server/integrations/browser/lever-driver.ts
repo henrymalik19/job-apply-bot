@@ -9,6 +9,7 @@ import type { Page } from "playwright-core";
 import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
+import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const byName = (name: string) => `[name=${JSON.stringify(name)}]`;
@@ -19,8 +20,9 @@ const CONFIRMED = /application (has been |was )?(successfully )?(received|submit
  *
  * @param formTimeoutMs - How long to wait for the form before calling the page formless.
  * @param analysisTimeoutMs - How long Lever may take to read an uploaded resume.
+ * @param pace - How fast to type and move between fields (a person's pace unless a test says otherwise).
  */
-export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutMs = 45_000): FormDriver {
+export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutMs = 45_000, pace: Pace = HUMAN): FormDriver {
   const form = page.locator("#application-form, form:has([name=email])").first();
 
   /**
@@ -52,10 +54,8 @@ export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutM
   /** Types a place and picks Lever's suggestion that starts with it ("Atlanta, GA" picks "Atlanta, GA, USA"). */
   async function pickPlaceOnce(value: string): Promise<boolean> {
     const input = form.locator(byName("location"));
-    await input.click();
-    await input.fill("");
     // The suggestions come from keystrokes, not a pasted value.
-    await input.pressSequentially(value.split(",")[0].trim(), { delay: 40 });
+    await typeSearch(input, value.split(",")[0].trim(), pace);
     const options = page.locator(".dropdown-location").filter({ visible: true });
     await options.first().waitFor({ timeout: 6000 }).catch(() => undefined);
     const texts = await options.allTextContents();
@@ -108,6 +108,8 @@ export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutM
     async fill(step: FillStep, resumePath: string) {
       if (step.kind === "resume") return attach(resumePath);
       if ((await form.locator(byName(step.fieldName)).count()) === 0) return false;
+      await form.locator(byName(step.fieldName)).first().scrollIntoViewIfNeeded().catch(() => undefined);
+      await pause(page, pace);
       if (step.kind === "decline") return choose(step.fieldName, (l) => DECLINE.test(l), false);
       if (step.kind === "check") return choose(step.fieldName, () => true, false);
       if (step.kind === "select") {
@@ -118,7 +120,7 @@ export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutM
       if (step.fieldName === "location") return pickPlace(step.value);
       const input = form.locator(`input${byName(step.fieldName)}, textarea${byName(step.fieldName)}`).first();
       if ((await input.count()) === 0) return false;
-      await input.fill(step.value);
+      await typeInto(input, step.value, pace);
       return sameText(await input.inputValue(), step.value);
     },
 

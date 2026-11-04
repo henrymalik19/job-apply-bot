@@ -8,6 +8,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import { leverDriver } from "./lever-driver";
+import { INSTANT } from "./human";
 
 const FIXTURE = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "lever-fixture.html")).href;
 const browser: Browser | null = await chromium.launch({ channel: "chrome", headless: true }).catch(() => null);
@@ -25,7 +26,7 @@ const step = (s: Partial<FillStep> & Pick<FillStep, "kind" | "fieldName">): Fill
 
 describe.skipIf(!browser)("leverDriver", () => {
   it("waits out the resume's autofill, then fills every field over it", async () => {
-    const driver = leverDriver(page);
+    const driver = leverDriver(page, 15_000, 45_000, INSTANT);
     expect(await driver.open(FIXTURE)).toBe("ok");
     const steps: FillStep[] = [
       step({ kind: "resume", fieldName: "resume" }),
@@ -55,7 +56,7 @@ describe.skipIf(!browser)("leverDriver", () => {
   }, 60_000);
 
   it("leaves a survey hidden for another region alone, and reports options that aren't there", async () => {
-    const driver = leverDriver(page);
+    const driver = leverDriver(page, 15_000, 45_000, INSTANT);
     await driver.open(FIXTURE);
     const survey = "surveysResponses[s1][responses][field0]";
     expect(await driver.has!(survey)).toBe(false);
@@ -67,7 +68,7 @@ describe.skipIf(!browser)("leverDriver", () => {
   }, 60_000);
 
   it("submits and reads the thank-you page", async () => {
-    const driver = leverDriver(page);
+    const driver = leverDriver(page, 15_000, 45_000, INSTANT);
     await driver.open(FIXTURE);
     expect(await driver.confirmation()).toBeNull();
     // The required fields, so the browser lets the form submit.
