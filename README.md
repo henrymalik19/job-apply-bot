@@ -93,8 +93,13 @@ person should do (CAPTCHAs, unanswered questions). It needs Google Chrome instal
 The first run asks for your app email and password and keeps only the refreshable session in
 `data/apply-session.json` (delete it to sign out). Chrome uses its own profile in `data/apply-chrome`,
 so sites you sign into there (Workday, say) stay signed in. On a supervised platform it fills the form,
-saves a screenshot, and waits up to 30 minutes for you to click Submit; Settings shows each platform's
-clean-submit streak and, once earned, lets it submit on its own.
+saves a screenshot, and waits up to 30 minutes for you to click Submit (an hour when a step is yours, like
+an assessment); Settings shows each platform's clean-submit streak and, once earned, lets it submit on its own.
+
+Each attempt is recorded in `data/apply-debug` (step log, screenshots, the form's HTML) and uploaded when it
+ends, so **Admin > Runs** shows it by person and job: a checklist of every field filled, couldn't fill or not on
+the form, and the screenshots in fixed slots. Ctrl+C (or the terminal closing) moves the application it had
+open to Runner stuck; restart it after pulling changes.
 
 ## Checks
 
@@ -108,6 +113,8 @@ pnpm test:db                                # RLS + transition tests against loc
 - **RLS on every table.** Policies allow only the user whose id is in the `owner` table
   (`is_owner()`). Anonymous users have no table grants at all.
 - **Workers** use the service role key server-side; it bypasses RLS and is never sent to the browser.
+- **Admin pages** (Users, a user's applications, Runs) read every user's rows the same way, through
+  `adminContext()` after the owner check, and only read. Every other page reads only your own rows.
 - **Status changes** go only through `transition_application()` (wrapped by `lib/transition.ts`).
   Allowed moves live in the `status_transitions` table. A trigger rejects raw `UPDATE`s of
   `applications.status`, and each change writes an `events` row with its cause.
