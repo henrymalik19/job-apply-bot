@@ -8,6 +8,7 @@ import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
+import { scanOpenFields } from "./open-fields";
 
 /** The element id of a form field: demographic questions use their bare number. */
 const domId = (fieldName: string) => fieldName.replace(/^demographic_(?=\d+$)/, "");
@@ -185,6 +186,21 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000, pace: Pace 
       // A field by its id or name, or a file upload's labelled group.
       const any = [byId(fieldName), `[name=${JSON.stringify(fieldName)}]`, `[aria-labelledby=${JSON.stringify(`upload-label-${fieldName}`)}]`].join(", ");
       return (await form.locator(any).count().catch(() => 0)) > 0;
+    },
+
+    async openFields(known) {
+      const open = await scanOpenFields(page, "#application-form", "id", known.map(domId));
+      // A react-select dropdown lists its options only while open: open it, read them, close it.
+      for (const f of open.filter((f) => f.kind === "combobox")) {
+        const input = page.locator(byId(f.key));
+        await input.click().catch(() => undefined);
+        const options = page.locator(`[id=${JSON.stringify(`react-select-${f.key}-listbox`)}] [role=option]`);
+        await options.first().waitFor({ timeout: 2000 }).catch(() => undefined);
+        f.options = (await options.allTextContents()).map((t) => t.trim()).filter(Boolean);
+        await input.press("Escape").catch(() => undefined);
+        if (f.options.length) f.kind = "select";
+      }
+      return open;
     },
 
     async values(steps) {

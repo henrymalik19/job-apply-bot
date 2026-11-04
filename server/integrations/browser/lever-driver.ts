@@ -10,6 +10,7 @@ import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
+import { scanOpenFields } from "./open-fields";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const byName = (name: string) => `[name=${JSON.stringify(name)}]`;
@@ -132,6 +133,10 @@ export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutM
         if ((await el.isVisible()) || (await el.locator("xpath=ancestor::label[1]").isVisible().catch(() => false))) return true;
       }
       return false;
+    },
+
+    async openFields(known) {
+      return scanOpenFields(page, "#application-form", "name", known);
     },
 
     async values(steps) {

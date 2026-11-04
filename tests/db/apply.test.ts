@@ -14,7 +14,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server/modules/applications/applications.service";
 import { listReadyToApply, setApplyStep } from "@/server/modules/apply/apply.repository";
-import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver } from "@/server/modules/apply/apply.service";
+import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver, type OpenField } from "@/server/modules/apply/apply.service";
+import type { FieldAnswer } from "@/server/modules/apply/field-mapping";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import { APPLY_RUNS_BUCKET, listApplyRuns, listRunFilters, saveApplyRun } from "@/server/modules/apply/apply-runs";
 import type {} from "./setup";
@@ -62,7 +63,7 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean; yo
  * A browser that fills everything and confirms on the second look, optionally with the user's
  * edits, a CAPTCHA, fields it can't fill, or nobody ever submitting.
  */
-function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean } = {}) {
+function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[] } = {}) {
   const filled: Record<string, string> = {};
   const submits: number[] = [];
   let looks = 0;
@@ -74,6 +75,8 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
       return true;
     },
     values: async () => ({ ...filled, ...opts.edits }),
+    // Required fields the plan didn't cover, until filled.
+    openFields: async (known: string[]) => (opts.open ?? []).filter((f) => !known.includes(f.key) && !(f.key in filled)),
     challenge: async () => opts.challenge ?? false,
     emailCode: async () => false,
     enterEmailCode: async () => true,
@@ -123,6 +126,7 @@ afterAll(async () => {
   await db.storage.from("resumes").remove(pdfPaths);
   await db.from("applications").delete().in("job_id", jobIds);
   await db.from("jobs").delete().in("id", jobIds);
+  await db.from("field_mappings").delete().eq("user_id", userId).eq("company", `apply${tag}`);
   await db.from("companies").delete().eq("id", companyId);
   await db.from("platforms").delete().eq("user_id", userId).eq("ats", "greenhouse");
   await cleanupUser();
@@ -271,6 +275,43 @@ describe("apply runner", () => {
     expect(run.shots.map((s) => s.name)).toEqual(["01-opened.png"]);
     const { data } = await db.from("apply_runs").select("folder").eq("application_id", id).single();
     await db.storage.from(APPLY_RUNS_BUCKET).remove([`${data!.folder}/run.log`, `${data!.folder}/01-opened.png`]);
+  });
+
+  it("fills a field it didn't prepare for by AI and waits for you even in auto mode, until it's learned", async () => {
+    const before = await streak();
+    await db.from("platforms").upsert({ user_id: userId, ats: "greenhouse", mode: "auto", clean_streak: 3 }, { onConflict: "user_id,ats" });
+    const open: OpenField[] = [{ key: "company-name-0", label: "Company name", kind: "text", options: [] }];
+    const asked: string[][] = [];
+    const mapFields = async (input: { fields: OpenField[] }): Promise<FieldAnswer[]> => {
+      asked.push(input.fields.map((f) => f.key));
+      return [{ key: "company-name-0", value: ["Acme"], category: "fact", reason: "current employer" }];
+    };
+    const runOnce = async (key: string) => {
+      const id = await addApproved(key);
+      const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+      const fake = fakeDriver({ open });
+      const outcome = await applyOne({ ...deps(fake.driver), mapFields }, job);
+      return { outcome, fake };
+    };
+    try {
+      // Twice by AI: filled, but held for you (no automatic submit), and kept as filled.
+      for (const key of ["ai1", "ai2"]) {
+        const { outcome, fake } = await runOnce(key);
+        expect(outcome).toMatchObject({ result: "submitted" });
+        expect(fake.filled["company-name-0"]).toBe("Acme");
+        expect(fake.submits).toEqual([]);
+      }
+      expect(asked).toEqual([["company-name-0"], ["company-name-0"]]);
+      const { data: mapping } = await db.from("field_mappings").select("confirmations, learned").eq("user_id", userId).eq("company", `apply${tag}`).single();
+      expect(mapping).toEqual({ confirmations: 2, learned: true });
+      // Learned: filled without asking Claude, and auto mode submits by itself.
+      const { fake } = await runOnce("ai3");
+      expect(asked).toHaveLength(2);
+      expect(fake.filled["company-name-0"]).toBe("Acme");
+      expect(fake.submits).toHaveLength(1);
+    } finally {
+      await db.from("platforms").update({ mode: "supervised", clean_streak: before?.clean_streak ?? 0 }).eq("user_id", userId).eq("ats", "greenhouse");
+    }
   });
 
   it("refuses auto mode until the streak is earned", async () => {

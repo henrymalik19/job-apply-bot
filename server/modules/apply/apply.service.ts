@@ -17,9 +17,19 @@ import {
   type Platform,
 } from "./apply.repository";
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
+import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
 
 /** ATSs the runner can fill (by field name). */
 export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
+
+/** A required field left empty after the prepared answers: what it asks and how it's answered. */
+export type OpenField = {
+  key: string;
+  label: string;
+  /** "agreement" is a lone checkbox (always yours); "combobox" a type-and-pick box. */
+  kind: "text" | "textarea" | "select" | "multiselect" | "combobox" | "agreement";
+  options: string[];
+};
 
 /** What the runner needs from a browser tab with an application form open. */
 export interface FormDriver {
@@ -31,6 +41,11 @@ export interface FormDriver {
   values(steps: FillStep[]): Promise<Record<string, string>>;
   /** Whether the form has this field at all (for the run log: "not on this form" vs couldn't fill). */
   has?(fieldName: string): Promise<boolean>;
+  /**
+   * The visible required fields still empty, other than `known` (the fields the runner filled):
+   * sections it didn't prepare for. Each key is what `fill` takes as a field name.
+   */
+  openFields?(known: string[]): Promise<OpenField[]>;
   /** A CAPTCHA or bot check is showing and needs a person. */
   challenge(): Promise<boolean>;
   /** The form asks for a code it emailed to the applicant before it accepts the submit. */
@@ -65,6 +80,11 @@ export type ApplyDeps = {
    * Null when none arrives in time; without it you type the code yourself.
    */
   readEmailCode?: (since: Date, company: string) => Promise<string | null>;
+  /**
+   * Answers required fields the form still has empty, from your profile (Claude, on the server).
+   * Without it they're left to you.
+   */
+  mapFields?: (input: { company: string; title: string; fields: OpenField[] }) => Promise<FieldAnswer[]>;
   /** How long to wait for the user to submit (default 30 minutes). */
   waitMs?: number;
   /** How often to look at the page while waiting (default 2 seconds). */
@@ -182,6 +202,65 @@ export async function applyOne(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOut
   }
 }
 
+/** A field filled outside the prepared answers: the step as filled, and the form's own label. */
+type ExtraFill = { step: FillStep; label: string; value: string[] };
+
+/** A filled value as a step for the driver: text, a choice, or a search to pick from. */
+function stepFor(field: OpenField, value: string[], label: string): FillStep {
+  const base = { fieldName: field.key, label, required: true };
+  if (field.kind === "select" || field.kind === "multiselect") return { kind: "select", ...base, value };
+  if (field.kind === "combobox") return { kind: "closest", ...base, value: value[0] };
+  return { kind: "text", ...base, value: value[0] };
+}
+
+/**
+ * Fills the required fields a form still has empty after the prepared answers: from what was learned
+ * for this company, else from your profile by Claude. Writing, agreements and anything Claude isn't
+ * sure of are left to you.
+ *
+ * @returns What was filled by AI (held for you to check), from learned mappings, and left to you.
+ */
+async function fillOpenFields(deps: ApplyDeps, app: ApplyJob, filled: FillStep[], resumePath: string) {
+  const out = { ai: [] as ExtraFill[], learned: [] as ExtraFill[], left: [] as string[], mappings: new Map<string, FieldMapping>(), company: app.job.board_token ?? app.job.company_name };
+  if (!deps.driver.openFields) return out;
+  const open = await deps.driver.openFields(filled.map((s) => s.fieldName)).catch(() => []);
+  if (open.length === 0) return out;
+  out.mappings = await listFieldMappings(deps.db, deps.userId, app.job.source, out.company);
+
+  const ask: OpenField[] = [];
+  for (const field of open) {
+    const learned = out.mappings.get(field.key);
+    if (!learned?.learned || field.kind === "agreement") {
+      ask.push(field);
+      continue;
+    }
+    const step = stepFor(field, learned.value, field.label);
+    if (await deps.driver.fill(step, resumePath)) out.learned.push({ step, label: field.label, value: learned.value });
+    else out.left.push(field.label);
+  }
+
+  const answers = ask.length && deps.mapFields
+    ? await deps.mapFields({ company: app.job.company_name, title: app.job.title, fields: ask }).catch((err) => {
+        deps.log(`${app.id}: couldn't ask Claude about the open fields: ${(err as Error).message}`);
+        return [] as FieldAnswer[];
+      })
+    : [];
+  for (const field of ask) {
+    const answer = answers.find((a) => a.key === field.key);
+    if (!answer?.value) {
+      out.left.push(field.label);
+      continue;
+    }
+    // Marked in the run log, so the checklist shows what Claude filled.
+    const step = stepFor(field, answer.value, `${field.label} (filled by AI)`);
+    if (await deps.driver.fill(step, resumePath)) {
+      out.ai.push({ step, label: field.label, value: answer.value });
+      deps.log(`${app.id}: filled "${field.label}" by AI with ${answer.value.join(", ")} (${answer.reason})`);
+    } else out.left.push(field.label);
+  }
+  return out;
+}
+
 async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const { db, userId, driver, log } = deps;
   const where = `${app.job.title} at ${app.job.company_name}`;
@@ -223,30 +302,48 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   if (missed.length) {
     return fail(`Couldn't fill ${missed.map((m) => `"${m}"`).join(", ")}. Finish it in the open Chrome window, or from the job page.`);
   }
+  // Required fields still empty (a section it didn't prepare for): learned, filled by AI, or left to you.
+  const extra = await fillOpenFields(deps, app, steps, resumePath);
+  const list = (labels: string[]) => labels.map((m) => `"${m}"`).join(", ");
+  const byAi = extra.ai.length ? ` Filled by AI from your profile, check them: ${list(extra.ai.map((e) => e.label))}.` : "";
+  const leftForYou = extra.left.length ? ` Left for you: ${list(extra.left)}.` : "";
+  // New AI answers and fields left to you always wait for you, even in auto mode; learned ones don't.
+  const hold = extra.ai.length > 0 || extra.left.length > 0;
   if (await driver.challenge()) return fail("The form shows a verification check. Finish it in the open Chrome window.");
 
-  const answers = steps.map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.kind === "decline" ? "declined" : s.value }));
+  const answers = [...steps, ...extra.learned.map((e) => e.step), ...extra.ai.map((e) => e.step)].map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.kind === "decline" ? "declined" : s.value }));
   await addEvidence(db, {
     userId,
     applicationId: app.id,
     kind: "screenshot",
     png: await driver.screenshot(),
-    detail: { answers, skipped, resume_sha256: app.resume.sha256 } as Json,
+    detail: { answers, skipped, ai_filled: extra.ai.map((e) => ({ label: e.label, value: e.value })), left_for_you: extra.left, resume_sha256: app.resume.sha256 } as Json,
   });
 
-  if (platform.mode === "auto" && !yours) {
+  if (platform.mode === "auto" && !yours && !hold) {
     await setApplyStep(db, app.id, "submitting", `Submitting the form for ${where}.`);
     await driver.submit();
   } else {
-    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${except} ${yours ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
+    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${byAi}${leftForYou}${except} ${yours || extra.left.length ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
     await driver.focus();
   }
 
-  const waited = await waitForConfirmation(deps, plan.steps, app, platform, yours ? YOUR_STEPS_WAIT_MS : undefined);
+  const extraSteps = [...extra.learned, ...extra.ai].map((e) => e.step);
+  const waited = await waitForConfirmation(deps, [...plan.steps, ...extraSteps], app, platform, yours || extra.left.length ? YOUR_STEPS_WAIT_MS : undefined);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
   if ("timedOut" in waited) return { ...(await fail(`Nobody submitted the form within ${yours ? "an hour" : "30 minutes"}.`)), closeTab: true };
 
   const changed = platform.mode === "auto" ? [] : changedFields(plan.steps, waited.last);
+  // What it learns: an AI or learned value you left as it was counts toward keeping it; one you changed is kept as you wrote it.
+  for (const e of [...extra.learned, ...extra.ai]) {
+    await recordFieldOutcome(
+      db,
+      userId,
+      { ats: app.job.source, company: extra.company },
+      { fieldName: e.step.fieldName, label: e.label, filled: e.value, final: waited.last[e.step.fieldName] },
+      extra.mappings.get(e.step.fieldName),
+    ).catch((err) => log(`${app.id}: couldn't record what was learned for "${e.label}": ${(err as Error).message}`));
+  }
   await addEvidence(db, {
     userId,
     applicationId: app.id,

@@ -25,7 +25,7 @@ import { codeInbox } from "@/server/integrations/email/code-inbox";
 import { listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { greenhouseExtras, type HomePlace, type Schooling, type WorkRole } from "@/server/modules/apply/fill-plan";
 import { usStateName } from "@/server/modules/criteria/places";
-import { APPLY_ATS, applyOne, handBackUnfinished } from "@/server/modules/apply/apply.service";
+import { APPLY_ATS, applyOne, handBackUnfinished, type ApplyDeps } from "@/server/modules/apply/apply.service";
 import { saveApplyRun, type RunFile } from "@/server/modules/apply/apply-runs";
 import { parseApplyEnv } from "@/shared/env";
 
@@ -138,6 +138,19 @@ async function main() {
   });
   const userId = await signIn(db);
   const { name, home, school, role } = await profileBasics(db, userId);
+  // Required fields a form still has empty: the web app answers them from your profile with Claude.
+  const mapFields: NonNullable<ApplyDeps["mapFields"]> = async (input) => {
+    const token = (await db.auth.getSession()).data.session?.access_token;
+    if (!token) throw new Error("not signed in");
+    const res = await fetch(new URL("/api/runner/map-fields", env.APPLY_APP_URL), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) throw new Error(`the app answered ${res.status}`);
+    return ((await res.json()) as { answers: Awaited<ReturnType<NonNullable<ApplyDeps["mapFields"]>>> }).answers;
+  };
   const uploadRun = (dir: string, app: { id: string; job: { title: string; company_name: string } }, startedAt: Date, outcome: string) =>
     uploadRunWith(db, { userId, userName: name }, dir, app, startedAt, outcome);
   const stale = await handBackUnfinished(db, userId);
@@ -217,7 +230,7 @@ async function main() {
         let outcome = "error";
         let closeTab = false;
         try {
-          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, saveResume, fullName: name, log: both }, app);
+          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, mapFields, saveResume, fullName: name, log: both }, app);
           outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
           // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
           // ones stay open for you, except a form nobody submitted in time, reopened from the app.

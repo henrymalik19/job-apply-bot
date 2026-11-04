@@ -10,6 +10,7 @@ import type { FormDriver } from "@/server/modules/apply/apply.service";
 import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
+import { scanOpenFields } from "./open-fields";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const CONFIRMED = /thank(s| you) for (applying|your (application|interest))|application (has been |was )?(successfully )?(received|submitted)/i;
@@ -130,6 +131,10 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
 
     async has(fieldName) {
       return (await box(fieldName).count().catch(() => 0)) > 0;
+    },
+
+    async openFields(known) {
+      return scanOpenFields(page, "body", "path", known);
     },
 
     async values(steps) {

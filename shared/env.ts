@@ -24,6 +24,8 @@ const applySchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_ANON_KEY: t
   APPLY_IMAP_HOST: z.preprocess(blank, z.string().min(1).default("imap.purelymail.com")),
   APPLY_IMAP_PORT: z.preprocess(blank, z.coerce.number().int().positive().default(993)),
   APPLY_IMAP_USER: z.preprocess(blank, z.string().min(1).optional()),
+  // The web app, which answers required fields the runner finds empty (Claude runs there, not here).
+  APPLY_APP_URL: z.preprocess(blank, z.string().url().default("https://jobrx.ai")),
 });
 
 /** Environment the local apply runner needs. */

@@ -325,6 +325,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"field_mappings": {
+                  Row: {
+                    "ats": string,"company": string,"confirmations": number,"created_at": string,"field_name": string,"id": string,"label": string,"learned": boolean,"source": string,"updated_at": string,"user_id": string,"value": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ats": string,"company": string,"confirmations"?: number,"created_at"?: string,"field_name": string,"id"?: string,"label": string,"learned"?: boolean,"source": string,"updated_at"?: string,"user_id": string,"value": NonNullable<Json>
+                  }
+                  Update: {
+                    "ats"?: string,"company"?: string,"confirmations"?: number,"created_at"?: string,"field_name"?: string,"id"?: string,"label"?: string,"learned"?: boolean,"source"?: string,"updated_at"?: string,"user_id"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "field_mappings_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"jobs": {
                   Row: {
                     "apply_url": string | null,"closed_at": string | null,"company_id": string | null,"company_name": string,"created_at": string,"dedup_key": string,"description_md": string | null,"external_id": string | null,"first_seen_at": string,"id": string,"last_seen_at": string,"location": string | null,"posted_at": string | null,"raw": Json | null,"remote_type": string | null,"salary_currency": string | null,"salary_max": number | null,"salary_min": number | null,"source": string,"title": string,"updated_at": string,"url": string
