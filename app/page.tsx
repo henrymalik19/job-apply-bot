@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo } from "@/components/brand/logo";
 import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Job Search Autopilot",
+  title: "Jobrx",
   description: "Finds the jobs that fit you, prepares each application, and fills the forms for you.",
 };
 
@@ -18,7 +19,7 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center gap-10 px-4 py-16">
       <div className="flex flex-col gap-4">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Job Search Autopilot</h1>
+        <h1 className="text-3xl sm:text-4xl"><Logo className="gap-3 [&>span:first-child]:size-10 [&>span:first-child]:text-base" /></h1>
         <p className="max-w-xl text-lg text-muted-foreground">
           Finds the jobs that fit you, prepares each application, and fills the forms for you. You approve what goes out.
         </p>

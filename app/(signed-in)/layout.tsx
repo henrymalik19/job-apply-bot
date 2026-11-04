@@ -3,12 +3,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { requireOwner } from "@/server/auth/require-owner";
+import { Logo } from "@/components/brand/logo";
 import { signOut } from "../login/actions";
 import { MobileMenu } from "./_components/mobile-menu";
 import { NavLinks, NavList } from "./_components/nav-links";
 
 export const metadata: Metadata = {
-  title: "Job Search Autopilot",
+  title: "Jobrx",
   robots: { index: false, follow: false },
 };
 
@@ -27,7 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex min-h-full flex-col md:flex-row">
       <aside className="relative flex items-center justify-between gap-4 border-b px-4 py-3 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:border-r md:border-b-0 md:px-3 md:py-5">
-        <Link href="/app" className="truncate font-semibold tracking-tight md:px-3">Job Search Autopilot</Link>
+        <Link href="/app" className="md:px-3" aria-label="Jobrx home"><Logo /></Link>
         {/* Phones: a Menu button with every page and the account. */}
         <Suspense fallback={null}>
           <MobileMenu>

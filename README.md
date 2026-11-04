@@ -1,4 +1,6 @@
-# Job Search Autopilot
+# Jobrx
+
+_Formerly Job Search Autopilot; live at https://jobrx.ai. The repo and package keep the old name._
 
 Private, self-hosted job search pipeline: discover → score → prepare → approve → track.
 Every application needs your approval in the admin UI, and every status change is logged.

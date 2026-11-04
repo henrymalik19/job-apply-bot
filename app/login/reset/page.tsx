@@ -5,7 +5,7 @@ import { requireOwner } from "@/server/auth/require-owner";
 import { ResetForm } from "./reset-form";
 
 export const metadata: Metadata = {
-  title: "New password · Job Search Autopilot",
+  title: "New password · Jobrx",
   robots: { index: false, follow: false },
 };
 

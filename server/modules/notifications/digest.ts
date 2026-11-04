@@ -84,7 +84,7 @@ function details(item: NotifyItem): string[] {
 export function buildDigest(items: NotifyItem[], appUrl: string): { subject: string; text: string; html: string } {
   const base = appUrl.replace(/\/$/, "");
   const groups = SECTIONS.map((s) => ({ ...s, items: items.filter((i) => i.status === s.status) })).filter((g) => g.items.length > 0);
-  const subject = `[Autopilot] ${groups.map((g) => g.count(g.items.length)).join(", ")}`;
+  const subject = `[Jobrx] ${groups.map((g) => g.count(g.items.length)).join(", ")}`;
 
   const text = groups
     .map((g) => [

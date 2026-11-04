@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Search Autopilot",
+  title: "Jobrx",
   description: "Private job search tracker",
   robots: { index: false, follow: false },
 };

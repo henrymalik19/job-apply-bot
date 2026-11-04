@@ -110,7 +110,7 @@ export async function runNotify(deps: NotifyDeps): Promise<{ counts: Record<stri
 
     const digest = buildDigest(items, appUrl);
     const send = createSender({ host: inbox.smtp_host, port: inbox.smtp_port, user: inbox.address, password: deps.password });
-    await send({ from: settings.from ?? `Job Search Autopilot <${inbox.address}>`, to: settings.to ?? inbox.address, ...digest, headers: { [NOTIFY_HEADER]: "notify" } });
+    await send({ from: settings.from ?? `Jobrx <${inbox.address}>`, to: settings.to ?? inbox.address, ...digest, headers: { [NOTIFY_HEADER]: "notify" } });
     await markNotified(db, items);
     counts.sent = 1;
     counts.applications = items.length;

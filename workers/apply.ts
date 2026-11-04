@@ -77,7 +77,7 @@ async function askLogin(): Promise<{ email: string; password: string }> {
 async function signIn(db: Db): Promise<string> {
   const { data } = await db.auth.getUser();
   if (data.user) return data.user.id;
-  console.log("Sign in to Job Search Autopilot (asked once; only the session is saved).");
+  console.log("Sign in to Jobrx (asked once; only the session is saved).");
   const { email, password } = await askLogin();
   const res = await db.auth.signInWithPassword({ email, password });
   if (res.error || !res.data.user) throw new Error(`sign in failed: ${res.error?.message ?? "no user"}`);
