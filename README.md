@@ -119,7 +119,7 @@ pnpm test:db                                # RLS + transition tests against loc
   Allowed moves live in the `status_transitions` table. A trigger rejects raw `UPDATE`s of
   `applications.status`, and each change writes an `events` row with its cause.
 - **`public_status`** view exposes title, company, URL, status and dates only. It is not granted to
-  `anon`/`authenticated`; the public page (M3) reads it server-side when `public_page_enabled` is true.
+  `anon`/`authenticated`; each user's public page (`/u/<handle>`, handle picked in Settings) reads it server-side when their `public_page_enabled` is true; `/` is a plain home page.
 
 ## Deploying (when ready)
 

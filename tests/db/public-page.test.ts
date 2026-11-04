@@ -1,10 +1,10 @@
-// M3 acceptance: the public page reads only public_status fields, hides
-// pre-submission applications, and is off (null → 404) unless enabled.
+// The public page (/u/<handle>) reads only public_status fields, hides pre-submission
+// applications, is off (null → 404) unless enabled, and belongs to one handle.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { transition } from "@/server/modules/applications/applications.service";
-import { getPublicPage, PUBLIC_PAGE_KEY } from "@/server/modules/public-page/public-page.service";
+import { getPublicPage, isPublicPageLive, PUBLIC_HANDLE_KEY, PUBLIC_PAGE_KEY, setPublicHandle } from "@/server/modules/public-page/public-page.service";
 import type { Db } from "@/server/db/types";
 import type {} from "./setup";
 import { setUserSettings, testUser } from "./users";
@@ -36,7 +36,7 @@ async function application(title: string) {
 beforeAll(async () => {
   // The public page shows the owner's applications.
   ({ id: userId, cleanup: cleanupUser } = await testUser(service));
-  restoreSettings = await setUserSettings(service, userId, { [PUBLIC_PAGE_KEY]: false });
+  restoreSettings = await setUserSettings(service, userId, { [PUBLIC_PAGE_KEY]: false, [PUBLIC_HANDLE_KEY]: `pub-${tag}` });
   const sent = await application("Sent Role");
   await transition(service, sent, "approved", "user:approve");
   await transition(service, sent, "submitted", "user:submit");
@@ -53,12 +53,15 @@ afterAll(async () => {
 describe("public page", () => {
   it("is off (null → 404) when the setting is false", async () => {
     await setPublic(false);
-    expect(await getPublicPage(service, new Date())).toBeNull();
+    expect(await getPublicPage(service, `pub-${tag}`, new Date())).toBeNull();
+    expect(await isPublicPageLive(service, `pub-${tag}`)).toBe(false);
   });
 
   it("shows submitted applications with only public fields, and hides queued ones", async () => {
     await setPublic(true);
-    const page = await getPublicPage(service, new Date());
+    expect(await isPublicPageLive(service, `pub-${tag}`)).toBe(true);
+    expect(await getPublicPage(service, "nobody-has-this", new Date())).toBeNull();
+    const page = await getPublicPage(service, `pub-${tag}`, new Date());
     expect(page).not.toBeNull();
     const mine = page!.applications.filter((a) => a.company_name === `PubCo ${tag}`);
     expect(mine.map((a) => a.job_title)).toEqual(["Sent Role"]);
@@ -69,5 +72,17 @@ describe("public page", () => {
     expect(page!.counts.find((c) => c.label === "Applications sent")!.value).toBeGreaterThanOrEqual(1);
     expect(page!.sentPerDay).toHaveLength(30);
     expect(page!.sentPerDay.at(-1)!.count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("takes a valid handle once: another user can't have it", async () => {
+    await expect(setPublicHandle(service, userId, "x")).rejects.toThrow(/3 to 30/);
+    const other = randomUUID();
+    await service.from("users").insert({ id: other, role: "member" });
+    try {
+      await expect(setPublicHandle(service, other, `PUB-${tag}`)).rejects.toThrow(/taken/);
+      expect(await setPublicHandle(service, other, `other-${tag}`)).toBe(`other-${tag}`);
+    } finally {
+      await service.from("users").delete().eq("id", other);
+    }
   });
 });

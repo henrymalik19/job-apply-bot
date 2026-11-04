@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { createServiceClient } from "@/server/db/service-client";
 import { getPublicPage } from "@/server/modules/public-page/public-page.service";
 import { serverEnv } from "@/shared/env";
-import { OverviewSkeleton } from "./(signed-in)/_components/skeletons";
+import { OverviewSkeleton } from "../../(signed-in)/_components/skeletons";
 
 export const metadata: Metadata = {
   title: "Job search status",
@@ -26,15 +26,19 @@ const STATUS_LABEL: Record<string, string> = {
 const shortDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "—";
 
-async function PublicStatus() {
+type Params = Promise<{ handle: string }>;
+
+async function PublicStatus({ params }: { params: Params }) {
   await connection();
+  const { handle } = await params;
   const now = new Date();
-  const page = await getPublicPage(createServiceClient(serverEnv()), now);
+  const page = await getPublicPage(createServiceClient(serverEnv()), decodeURIComponent(handle), now);
   if (!page) notFound();
   const max = Math.max(1, ...page.sentPerDay.map((d) => d.count));
 
   return (
     <>
+      <h1 className="text-2xl font-semibold tracking-tight">{page.name ? `${page.name}'s job search` : "Job search status"}</h1>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {page.counts.map((c) => (
           <Card key={c.label} size="sm">
@@ -101,16 +105,15 @@ async function PublicStatus() {
 }
 
 /**
- * Public status page: headline counts, sends per day and the list of sent
- * applications. Off by default (404) until switched on in Settings; reads only
- * the public_applications view, server-side.
+ * One user's public status page (/u/<handle>): headline counts, sends per day and the
+ * list of sent applications. Off by default (404) until they switch it on and pick a
+ * handle in Settings; reads only the public_applications view, server-side.
  */
-export default function Home() {
+export default function PublicStatusPage({ params }: { params: Params }) {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Job search status</h1>
       <Suspense fallback={<OverviewSkeleton />}>
-        <PublicStatus />
+        <PublicStatus params={params} />
       </Suspense>
     </main>
   );

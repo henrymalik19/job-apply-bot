@@ -2,16 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isOwnerId } from "@/server/auth/owner";
 import { createServiceClient } from "@/server/db/service-client";
-import { isOwnerPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
+import { isPublicPageLive } from "@/server/modules/public-page/public-page.service";
 import { serverEnv } from "@/shared/env";
 
 /**
- * The public status page (/) answers a real 404 while it is switched off. The
- * page itself also checks, but it streams, so by the time it could call
- * notFound() a 200 status would already be sent.
+ * A public status page (/u/<handle>) answers a real 404 while it is switched off or
+ * the handle is nobody's. The page itself also checks, but it streams, so by the time
+ * it could call notFound() a 200 status would already be sent.
  */
-async function publicPage(): Promise<NextResponse> {
-  const enabled = await isOwnerPublicPageEnabled(createServiceClient(serverEnv()));
+async function publicPage(handle: string): Promise<NextResponse> {
+  const enabled = await isPublicPageLive(createServiceClient(serverEnv()), decodeURIComponent(handle));
   const response = enabled ? NextResponse.next() : new NextResponse("Not found", { status: 404 });
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
@@ -23,7 +23,9 @@ async function publicPage(): Promise<NextResponse> {
  */
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  if (path === "/") return publicPage();
+  if (path === "/") return NextResponse.next();
+  const handle = /^\/u\/([^/]+)\/?$/.exec(path)?.[1];
+  if (handle) return publicPage(handle);
 
   const env = serverEnv();
   let response = NextResponse.next({ request });
@@ -59,5 +61,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // The public page, the signed-in areas, and /login (to refresh the session).
-  matcher: ["/", "/app/:path*", "/admin/:path*", "/login", "/api/app/:path*", "/api/admin/:path*"],
+  matcher: ["/", "/u/:handle", "/app/:path*", "/admin/:path*", "/login", "/api/app/:path*", "/api/admin/:path*"],
 };

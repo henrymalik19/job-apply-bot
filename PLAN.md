@@ -14,7 +14,7 @@ Do not start the next milestone until the current one is deployed and verified.*
 | M1 Foundation | **Done.** Deployed 2026-10-29 (Vercel + hosted Supabase); acceptance checks passed live. |
 | M2 Discovery | **Done.** Deployed 2026-10-29; Railway cron runs verified live (298 boards, ~3,000 matching jobs). |
 | M2.5 Structure | **Done.** Domain modules + repositories, generated DB types, TSDoc enforced by ESLint, shadcn/ui pages. |
-| M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page at / (off → 404). |
+| M3 Dashboard + public page | **Done.** /app (Overview, Jobs, Search, Companies, Settings), /admin (Health), public page per user at /u/<handle> (off → 404; `/` is a home page since 2026-11-04). |
 | M4 Matching | **Done.** Live 2026-10-29: 274 jobs → 14 ruled out, 260 scored (76 at 75+), 0 failed, $0.11. |
 | M6 Email tracking | **Built 2026-11-03.** track_email runs before the digest on the notify service: rules then Claude Haiku sort the job inbox, matched replies move applications, matched rejections move to the "Rejections (Autopilot)" folder, Unmatched emails on To do, "No confirmation yet" on the board after 24h. |
 | Admin + runner logs | **Built 2026-11-04.** Each apply run is uploaded (apply_runs + the apply-runs bucket) and shown on Admin > Runs by person and job, as a checklist with screenshot slots. Admin > Users shows everyone's profile and applications, read only. Emails show on each application; unsorted employer mail is on To do. |
@@ -469,7 +469,7 @@ queries. Workers loop over every user.
 
 ## 5. Web app
 
-### Public (`/`) — only if `public_page_enabled`
+### Public (`/u/<handle>`): only if that user's `public_page_enabled`
 Modeled on a simple status board: headline counts (scanned, sent, responded, interviewing, offer, rejected),
 "sent per day" bar chart, and a table of applications (role, company, sent date, latest status).
 Reads only `public_status`. `noindex, nofollow`.
