@@ -15,7 +15,8 @@ const BUCKET_LABEL: Record<string, { label: string; variant: "default" | "second
 /** Where an answer came from, in a few words. */
 function sourceLabel(q: ApplicationQuestion): string | null {
   switch (q.answer_source) {
-    case "profile": return "from your profile";
+    // Claude picked the form's option from your profile answer (the reason says which and why).
+    case "profile": return q.reason?.startsWith("picked by AI") ? q.reason : "from your profile";
     case "criteria": return "from your search criteria";
     case "skill_years": return "from your job dates";
     case "answer": return "saved answer";

@@ -39,8 +39,10 @@ import {
 import {
   buildClassifyPrompt,
   buildDraftPrompt,
+  buildPickPrompt,
   classifyOutputSchema,
   draftOutputSchema,
+  pickOutputSchema,
   type ClassifiedQuestion,
   type PromptPosting,
   type PromptQuestion,
@@ -179,6 +181,13 @@ const WHERE: Record<string, string> = {
   answer: "no saved answer for",
 };
 
+/** Rows whose known answer didn't match the form's options, with that answer: Claude may pick the option. */
+const misfits = new WeakMap<Draft, { label: string; value: AnswerValue }>();
+
+/** A known answer as text for the pick prompt. */
+const valueText = (v: AnswerValue): string =>
+  typeof v === "boolean" ? (v ? "Yes" : "No") : typeof v === "object" ? `${v.min} to ${v.max}` : String(v);
+
 /** Fills a row from a catalog question: auto when its value fits the form, otherwise Needs you. */
 function answerFromQuestion(row: Draft, q: FormQuestion, question: Question, ctx: RunContext, mapping: Mapping): Partial<Draft> | "draft" {
   const linked = { question_id: question.id };
@@ -187,7 +196,10 @@ function answerFromQuestion(row: Draft, q: FormQuestion, question: Question, ctx
   const value = questionValue(question, mapping, ctx);
   if (value == null) return { ...linked, bucket: "needs_user", reason: `${WHERE[question.answer_source]} "${question.label}"` };
   const shaped = shapeAnswer(q, value, mapping.inverted);
-  if (!shaped) return { ...linked, bucket: "needs_user", reason: `your answer for "${question.label}" doesn't fit this question's options` };
+  if (!shaped) {
+    if (q.options.length > 0 && !mapping.inverted) misfits.set(row, { label: question.label, value });
+    return { ...linked, bucket: "needs_user", reason: `your answer for "${question.label}" doesn't fit this question's options` };
+  }
   return {
     ...linked,
     bucket: "auto",
@@ -253,6 +265,7 @@ export async function prepareJob(
   };
 
   const rows: Draft[] = [];
+  const pairs: { row: Draft; q: FormQuestion }[] = [];
   const unknown: { row: Draft; q: FormQuestion }[] = [];
   const toDraft: { row: Draft; q: FormQuestion }[] = [];
   const fill = (row: Draft, q: FormQuestion, filled: Partial<Draft> | "draft") => {
@@ -265,6 +278,7 @@ export async function prepareJob(
     if (q.fieldType === "hidden") continue;
     const row = baseRow(q, index);
     rows.push(row);
+    pairs.push({ row, q });
     const restriction = findAiRestriction(`${q.label}\n${q.description ?? ""}`);
     if (restriction) flags.push({ kind: "ai_restriction", excerpt: restriction, where: q.fieldName });
 
@@ -332,6 +346,34 @@ export async function prepareJob(
       Object.assign(row, answer
         ? { bucket: "drafted", answer, answer_value: asJson(answer), answer_source: "drafted", needs_check: true }
         : { bucket: "needs_user", reason: "drafting failed" });
+    }
+  }
+
+  // Known answers the rules couldn't match to an option ("Atlanta, GA" for a list of countries): Claude picks
+  // the option they mean, or leaves it to you. Its picks are marked to double-check.
+  const toPick = pairs.filter(({ row }) => row.bucket === "needs_user" && misfits.has(row));
+  if (toPick.length > 0) {
+    const prompt = buildPickPrompt({
+      facts: ctx.facts,
+      questions: toPick.map(({ row, q }) => {
+        const known = misfits.get(row)!;
+        return { index: row._index, label: q.label, options: q.options.map((o) => o.label), known: `${known.label}: ${valueText(known.value)}` };
+      }),
+    });
+    const out = await callWithRetry(deps, deps.call, "pick_option", job.id, { ...prompt, schema: pickOutputSchema, maxTokens: 1500 }, ctx.spend);
+    const byIndex = new Map((out?.picks ?? []).map((p) => [p.index, p]));
+    for (const { row, q } of toPick) {
+      const pick = byIndex.get(row._index);
+      const option = pick?.option == null ? undefined : q.options.find((o) => o.label === pick.option);
+      if (!option) continue;
+      Object.assign(row, {
+        bucket: "auto",
+        answer: option.label,
+        answer_value: asJson(q.fieldType === "multiselect" ? [option.value] : option.value),
+        answer_source: "profile",
+        needs_check: true,
+        reason: `picked by AI from your ${misfits.get(row)!.label.toLowerCase()}: ${pick!.reason}`.slice(0, 500),
+      });
     }
   }
 
