@@ -29,6 +29,8 @@ export interface FormDriver {
   fill(step: FillStep, resumePath: string): Promise<boolean>;
   /** Each step's current value as shown on the page, by field name (unreadable fields left out). */
   values(steps: FillStep[]): Promise<Record<string, string>>;
+  /** Whether the form has this field at all (for the run log: "not on this form" vs couldn't fill). */
+  has?(fieldName: string): Promise<boolean>;
   /** A CAPTCHA or bot check is showing and needs a person. */
   challenge(): Promise<boolean>;
   /** The form asks for a code it emailed to the applicant before it accepts the submit. */

@@ -76,6 +76,15 @@ describe.skipIf(!browser)("greenhouseDriver", () => {
     expect(await driver.fill({ kind: "closest", fieldName: "school--0", label: "School", required: false, value: "Stanford University" }, resume)).toBe(false);
   }, 30_000);
 
+  it("tells a field the form has from one it doesn't", async () => {
+    const driver = greenhouseDriver(page);
+    await driver.open(FIXTURE);
+    expect(await driver.has!("first_name")).toBe(true);
+    expect(await driver.has!("resume")).toBe(true);
+    expect(await driver.has!("gdpr_demographic_data_consent_given")).toBe(true);
+    expect(await driver.has!("race")).toBe(false);
+  });
+
   it("reports an option that isn't on the form", async () => {
     const driver = greenhouseDriver(page);
     await driver.open(FIXTURE);

@@ -161,6 +161,12 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000): FormDriver
       return true;
     },
 
+    async has(fieldName) {
+      // A field by its id or name, or a file upload's labelled group.
+      const any = [byId(fieldName), `[name=${JSON.stringify(fieldName)}]`, `[aria-labelledby=${JSON.stringify(`upload-label-${fieldName}`)}]`].join(", ");
+      return (await form.locator(any).count().catch(() => 0)) > 0;
+    },
+
     async values(steps) {
       const fields = steps.filter((s) => s.kind !== "resume" && s.kind !== "check" && s.kind !== "decline").map((s) => ({ name: s.fieldName, id: domId(s.fieldName), select: s.kind !== "text" }));
       return page.evaluate((list) => {

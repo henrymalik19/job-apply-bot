@@ -65,7 +65,9 @@ export async function recordRun(root: string, appId: string, page: Page, driver:
         await write(`fill ${step.fieldName} (${step.kind}) "${step.label}" = ${shown} -> threw: ${(err as Error).message.split("\n")[0]}`);
         throw err;
       }
-      await write(`fill ${step.fieldName} (${step.kind}) "${step.label}" = ${shown} -> ${ok ? "ok" : "NOT FILLED"}`);
+      // A field the form doesn't have isn't a failure: most forms lack some of the extras.
+      const absent = !ok && driver.has ? !(await driver.has(step.fieldName).catch(() => true)) : false;
+      await write(`fill ${step.fieldName} (${step.kind}) "${step.label}" = ${shown} -> ${ok ? "ok" : absent ? "not on this form" : "NOT FILLED"}`);
       if (step.kind === "resume") {
         // Uploads finish after the change event; give the page a moment before looking.
         await page.waitForTimeout(2000).catch(() => undefined);
