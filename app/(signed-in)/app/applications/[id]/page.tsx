@@ -9,6 +9,7 @@ import { ownerContext } from "@/server/auth/require-owner";
 import {
   blockingQuestions,
   getApplication,
+  yourSteps,
   type ApplicationQuestion,
   type ApplicationWithDetails,
 } from "@/server/modules/applications/applications.service";
@@ -36,6 +37,26 @@ const TONE_BOX: Record<Tone, string> = {
   destructive: "border-destructive/40 bg-destructive/10",
 };
 
+/** The required steps the runner leaves for you in Chrome, each linked to its question. */
+function YourSteps({ steps }: { steps: ApplicationQuestion[] }) {
+  return (
+    <>
+      <p className="mt-1">
+        Once you approve, the apply runner fills everything else and leaves {steps.length === 1 ? "this" : "these"} for you in
+        the Chrome window, then waits up to an hour for you to click Submit:
+      </p>
+      <ul className="list-disc pl-5">
+        {steps.map((q) => (
+          <li key={q.id}>
+            <a href={`#q-${q.id}`} className="underline underline-offset-2">{q.question}</a>
+            {q.reason && <span className="text-muted-foreground">: {q.reason}</span>}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 /** What to do next with this application, in one colored box at the top. */
 function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[]; flags: Flag[] }) {
   const info = statusInfo(app.status);
@@ -52,27 +73,14 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
       </ul>
     );
   } else if (app.status === "manual" && app.apply_note == null) {
-    // Prepare found either no form it can read (an unsupported site) or required questions only you can do.
-    const yours = app.questions.filter((q) => q.required && q.bucket === "cannot_automate");
-    title = "Can't be filled automatically";
+    // Prepare couldn't read this site's form. (Older applications landed here for steps only you can do;
+    // approving those works like Ready to approve.)
+    const steps = yourSteps(app);
+    title = steps.length ? "Ready to approve, with a step for you" : "Can't be filled automatically";
     body = (
       <>
-        {yours.length > 0 ? (
-          <>
-            <p>The form has {yours.length === 1 ? "a required question" : "required questions"} only you can do:</p>
-            <ul className="list-disc pl-5">
-              {yours.map((q) => (
-                <li key={q.id}>
-                  <a href={`#q-${q.id}`} className="underline underline-offset-2">{q.question}</a>
-                  {q.reason && <span className="text-muted-foreground">: {q.reason}</span>}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1">
-              Apply on the employer&apos;s site yourself, then mark it applied. Approving it now only sends it to Runner stuck. The
-              resume and answers below are ready to copy.
-            </p>
-          </>
+        {steps.length ? (
+          <YourSteps steps={steps} />
         ) : (
           <p>
             {app.prepare_error ?? "The apply runner can't read this site's form."} Approve it to wait in Approved until the
@@ -138,6 +146,7 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
         approve or skip on the right.
       </p>
     );
+    if (yourSteps(app).length > 0) body = <>{body}<YourSteps steps={yourSteps(app)} /></>;
   } else {
     title = info.label;
     body = <p>{info.hint}</p>;

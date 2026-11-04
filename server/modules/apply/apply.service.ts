@@ -115,15 +115,18 @@ async function enterCodeFromInbox(deps: ApplyDeps, app: ApplyJob): Promise<boole
   return entered;
 }
 
+/** How long a form with a step only you can do (an assessment) stays open for you; the runner waits meanwhile. */
+const YOUR_STEPS_WAIT_MS = 60 * 60_000;
+
 /**
  * Waits for the confirmation page, keeping the last field values seen so
  * changes the user made can be found afterwards.
  */
-async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: ApplyJob, platform: Platform) {
+async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: ApplyJob, platform: Platform, waitMs?: number) {
   const { driver } = deps;
   const sleep = deps.sleep ?? defaultSleep;
   const pollMs = deps.pollMs ?? 2000;
-  const deadline = Date.now() + (deps.waitMs ?? 30 * 60_000);
+  const deadline = Date.now() + (deps.waitMs ?? waitMs ?? 30 * 60_000);
   let last: Record<string, string> = {};
   let askedForCheck = false;
   let askedForCode = false;
@@ -204,6 +207,8 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     else if (known.has(step.fieldName)) skipped.push(step.label);
   }
   const except = skipped.length ? ` It couldn't fill ${skipped.map((m) => `"${m}"`).join(", ")}.` : "";
+  // Steps only you can do (an assessment, a file to attach): everything else is filled, then it waits for you.
+  const yours = plan.yours.length ? ` ${plan.yours.map((m) => `"${m}"`).join(", ")} ${plan.yours.length === 1 ? "is" : "are"} yours to do.` : "";
   if (missed.length) {
     return fail(`Couldn't fill ${missed.map((m) => `"${m}"`).join(", ")}. Finish it in the open Chrome window, or from the job page.`);
   }
@@ -218,17 +223,17 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     detail: { answers, skipped, resume_sha256: app.resume.sha256 } as Json,
   });
 
-  if (platform.mode === "auto") {
+  if (platform.mode === "auto" && !yours) {
     await setApplyStep(db, app.id, "submitting", `Submitting the form for ${where}.`);
     await driver.submit();
   } else {
-    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${except} Check the Chrome window and click Submit.`);
+    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${except} ${yours ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
     await driver.focus();
   }
 
-  const waited = await waitForConfirmation(deps, plan.steps, app, platform);
+  const waited = await waitForConfirmation(deps, plan.steps, app, platform, yours ? YOUR_STEPS_WAIT_MS : undefined);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
-  if ("timedOut" in waited) return { ...(await fail("Nobody submitted the form within 30 minutes.")), closeTab: true };
+  if ("timedOut" in waited) return { ...(await fail(`Nobody submitted the form within ${yours ? "an hour" : "30 minutes"}.`)), closeTab: true };
 
   const changed = platform.mode === "auto" ? [] : changedFields(plan.steps, waited.last);
   await addEvidence(db, {

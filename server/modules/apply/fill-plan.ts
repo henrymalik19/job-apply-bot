@@ -12,6 +12,8 @@ export type PlanQuestion = {
   required: boolean;
   answer: string | null;
   answer_value: Json | null;
+  /** "cannot_automate" marks a step only you can do (an assessment, a file to attach). */
+  bucket?: string;
 };
 
 /**
@@ -30,8 +32,11 @@ export type FillStep =
   | { kind: "closest"; fieldName: string; label: string; required: boolean; value: string }
   | { kind: "resume"; fieldName: string; label: string; required: boolean };
 
-/** The steps in form order, and why the form can't be filled (empty when it can). */
-export type FillPlan = { steps: FillStep[]; blockers: string[] };
+/**
+ * The steps in form order; why the form can't be filled (empty when it can); and the
+ * required questions left for you to do in the Chrome window once the rest is filled.
+ */
+export type FillPlan = { steps: FillStep[]; blockers: string[]; yours: string[] };
 
 const isResume = (q: PlanQuestion) => /resume|cv/i.test(`${q.field_name} ${q.question}`);
 
@@ -52,17 +57,22 @@ function chosenLabels(q: PlanQuestion): string[] {
  * Builds the fill steps for an application's prepared questions.
  *
  * @param questions - The application's questions, in form order.
- * @returns Steps for every answered field; blockers for required fields with no usable answer.
+ * @returns Steps for every answered field; blockers for required fields with no usable answer;
+ * the required steps only you can do (an assessment, a file other than the resume).
  */
 export function buildFillPlan(questions: PlanQuestion[]): FillPlan {
   const steps: FillStep[] = [];
   const blockers: string[] = [];
+  const yours: string[] = [];
   for (const q of questions) {
     if (!q.field_name || q.field_type === "hidden") continue;
     const base = { fieldName: q.field_name, label: q.question, required: q.required };
-    if (q.field_type === "file") {
-      if (isResume(q)) steps.push({ kind: "resume", ...base });
-      else if (q.required) blockers.push(`"${q.question}" needs a file`);
+    if (q.field_type === "file" && isResume(q)) {
+      steps.push({ kind: "resume", ...base });
+      continue;
+    }
+    if (q.bucket === "cannot_automate" || q.field_type === "file") {
+      if (q.required) yours.push(q.question);
       continue;
     }
     if (q.answer == null || q.answer.trim() === "") {
@@ -79,7 +89,7 @@ export function buildFillPlan(questions: PlanQuestion[]): FillPlan {
       steps.push({ kind: "text", ...base, value: q.answer });
     }
   }
-  return { steps, blockers };
+  return { steps, blockers, yours };
 }
 
 /**

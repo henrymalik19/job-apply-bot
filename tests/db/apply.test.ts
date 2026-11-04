@@ -31,7 +31,7 @@ const pdfPaths: string[] = [];
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** An approved application with a name field, the resume and a select. */
-async function addApproved(key: string, opts: { requiredUnanswered?: boolean } = {}): Promise<string> {
+async function addApproved(key: string, opts: { requiredUnanswered?: boolean; yourStep?: boolean } = {}): Promise<string> {
   const { data: job } = await db
     .from("jobs")
     .insert({ company_id: companyId, company_name: `ApplyCo ${tag}`, source: "greenhouse", external_id: `${tag}${key}`, url: `https://example.test/${tag}/${key}`, title: `Engineer ${key}`, dedup_key: `${tag}-apply-${key}` })
@@ -46,6 +46,7 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean } =
     { ...base, question: "First Name", field_name: "first_name", field_type: "text", answer: "Ada", required: true, sort_order: 0 },
     { ...base, question: "Resume/CV", field_name: "resume", field_type: "file", answer: "Tailored resume (PDF)", required: true, sort_order: 1 },
     { ...base, question: "Sponsorship?", field_name: "question_9", field_type: "select", options: [{ label: "No", value: "1" }], answer: "No", answer_value: "1", sort_order: 2 },
+    ...(opts.yourStep ? [{ ...base, bucket: "cannot_automate", question: "Coding challenge", field_name: "question_11", field_type: "text", required: true, sort_order: 4 }] : []),
     ...(opts.requiredUnanswered ? [{ ...base, bucket: "needs_user", question: "Why us?", field_name: "question_10", field_type: "textarea", required: true, sort_order: 3 }] : []),
   ]);
   if (inserted.error) throw new Error(inserted.error.message);
@@ -62,6 +63,7 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean } =
  */
 function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean } = {}) {
   const filled: Record<string, string> = {};
+  const submits: number[] = [];
   let looks = 0;
   const driver: FormDriver = {
     open: async () => "ok",
@@ -75,12 +77,14 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
     emailCode: async () => false,
     enterEmailCode: async () => true,
     confirmation: async () => (!opts.neverSubmitted && ++looks > 1 ? "Thank you for applying." : null),
-    submit: async () => {},
+    submit: async () => {
+      submits.push(Date.now());
+    },
     screenshot: async () => PNG,
     focus: async () => {},
     closed: () => false,
   };
-  return { driver, filled };
+  return { driver, filled, submits };
 }
 
 const deps = (driver: FormDriver) => ({
@@ -183,6 +187,23 @@ describe("apply runner", () => {
     const outcome = await applyOne(deps(fakeDriver().driver), job);
     expect(outcome).toMatchObject({ result: "handed_back" });
     expect(await app(id)).toMatchObject({ status: "manual", apply_step: null, apply_note: expect.stringContaining("Why us?") });
+  });
+
+  it("fills around a step only you can do and waits for you, even in auto mode", async () => {
+    const id = await addApproved("yours", { yourStep: true });
+    const before = await streak();
+    await db.from("platforms").upsert({ user_id: userId, ats: "greenhouse", mode: "auto", clean_streak: 3 }, { onConflict: "user_id,ats" });
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const steps: string[] = [];
+    const { driver, filled, submits } = fakeDriver();
+    const outcome = await applyOne({ ...deps(driver), log: (l: string) => steps.push(l) }, job);
+    await db.from("platforms").update({ mode: "supervised", clean_streak: before?.clean_streak ?? 0 }).eq("user_id", userId).eq("ats", "greenhouse");
+    expect(submits).toEqual([]);
+    expect(filled).not.toHaveProperty("question_11");
+    expect(filled).toHaveProperty("first_name", "Ada");
+    expect(outcome).toMatchObject({ result: "submitted" });
+    const { data: events } = await db.from("application_events").select("to_status").eq("application_id", id);
+    expect(events!.map((e) => e.to_status)).toContain("submitted");
   });
 
   it("hands back when a CAPTCHA shows, without submitting, and can be retried", async () => {

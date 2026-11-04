@@ -65,15 +65,22 @@ describe("buildFillPlan", () => {
     expect(plan.steps[0]).toMatchObject({ kind: "select", value: ["Yes"] });
   });
 
-  it("blocks on required fields without an answer or a file it can't attach", () => {
-    const plan = buildFillPlan([
-      q({ question: "Why us?", required: true }),
-      q({ question: "Portfolio", field_type: "file", required: true }),
-      q({ question: "Optional note" }),
-      q({ question: "Cover Letter", field_name: "cover_letter", field_type: "file" }),
-    ]);
-    expect(plan.blockers).toEqual(['"Why us?" has no answer', '"Portfolio" needs a file']);
+  it("blocks on required fields without an answer", () => {
+    const plan = buildFillPlan([q({ question: "Why us?", required: true }), q({ question: "Optional note" })]);
+    expect(plan.blockers).toEqual(['"Why us?" has no answer']);
     expect(plan.steps).toEqual([]);
+  });
+
+  it("leaves steps only you can do to you: required files and assessments", () => {
+    const plan = buildFillPlan([
+      q({ question: "Portfolio", field_type: "file", required: true }),
+      q({ question: "Coding challenge", required: true, bucket: "cannot_automate" }),
+      q({ question: "Cover Letter", field_name: "cover_letter", field_type: "file" }),
+      q({ question: "Name", required: true, answer: "Ada" }),
+    ]);
+    expect(plan.blockers).toEqual([]);
+    expect(plan.yours).toEqual(["Portfolio", "Coding challenge"]);
+    expect(plan.steps.map((s) => s.label)).toEqual(["Name"]);
   });
 
   it("skips hidden fields and rows without a field name", () => {

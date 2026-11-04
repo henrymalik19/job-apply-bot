@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import type { AppStatus } from "@/server/modules/applications/application-status";
-import { blockingQuestions, listApplications, runnerHandedBack, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
+import { blockingQuestions, listApplications, runnerHandedBack, yourSteps, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { matchEmail } from "@/server/modules/tracking/classify";
 import { listUnmatchedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
 import { cn } from "@/shared/cn";
@@ -63,8 +63,9 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
       </span>
     );
   }
-  if (app.status === "manual") {
-    const reason = app.prepare_error ?? blockingQuestions(app).find((q) => q.bucket === "cannot_automate")?.question;
+  const steps = yourSteps(app);
+  if (app.status === "manual" && steps.length === 0) {
+    const reason = app.prepare_error;
     return (
       <span>
         <Badge className={TONE_BADGE.warning}>Can&apos;t fill automatically</Badge>
@@ -74,9 +75,14 @@ function Needs({ tab, app }: { tab: TabId; app: ApplicationWithDetails }) {
   }
   const toCheck = app.questions.filter((q) => q.bucket === "drafted" || q.needs_check).length;
   const kinds = [...new Set(((app.flags as { kind: string }[] | null) ?? []).map((f) => f.kind))];
-  if (!toCheck && !kinds.length) return <span className="text-muted-foreground">All answers filled</span>;
+  if (!toCheck && !kinds.length && !steps.length) return <span className="text-muted-foreground">All answers filled</span>;
   return (
     <span className="flex flex-wrap items-center gap-1">
+      {steps.length > 0 && (
+        <Badge className={TONE_BADGE.warning} title={`The runner fills the rest and leaves this to you in Chrome:\n${steps.map((q) => q.question).join("\n")}`}>
+          {steps.length === 1 ? "1 step" : `${steps.length} steps`} for you in Chrome
+        </Badge>
+      )}
       {toCheck > 0 && <Badge className={TONE_BADGE.info}>{toCheck} to double-check</Badge>}
       {kinds.map((k) => <Badge key={k} className={TONE_BADGE.warning} title={FLAG_HINT[k]}>{FLAG_LABEL[k] ?? k}</Badge>)}
     </span>

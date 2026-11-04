@@ -109,7 +109,6 @@ const STANDARD_FIELDS: Record<string, string> = {
 };
 
 const isResume = (q: FormQuestion) => q.fieldType === "file" && /resume|cv/i.test(`${q.fieldName} ${q.label}`);
-const isCoverLetter = (q: FormQuestion) => /cover[ _]?letter/i.test(`${q.fieldName} ${q.label}`);
 
 /** Context shared by every application in a run. */
 type RunContext = {
@@ -272,9 +271,10 @@ export async function prepareJob(
     if (isResume(q)) {
       Object.assign(row, { bucket: "auto", answer: "Tailored resume (PDF)", answer_source: "profile" });
     } else if (q.fieldType === "file") {
-      Object.assign(row, isCoverLetter(q) && !q.required
-        ? { bucket: "auto", reason: "optional; not sent" }
-        : { bucket: "needs_user", reason: "file upload" });
+      // A required file other than the resume is attached by you in the Chrome window, once the runner fills the rest.
+      Object.assign(row, q.required
+        ? { bucket: "cannot_automate", reason: "a file to attach in the Chrome window" }
+        : { bucket: "auto", reason: "optional; not sent" });
     } else if (q.group === "eeo") {
       const decline = declineOption(q);
       Object.assign(row, decline
@@ -337,11 +337,8 @@ export async function prepareJob(
 
   const questions = rows.map(({ _index: _i, ...r }) => r);
   const blocking = questions.filter((q) => q.required);
-  const status: AppStatus = blocking.some((q) => q.bucket === "cannot_automate")
-    ? "manual"
-    : blocking.some((q) => q.bucket === "needs_user")
-      ? "needs_input"
-      : "queued";
+  // Steps only you can do (cannot_automate) don't hold it back: the runner fills the rest and leaves those to you.
+  const status: AppStatus = blocking.some((q) => q.bucket === "needs_user") ? "needs_input" : "queued";
   return { status, flags, questions, posting };
 }
 

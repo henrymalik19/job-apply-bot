@@ -47,7 +47,7 @@ export const TONE_BADGE: Record<Tone, string> = {
 /** Headline while the apply runner works on an approved application. */
 export const APPLY_STEP_TITLE: Record<string, string> = {
   filling: "Filling the form now",
-  waiting_for_you: "Filled: click Submit in Chrome",
+  waiting_for_you: "Your turn in Chrome",
   submitting: "Submitting",
 };
 

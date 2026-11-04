@@ -59,9 +59,14 @@ export const REVIEW_STATUSES: readonly AppStatus[] = ["queued"];
 /** An option of a select question, as stored on `application_questions.options`. */
 export type QuestionOption = { label: string; value: string; decline?: boolean };
 
-/** Required questions still blocking an application. */
+/** Required questions still waiting for your answer (Missing answers). */
 export function blockingQuestions(app: Pick<ApplicationWithDetails, "questions">): ApplicationQuestion[] {
-  return app.questions.filter((q) => q.required && (q.bucket === "needs_user" || q.bucket === "cannot_automate"));
+  return app.questions.filter((q) => q.required && q.bucket === "needs_user");
+}
+
+/** Required steps the runner leaves for you in the Chrome window (an assessment, a file to attach). */
+export function yourSteps(app: Pick<ApplicationWithDetails, "questions">): ApplicationQuestion[] {
+  return app.questions.filter((q) => q.required && q.bucket === "cannot_automate");
 }
 
 /** The answer a form takes, from what was typed or picked. */
