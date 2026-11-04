@@ -16,6 +16,7 @@ import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server
 import { listReadyToApply, setApplyStep } from "@/server/modules/apply/apply.repository";
 import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver } from "@/server/modules/apply/apply.service";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
+import { APPLY_RUNS_BUCKET, listApplyRuns, saveApplyRun } from "@/server/modules/apply/apply-runs";
 import type {} from "./setup";
 import { testUser } from "./users";
 
@@ -239,6 +240,29 @@ describe("apply runner", () => {
     expect((await app(idle)).status).toBe("approved");
     await retryApply(db, userId, id);
     expect((await app(id)).status).toBe("approved");
+  });
+
+  it("uploads a run record and shows it back, with any emailed code blanked", async () => {
+    const id = await addApproved("runlog");
+    const text = (s: string) => new TextEncoder().encode(s);
+    await saveApplyRun(db, {
+      userId,
+      applicationId: id,
+      startedAt: new Date(),
+      outcome: "handed back: Couldn't fill \"Start year\".",
+      files: [
+        { name: "run.log", bytes: text("fill start-year--0 (text) \"Start year\" = \"2020\" -> NOT FILLED\nthe form shows a security code box: aB3dE9fG\n") },
+        { name: "01-opened.png", bytes: PNG },
+      ],
+    });
+    const [run] = await listApplyRuns(db, id);
+    expect(run.outcome).toContain("Start year");
+    expect(run.log).toContain("NOT FILLED");
+    expect(run.log).toContain("[code]");
+    expect(run.log).not.toContain("aB3dE9fG");
+    expect(run.shots.map((s) => s.name)).toEqual(["01-opened.png"]);
+    const { data } = await db.from("apply_runs").select("folder").eq("application_id", id).single();
+    await db.storage.from(APPLY_RUNS_BUCKET).remove([`${data!.folder}/run.log`, `${data!.folder}/01-opened.png`]);
   });
 
   it("refuses auto mode until the streak is earned", async () => {

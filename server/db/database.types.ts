@@ -141,6 +141,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"apply_runs": {
+                  Row: {
+                    "application_id": string,"created_at": string,"files": (string)[],"finished_at": string,"folder": string,"id": string,"outcome": string,"started_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "application_id": string,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder": string,"id"?: string,"outcome": string,"started_at": string,"user_id": string
+                  }
+                  Update: {
+                    "application_id"?: string,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder"?: string,"id"?: string,"outcome"?: string,"started_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "apply_runs_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "apply_runs_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "public_applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "apply_runs_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"certifications": {
                   Row: {
                     "created_at": string,"credential_url": string | null,"expires_on": string | null,"id": string,"issued_on": string | null,"issuer": string | null,"name": string,"sort_order": number,"updated_at": string,"user_id": string

@@ -14,7 +14,8 @@ const ERROR_SELECTOR = '[role="alert"], [class*="error" i], [class*="helper-text
 
 /** Starts a record for one application and returns a driver that writes to it. */
 export async function recordRun(root: string, appId: string, page: Page, driver: FormDriver) {
-  const dir = path.join(root, `${new Date().toISOString().replace(/[:.]/g, "-")}-${appId}`);
+  const startedAt = new Date();
+  const dir = path.join(root, `${startedAt.toISOString().replace(/[:.]/g, "-")}-${appId}`);
   await mkdir(dir, { recursive: true });
   await prune(root);
   const file = path.join(dir, "run.log");
@@ -94,6 +95,7 @@ export async function recordRun(root: string, appId: string, page: Page, driver:
 
   return {
     driver: recorded,
+    startedAt,
     log: (line: string) => void write(line),
     /** Final screenshot, the form's error text and HTML; call when the run ends. */
     async finish(outcome: string) {

@@ -8,7 +8,7 @@
 // Chrome uses its own profile in data/apply-chrome, so sign-ins you make there stay.
 // Chrome opens when there's an application to fill and closes again once nothing
 // is left open for you (a submitted tab closes 10 seconds after the thank-you page).
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -24,6 +24,7 @@ import { listReadyToApply } from "@/server/modules/apply/apply.repository";
 import { greenhouseExtras, type HomePlace, type Schooling, type WorkRole } from "@/server/modules/apply/fill-plan";
 import { usStateName } from "@/server/modules/criteria/places";
 import { APPLY_ATS, applyOne, handBackUnfinished } from "@/server/modules/apply/apply.service";
+import { saveApplyRun, type RunFile } from "@/server/modules/apply/apply-runs";
 import { parseApplyEnv } from "@/shared/env";
 
 const DATA = path.resolve("data");
@@ -107,6 +108,20 @@ async function jobInboxAddress(db: Db, userId: string): Promise<string | null> {
   return typeof address === "string" ? address : null;
 }
 
+/**
+ * Uploads a run record (its log, screenshots and the form's HTML) for the application's page.
+ * Best effort: the local copy stays either way.
+ */
+async function uploadRunWith(db: Db, userId: string, dir: string, applicationId: string, startedAt: Date, outcome: string) {
+  try {
+    const names = (await readdir(dir)).sort();
+    const files: RunFile[] = await Promise.all(names.map(async (name) => ({ name, bytes: new Uint8Array(await readFile(path.join(dir, name))) })));
+    await saveApplyRun(db, { userId, applicationId, startedAt, outcome, files });
+  } catch (err) {
+    log(`${applicationId}: couldn't upload the run record: ${(err as Error).message}`);
+  }
+}
+
 async function main() {
   const env = parseApplyEnv(process.env);
   const db: Db = createClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
@@ -114,6 +129,8 @@ async function main() {
   });
   const userId = await signIn(db);
   const { name, home, school, role } = await profileBasics(db, userId);
+  const uploadRun = (dir: string, applicationId: string, startedAt: Date, outcome: string) =>
+    uploadRunWith(db, userId, dir, applicationId, startedAt, outcome);
   const stale = await handBackUnfinished(db, userId);
   if (stale) log(`moved ${stale} application(s) an earlier run left mid-way to Runner stuck`);
 
@@ -197,7 +214,10 @@ async function main() {
         } catch (err) {
           both(`${app.id}: failed: ${(err as Error).message}`);
         }
-        log(`${app.id}: run record in ${path.relative(process.cwd(), await record.finish(outcome))}`);
+        const dir = await record.finish(outcome);
+        log(`${app.id}: run record in ${path.relative(process.cwd(), dir)}`);
+        // Also to the app, so the application's page shows it (and anyone helping you can see it).
+        await uploadRun(dir, app.id, record.startedAt, outcome);
         // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
         if (closeTab) await page.close().catch(() => undefined);
       }
