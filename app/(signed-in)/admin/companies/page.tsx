@@ -9,6 +9,7 @@ import { BoardStatus } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FindCompanyForm } from "./forms";
+import { TableSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -98,7 +99,7 @@ export default function CompaniesPage({ searchParams }: { searchParams: SearchPa
   return (
     <main className="flex flex-col gap-6 md:h-full">
       <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<TableSkeleton />}>
         <Companies searchParams={searchParams} />
       </Suspense>
     </main>

@@ -11,6 +11,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { InfoTip } from "../_components/info-tip";
 import { LiveRefresh } from "../_components/live-refresh";
 import { statusInfo, type Tone } from "../_components/status";
+import { OverviewSkeleton } from "../_components/skeletons";
 
 /** Left accent per tone, so "waiting on you" numbers stand out from the rest. */
 const TONE_ACCENT: Record<Tone, string> = {
@@ -127,7 +128,7 @@ export default function OverviewPage() {
     <main className="flex flex-col gap-6">
       <LiveRefresh everyMs={30_000} />
       <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<OverviewSkeleton />}>
         <Overview />
       </Suspense>
     </main>

@@ -8,6 +8,7 @@ import { loadPlatforms } from "@/server/modules/apply/apply.service";
 import { isPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
 import { TONE_BADGE } from "../../_components/status";
 import { setPlatformModeAction, setPublicPageAction } from "./actions";
+import { FormSkeleton } from "../../_components/skeletons";
 
 async function PublicPageSetting() {
   const { db, owner } = await ownerContext();
@@ -80,7 +81,7 @@ export default function SettingsPage() {
   return (
     <main className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<FormSkeleton cards={2} />}>
         <PublicPageSetting />
         <ApplyRunnerSetting />
       </Suspense>

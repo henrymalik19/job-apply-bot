@@ -26,6 +26,7 @@ import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from ".
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 import { RunnerLog } from "../runner-log";
+import { DetailSkeleton } from "../../../_components/skeletons";
 
 type Params = Promise<{ id: string }>;
 type Flag = { kind: string; excerpt: string; where: string; hidden?: boolean };
@@ -435,7 +436,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
 export default function ApplicationPage({ params }: { params: Params }) {
   return (
     <main className="flex flex-col gap-4">
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<DetailSkeleton />}>
         <ApplicationDetail params={params} />
       </Suspense>
     </main>

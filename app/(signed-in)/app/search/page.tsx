@@ -15,6 +15,7 @@ import { PruneForm } from "./prune-form";
 import { TitleFilterForm } from "./title-filter-form";
 import { TitleSuggestions } from "./title-suggestions";
 import { toggleLessonAction } from "./rule-actions";
+import { FormSkeleton } from "../../_components/skeletons";
 
 const SCOPE_LABEL: Record<string, string> = Object.fromEntries(RULE_SCOPES);
 
@@ -179,7 +180,7 @@ export default function SearchPage() {
           Discovery only saves jobs that pass the first two filters; matching then scores what was saved.
         </p>
       </div>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<FormSkeleton />}>
         <SearchCriteria />
       </Suspense>
     </main>

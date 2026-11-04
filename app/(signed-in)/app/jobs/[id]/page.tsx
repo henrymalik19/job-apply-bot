@@ -10,6 +10,7 @@ import { MatchCard } from "../../../_components/match-card";
 import { findJob } from "@/server/modules/jobs/jobs.service";
 import { getJobMatch } from "@/server/modules/matching/matching.service";
 import { ago, formatSalary } from "@/shared/format";
+import { DetailSkeleton } from "../../../_components/skeletons";
 
 type Params = Promise<{ id: string }>;
 
@@ -73,7 +74,7 @@ async function JobDetail({ params, searchParams }: { params: Params; searchParam
 export default function JobPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-4 md:h-full">
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<DetailSkeleton />}>
         <JobDetail params={params} searchParams={searchParams} />
       </Suspense>
     </main>

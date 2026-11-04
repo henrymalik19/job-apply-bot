@@ -36,6 +36,7 @@ import {
   updateSkillAction,
 } from "./actions";
 import { SkillCleanup } from "./skill-cleanup";
+import { FormSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -470,7 +471,7 @@ export default function ProfilePage({ searchParams }: { searchParams: SearchPara
           Everything here counts as true. Claude only uses what&apos;s here, and never invents anything beyond it.
         </p>
       </div>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<FormSkeleton cards={4} />}>
         <Profile searchParams={searchParams} />
       </Suspense>
     </main>

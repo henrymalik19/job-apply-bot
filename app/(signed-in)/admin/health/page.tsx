@@ -13,6 +13,7 @@ import { BoardStatus, RunCounts } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { LiveRefresh } from "../../_components/live-refresh";
 import { RunNow } from "./run-now";
+import { TableSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -181,7 +182,7 @@ export default function HealthPage({ searchParams }: { searchParams: SearchParam
     <main className="flex flex-col gap-6 md:h-full">
       <LiveRefresh />
       <h1 className="text-2xl font-semibold tracking-tight">Health</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<TableSkeleton rows={6} />}>
         <Health searchParams={searchParams} />
       </Suspense>
     </main>

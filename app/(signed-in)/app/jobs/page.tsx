@@ -13,6 +13,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { AutoSubmitForm } from "./auto-submit-form";
+import { TableSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -166,7 +167,7 @@ export default function JobsPage({ searchParams }: { searchParams: SearchParams 
   return (
     <main className="flex flex-col gap-6 md:h-full">
       <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<TableSkeleton rows={10} />}>
         <Jobs searchParams={searchParams} />
       </Suspense>
     </main>

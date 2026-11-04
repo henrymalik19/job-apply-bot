@@ -15,6 +15,7 @@ import { LiveRefresh } from "../../_components/live-refresh";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
 import { LinkEmail, type LinkTarget } from "./link-email";
+import { TableSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -251,7 +252,7 @@ export default function TodoPage({ searchParams }: { searchParams: SearchParams 
     <main className="flex flex-col gap-6 md:h-full">
       <LiveRefresh />
       <h1 className="text-2xl font-semibold tracking-tight">To do</h1>
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<TableSkeleton tabs={3} />}>
         <Todo searchParams={searchParams} />
       </Suspense>
     </main>
