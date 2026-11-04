@@ -20,7 +20,10 @@ const INTERVIEW =
   /\b(schedule|book|set up|arrange)\b.{0,60}\b(interview|call|chat|conversation|phone screen|meeting)\b|\binterview\b.{0,60}\b(invit|availability|schedul)|\bcalendly\.com\b|\bgoodtime\.io\b|\byour availability\b/i;
 const CONFIRMATION =
   /\bthank(s| you) for (applying|your application|submitting)\b|\bapplication (has been |was )?(received|submitted)\b|\bwe('ve| have) received your application\b|\byour application (to|for) .{0,80} (is in|has been received)/i;
-const JOB_ALERT_SENDER = /(jobalerts?|jobs-listings|jobs-noreply|alerts?)@|@(linkedin|indeed|glassdoor|ziprecruiter|wellfound|otta|builtin)\./i;
+// Job boards mail from subdomains too (match.indeed.com, e.linkedin.com), and their "apply now" pitches
+// can read like interview invites, so anything from one is an alert, never about an application here.
+const JOB_ALERT_SENDER =
+  /(jobalerts?|jobs-listings|jobs-noreply|alerts?)@|[@.](linkedin|indeed|indeedemail|glassdoor|ziprecruiter|wellfound|otta|builtin|dice|monster|simplyhired)\.(com|co|net|io)\b/i;
 const JOB_ALERT_SUBJECT = /\bjob alert\b|\bjobs? (for|matching) you\b|\bnew jobs?\b|\brecommended jobs?\b/i;
 // Mail sent by an ATS or a company's careers address: a recruiter's personal note
 // may come from either, so it isn't "other" just because no rule fired.

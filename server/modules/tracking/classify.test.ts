@@ -12,6 +12,9 @@ describe("classifyByRules", () => {
     expect(classifyByRules(mail("Next steps", "We'd love to schedule a 30 minute phone screen. Please share your availability here: calendly.com/acme"))).toBe("interview");
     expect(classifyByRules(mail("Security code for your application to Pinterest", "Copy and paste this code: aB3dE9fG"))).toBe("code");
     expect(classifyByRules(mail("30+ new jobs for you", "Senior Engineer at ...", "jobalerts-noreply@linkedin.com"))).toBe("job_alert");
+    // A job board's pitch from a subdomain that reads like an invite is still an alert.
+    expect(classifyByRules(mail("Netflix is hiring: apply now", "Apply today and schedule your interview with Netflix.", "donotreply@match.indeed.com"))).toBe("job_alert");
+    expect(classifyByRules(mail("Schedule your interview", "Can we set up a call this week?", "recruiting@netflix.com"))).toBe("interview");
   });
 
   it("leaves what it can't tell to Claude", () => {
