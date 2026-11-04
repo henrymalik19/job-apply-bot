@@ -7,7 +7,7 @@ import { ownerContext } from "@/server/auth/require-owner";
 import type { AppStatus } from "@/server/modules/applications/application-status";
 import { blockingQuestions, listApplications, runnerHandedBack, yourSteps, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { matchEmail } from "@/server/modules/tracking/classify";
-import { listUnmatchedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
+import { listUnmatchedEmails, listUnsortedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
 import { scrollingTable } from "../../_components/data-table";
@@ -98,8 +98,8 @@ const EMAIL_KIND_LABEL: Record<string, string> = {
   recruiter: "Recruiter reply",
 };
 
-/** Emails tracking couldn't tie to one application: pick it, and it moves as if matched. */
-function UnmatchedEmails({ emails, apps, now }: { emails: UnmatchedEmail[]; apps: ApplicationWithDetails[]; now: Date }) {
+/** Emails tracking couldn't tie to one application, or couldn't sort: pick it, and it moves as if matched. */
+function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEmail[]; unsorted: UnmatchedEmail[]; apps: ApplicationWithDetails[]; now: Date }) {
   const targets: LinkTarget[] = apps.map((a) => ({ id: a.id, label: `${a.job.company_name}: ${a.job.title}` }));
   const tracked = apps.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at }));
   return (
@@ -112,8 +112,35 @@ function UnmatchedEmails({ emails, apps, now }: { emails: UnmatchedEmail[]; apps
         </CardDescription>
       </CardHeader>
       <CardContent className={scrollingTable.content}>
+        {unsorted.length > 0 && (
+          <div className="mb-6 flex flex-col gap-2">
+            <h2 className="text-sm font-medium">Couldn&apos;t tell what it says</h2>
+            <p className="text-sm text-muted-foreground">
+              From an applicant system or a company you applied to, but no rule recognized the wording. Pick what it says
+              and the application; it moves as if tracking had caught it.
+            </p>
+            <Table>
+              <TableBody>
+                {unsorted.map((e) => {
+                  const guess = matchEmail({ fromAddress: e.from, fromName: e.from, subject: e.subject, text: e.snippet, receivedAt: new Date(e.receivedAt) }, tracked);
+                  return (
+                    <TableRow key={e.id}>
+                      <TableCell className="max-w-md whitespace-normal align-top">
+                        <span className="font-medium">{e.subject || "(no subject)"}</span>
+                        <span className="block text-sm text-muted-foreground">{e.from}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={e.snippet}>{e.snippet}</span>
+                      </TableCell>
+                      <TableCell className="align-top"><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} askKind /></TableCell>
+                      <TableCell className="align-top text-muted-foreground">{ago(e.receivedAt, now)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
         {emails.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No emails waiting to be linked.</p>
+          unsorted.length === 0 && <p className="text-sm text-muted-foreground">No emails waiting to be linked.</p>
         ) : (
           <Table containerClassName={scrollingTable.container}>
             <TableHeader className={scrollingTable.header}>
@@ -160,12 +187,18 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
     listUnmatchedEmails(db, owner.id),
     listApplications(db, owner.id, ["approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer"]),
   ]);
+  const unsorted = await listUnsortedEmails(
+    db,
+    owner.id,
+    applied.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at })),
+  );
+  const waiting = emails.length + unsorted.length;
   // Ones the apply runner handed back are on the board (Runner stuck).
   const apps = listed.filter((a) => !runnerHandedBack(a));
   const byTab = Object.fromEntries(TABS.map((t) => [t.id, apps.filter((a) => (t.statuses as readonly string[]).includes(a.status))])) as Record<TabId, ApplicationWithDetails[]>;
   // Without a tab in the URL, open the first lane that has something in it.
   const asked = TABS.find((t) => t.id === one(params.tab));
-  const showEmails = one(params.tab) === "emails" || (!asked && TABS.every((t) => byTab[t.id].length === 0) && emails.length > 0);
+  const showEmails = one(params.tab) === "emails" || (!asked && TABS.every((t) => byTab[t.id].length === 0) && waiting > 0);
   const current = asked ?? TABS.find((t) => byTab[t.id].length > 0) ?? TABS[0];
   const rows = byTab[current.id];
   const now = new Date();
@@ -196,11 +229,11 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
           )}
         >
           Unmatched emails
-          <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{emails.length}</span>
+          <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{waiting}</span>
         </Link>
       </nav>
 
-      {showEmails ? <UnmatchedEmails emails={emails} apps={applied} now={now} /> : (
+      {showEmails ? <UnmatchedEmails emails={emails} unsorted={unsorted} apps={applied} now={now} /> : (
 
       <Card className={scrollingTable.card}>
         <CardHeader>

@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { ownerContext } from "@/server/auth/require-owner";
 import { BOARD_STATUSES, countByStatus, listApplications, listUserMoves, runnerHandedBack, type ApplicationWithDetails } from "@/server/modules/applications/applications.service";
 import { canRetry } from "@/server/modules/apply/apply.service";
+import { matchEmail } from "@/server/modules/tracking/classify";
+import { listUnmatchedEmails, listUnsortedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
 import { ago } from "@/shared/format";
 import { InfoTip } from "../../_components/info-tip";
 import { LiveRefresh } from "../../_components/live-refresh";
@@ -22,7 +24,7 @@ const COLUMNS: BoardColumn[] = [
 ];
 
 /** A card's status pill: what the runner is doing, why it's stuck, or how long it has been in its lane. */
-function cardNote(app: ApplicationWithDetails, now: Date): CardNote {
+function cardNote(app: ApplicationWithDetails, now: Date, loose: UnmatchedEmail[]): CardNote {
   if (app.status === "manual") return { text: app.apply_note ?? "Handed back", detail: app.apply_note ?? undefined, tone: "warning" };
   if (app.status === "approved") {
     if (!runnerFills(app.job.source)) {
@@ -38,6 +40,16 @@ function cardNote(app: ApplicationWithDetails, now: Date): CardNote {
   }
   // Email tracking confirms an application when the employer's receipt arrives; a day without one is worth a look.
   if (app.status === "submitted" && app.submitted_at && now.getTime() - new Date(app.submitted_at).getTime() > 86_400_000) {
+    // An email naming the company that tracking couldn't tie to it for sure is probably the receipt.
+    const tracked = { id: app.id, status: app.status, company: app.job.company_name, title: app.job.title, submittedAt: app.submitted_at };
+    const email = loose.find((e) => matchEmail({ fromAddress: e.from, fromName: e.from, subject: e.subject, text: e.snippet, receivedAt: new Date(e.receivedAt) }, [tracked]).app);
+    if (email) {
+      return {
+        text: "Email to check",
+        detail: `"${email.subject}" arrived ${ago(email.receivedAt, now)} and names ${app.job.company_name}, but tracking couldn't sort it for sure. Link it on To do, Unmatched emails.`,
+        tone: "info",
+      };
+    }
     return {
       text: "No confirmation yet",
       detail: `Submitted ${ago(app.submitted_at, now)} and no confirmation email has arrived. Check that it went through on the employer's site; some employers don't send one.`,
@@ -50,10 +62,17 @@ function cardNote(app: ApplicationWithDetails, now: Date): CardNote {
 
 async function Applying() {
   const { db, owner } = await ownerContext();
-  const [listed, moves, counts] = await Promise.all([listApplications(db, owner.id, BOARD_STATUSES), listUserMoves(db), countByStatus(db, owner.id)]);
+  const [listed, moves, counts, unmatched] = await Promise.all([
+    listApplications(db, owner.id, BOARD_STATUSES),
+    listUserMoves(db),
+    countByStatus(db, owner.id),
+    listUnmatchedEmails(db, owner.id),
+  ]);
   // Manual ones the runner never tried (preparing found the form can't be filled) are decided on To do.
   const apps = listed.filter((a) => a.status !== "manual" || runnerHandedBack(a));
   const now = new Date();
+  const unsorted = await listUnsortedEmails(db, owner.id, apps.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at })));
+  const loose = [...unmatched, ...unsorted];
   // Most recent change first within each column; the runner takes approvals oldest first.
   apps.sort((a, b) => b.last_status_at.localeCompare(a.last_status_at));
   const cards: BoardCard[] = apps.map((a) => ({
@@ -62,7 +81,7 @@ async function Applying() {
     title: a.job.title,
     company: a.job.company_name,
     badge: <SiteBadge source={a.job.source} />,
-    note: cardNote(a, now),
+    note: cardNote(a, now, loose),
     applyUrl: (a.status === "approved" && !runnerFills(a.job.source)) || a.status === "manual" ? (a.job.apply_url ?? a.job.url) : null,
     canRetry: a.status === "manual" && canRetry(a.job.source, a.apply_note),
   }));

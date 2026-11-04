@@ -32,7 +32,7 @@ const FIRST_RUN_DAYS = 14;
 export const REJECTIONS_FOLDER = "Rejections (Autopilot)";
 
 /** The kinds that move an application, and where to. */
-const MOVES: Partial<Record<EmailKind, AppStatus>> = {
+export const MOVES: Partial<Record<EmailKind, AppStatus>> = {
   confirmation: "confirmed",
   rejection: "rejected",
   interview: "interviewing",
@@ -301,25 +301,71 @@ export async function listUnmatchedEmails(db: Db, userId: string, now = new Date
       .order("received_at", { ascending: false }),
     "list unmatched emails",
   );
-  return rows.map((r) => ({
-    id: r.id,
-    receivedAt: r.received_at,
-    from: r.from_addr ?? "",
-    subject: r.subject ?? "",
-    snippet: r.snippet ?? "",
-    kind: r.classification as EmailKind,
-    reason: r.reason,
-  }));
+  return rows.map(toView);
+}
+
+const DISMISSED = "not about an application (you said)";
+const toView = (r: { id: string; received_at: string; from_addr: string | null; subject: string | null; snippet: string | null; classification: string | null; reason: string | null }): UnmatchedEmail => ({
+  id: r.id,
+  receivedAt: r.received_at,
+  from: r.from_addr ?? "",
+  subject: r.subject ?? "",
+  snippet: r.snippet ?? "",
+  kind: (r.classification ?? "other") as EmailKind,
+  reason: r.reason,
+});
+/** The address in "Name <address>", or the whole string. */
+const addressOf = (from: string) => /<([^>]+)>/.exec(from)?.[1] ?? from;
+
+/**
+ * Emails tracking couldn't sort (saved as "other") that look like they're about an application:
+ * from an ATS, or naming a company you applied to. Last 30 days, newest first; ones you dismissed
+ * are left out.
+ */
+export async function listUnsortedEmails(db: Db, userId: string, apps: TrackedApp[], now = new Date()): Promise<UnmatchedEmail[]> {
+  const rows = unwrap(
+    await db
+      .from("emails")
+      .select("id, received_at, from_addr, subject, snippet, classification, reason")
+      .eq("user_id", userId)
+      .is("application_id", null)
+      .eq("classification", "other")
+      .gte("received_at", new Date(now.getTime() - 30 * 86_400_000).toISOString())
+      .order("received_at", { ascending: false }),
+    "list unsorted emails",
+  );
+  return rows
+    .filter((r) => r.reason !== DISMISSED)
+    .filter((r) => {
+      const mail = { fromAddress: addressOf(r.from_addr ?? ""), fromName: r.from_addr ?? "", subject: r.subject ?? "", text: r.snippet ?? "" };
+      return fromAts(mail) || matchEmail({ ...mail, receivedAt: new Date(r.received_at) }, apps).app != null;
+    })
+    .map(toView);
+}
+
+/** The emails tied to one application, newest first. */
+export async function listApplicationEmails(db: Db, userId: string, applicationId: string): Promise<UnmatchedEmail[]> {
+  const rows = unwrap(
+    await db
+      .from("emails")
+      .select("id, received_at, from_addr, subject, snippet, classification, reason")
+      .eq("user_id", userId)
+      .eq("application_id", applicationId)
+      .order("received_at", { ascending: false }),
+    "list application emails",
+  );
+  return rows.map(toView);
 }
 
 /**
- * Links an unmatched email to one of your applications and moves it as tracking would
- * have (a confirmation is kept as evidence). It stays in the inbox: the web app doesn't
- * reach the mailbox.
+ * Links an email to one of your applications and moves it as tracking would have (a
+ * confirmation is kept as evidence). For an email tracking couldn't sort, `kind` says what
+ * it is. It stays in the inbox: the web app doesn't reach the mailbox.
  *
- * @throws {@link ValidationError} when the email or the application isn't yours.
+ * @throws {@link ValidationError} when the email or the application isn't yours, or the kind doesn't move one.
  */
-export async function linkEmail(db: Db, userId: string, emailId: string, applicationId: string): Promise<AppStatus | null> {
+export async function linkEmail(db: Db, userId: string, emailId: string, applicationId: string, kind?: EmailKind): Promise<AppStatus | null> {
+  if (kind && !(kind in MOVES)) throw new ValidationError("Pick what the email says.");
   const email = unwrap(
     await db.from("emails").select("id, message_id, subject, snippet, classification, received_at, from_addr").eq("user_id", userId).eq("id", emailId).maybeSingle(),
     "get email",
@@ -327,12 +373,13 @@ export async function linkEmail(db: Db, userId: string, emailId: string, applica
   if (!email) throw new ValidationError("That email is gone.");
   const app = await getApplication(db, userId, applicationId);
   if (!app) throw new ValidationError("That application is gone.");
+  const said = kind ?? (email.classification as EmailKind);
+  if (!(said in MOVES)) throw new ValidationError("Pick what the email says.");
   check(
-    await db.from("emails").update({ application_id: app.id, match_confidence: 1, reason: "linked by you" }).eq("id", email.id),
+    await db.from("emails").update({ application_id: app.id, match_confidence: 1, classification: said, reason: "linked by you" }).eq("id", email.id),
     "link email",
   );
-  const kind = email.classification as EmailKind;
-  if (kind === "confirmation") {
+  if (said === "confirmation") {
     check(
       await db.from("application_evidence_items").insert({
         application_id: app.id,
@@ -344,13 +391,13 @@ export async function linkEmail(db: Db, userId: string, emailId: string, applica
       "keep confirmation email",
     );
   }
-  return moveForEmail(db, app, kind, { email_id: email.id, subject: (email.subject ?? "").slice(0, 200), linked_by: "user" }, await listTransitions(db));
+  return moveForEmail(db, app, said, { email_id: email.id, subject: (email.subject ?? "").slice(0, 200), linked_by: "user" }, await listTransitions(db));
 }
 
 /** Marks an unmatched email as not about any application, so it leaves the list. */
 export async function dismissEmail(db: Db, userId: string, emailId: string): Promise<void> {
   check(
-    await db.from("emails").update({ classification: "other", reason: "not about an application (you said)" }).eq("user_id", userId).eq("id", emailId),
+    await db.from("emails").update({ classification: "other", reason: DISMISSED }).eq("user_id", userId).eq("id", emailId),
     "dismiss email",
   );
 }

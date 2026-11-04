@@ -11,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import type { InboxMail } from "@/server/integrations/email/inbox";
-import { REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
+import { linkEmail, listApplicationEmails, listUnsortedEmails, REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
 import type {} from "./setup";
 import { setUserSettings, testUser } from "./users";
 
@@ -91,6 +91,7 @@ beforeAll(async () => {
   await addApp("twin1", `Twinco ${tag}`, "Backend Engineer", "submitted");
   await addApp("twin2", `Twinco ${tag}`, "Product Designer", "submitted");
   await addApp("late", `Pinco ${tag}`, "Ads Engineer", "submitted");
+  await addApp("odd", `Oddco ${tag}`, "Platform Engineer", "submitted");
   inbox.push(
     mail("c", `Thank you for applying to Confco ${tag}`, "We have received your application for Backend Engineer."),
     mail("r", `Your application to Rejco ${tag}`, "Thank you for applying. Unfortunately, we have decided to move forward with other candidates."),
@@ -147,5 +148,21 @@ describe("track_email", () => {
     expect(await status("late")).toBe("confirmed");
     const { data } = await db.from("emails").select("classification").eq("message_id", pin.messageId);
     expect(data).toEqual([{ classification: "confirmation" }]);
+  });
+
+  it("lists employer mail it couldn't sort, and links it once you say what it is", async () => {
+    // From an ATS with wording no rule knows, saved while there was no Claude.
+    const { data: row } = await db
+      .from("emails")
+      .insert({ user_id: userId, message_id: `<${tag}-odd@mail.test>`, received_at: ago(60).toISOString(), from_addr: "no-reply@us.greenhouse-mail.io", subject: `Oddco ${tag} update`, snippet: "We wanted to let you know where things stand.", classification: "other", reason: "no Claude to sort it" })
+      .select("id")
+      .single();
+    const tracked = [{ id: apps.odd, status: "submitted", company: `Oddco ${tag}`, title: "Platform Engineer", submittedAt: null }];
+    expect((await listUnsortedEmails(db, userId, tracked)).map((e) => e.id)).toContain(row!.id);
+
+    await expect(linkEmail(db, userId, row!.id, apps.odd)).rejects.toThrow(/what the email says/);
+    expect(await linkEmail(db, userId, row!.id, apps.odd, "rejection")).toBe("rejected");
+    expect((await listUnsortedEmails(db, userId, tracked)).map((e) => e.id)).not.toContain(row!.id);
+    expect((await listApplicationEmails(db, userId, apps.odd)).map((e) => [e.id, e.kind])).toEqual([[row!.id, "rejection"]]);
   });
 });

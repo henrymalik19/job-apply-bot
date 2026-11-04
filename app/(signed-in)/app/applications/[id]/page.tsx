@@ -26,6 +26,8 @@ import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from ".
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 import { RunnerLog } from "../runner-log";
+import { EmailsCard } from "../emails-card";
+import { listApplicationEmails } from "@/server/modules/tracking/tracking.service";
 import { DetailSkeleton } from "../../../_components/skeletons";
 
 type Params = Promise<{ id: string }>;
@@ -313,7 +315,12 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const { id } = await params;
   const app = await getApplication(db, owner.id, id);
   if (!app) notFound();
-  const [match, resume, runs] = await Promise.all([getJobMatch(db, owner.id, app.job.id), getApplicationResume(db, app.id), listApplyRuns(db, app.id)]);
+  const [match, resume, runs, emails] = await Promise.all([
+    getJobMatch(db, owner.id, app.job.id),
+    getApplicationResume(db, app.id),
+    listApplyRuns(db, app.id),
+    listApplicationEmails(db, owner.id, app.id),
+  ]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
   const now = new Date();
   const blockers = blockingQuestions(app);
@@ -420,6 +427,7 @@ async function ApplicationDetail({ params }: { params: Params }) {
             tone="success"
             collapsible
           />
+          <EmailsCard emails={emails} now={now} />
           <RunnerLog runs={runs} now={now} />
         </div>
         <aside className="flex flex-col gap-6 lg:sticky lg:top-32">
