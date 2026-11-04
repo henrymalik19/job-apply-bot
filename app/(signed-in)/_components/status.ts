@@ -52,6 +52,19 @@ export const APPLY_STEP_TITLE: Record<string, string> = {
 };
 
 /**
+ * Where an application page's back arrow goes: the page you opened it from (`from` is
+ * "applying" or "todo"), otherwise where it lives now (To do before approval, the board after).
+ */
+export function backLink(status: string, applyNote: string | null, from: string | undefined): { href: string; label: string } {
+  if (from === "applying") return { href: "/app/applying", label: "Applying" };
+  if (from === "todo") return { href: todoHref(status, applyNote), label: "To do" };
+  const href = todoHref(status, applyNote);
+  return href.startsWith("/app/todo") && ["queued", "needs_input", "manual"].includes(status)
+    ? { href, label: "To do" }
+    : { href: "/app/applying", label: "Applying" };
+}
+
+/**
  * Where an application is listed, for back links and redirects: a To do lane, or the board for
  * one the apply runner handed back (it leaves a note).
  */

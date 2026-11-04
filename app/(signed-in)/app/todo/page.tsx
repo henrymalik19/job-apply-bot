@@ -258,7 +258,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
                   <TableRow key={a.id}>
                     <TableCell className="text-right align-top"><Badge className="tabular-nums">{a.score ?? "—"}</Badge></TableCell>
                     <TableCell className="max-w-xs whitespace-normal align-top">
-                      <Link href={`/app/applications/${a.id}`} className="font-medium hover:underline">{a.job.title}</Link>
+                      <Link href={`/app/applications/${a.id}?from=todo`} className="font-medium hover:underline">{a.job.title}</Link>
                       <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
                         {a.job.company_name}{a.job.location ? ` · ${a.job.location}` : ""}
                         <SiteBadge source={a.job.source} />

@@ -205,7 +205,7 @@ function CardBody({ card, accent, muted, targets = [], onMove, lifted }: {
         lifted && "w-68 cursor-grabbing shadow-lg ring-1 ring-primary/30",
       )}
     >
-      <Link href={`/app/applications/${card.id}`} draggable={false} className="font-medium leading-snug hover:underline">{card.title}</Link>
+      <Link href={`/app/applications/${card.id}?from=applying`} draggable={false} className="font-medium leading-snug hover:underline">{card.title}</Link>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
         {card.company}
         {card.badge}

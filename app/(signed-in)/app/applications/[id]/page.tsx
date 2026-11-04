@@ -22,7 +22,7 @@ import { ago, formatSalary } from "@/shared/format";
 import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { LiveRefresh } from "../../../_components/live-refresh";
-import { APPLY_STEP_TITLE, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
+import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
 import { EmailsCard } from "../emails-card";
@@ -30,6 +30,7 @@ import { listApplicationEmails } from "@/server/modules/tracking/tracking.servic
 import { DetailSkeleton } from "../../../_components/skeletons";
 
 type Params = Promise<{ id: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 type Flag = { kind: string; excerpt: string; where: string; hidden?: boolean };
 
 /** Colored box per tone for the "next step" callout. */
@@ -309,9 +310,9 @@ function QuestionGroup(props: {
   );
 }
 
-async function ApplicationDetail({ params }: { params: Params }) {
+async function ApplicationDetail({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const app = await getApplication(db, owner.id, id);
   if (!app) notFound();
   const [match, resume, runs, emails] = await Promise.all([
@@ -337,12 +338,13 @@ async function ApplicationDetail({ params }: { params: Params }) {
   const toCheck = app.questions.filter((q) => !yours.includes(q) && (q.bucket === "drafted" || q.needs_check));
   const filled = app.questions.filter((q) => !yours.includes(q) && !toCheck.includes(q));
 
+  const back = backLink(app.status, app.apply_note, typeof query.from === "string" ? query.from : undefined);
   return (
     <div className="flex flex-col gap-6">
       {/* While approved the apply runner may be filling it; other states have answer boxes a refresh could disturb. */}
       {app.status === "approved" && <LiveRefresh everyMs={5000} />}
-      <Link href={todoHref(app.status, app.apply_note)} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
-        <ArrowLeft /> To do
+      <Link href={back.href} className={`${buttonVariants({ variant: "ghost", size: "sm" })} -mb-2 self-start`}>
+        <ArrowLeft /> {back.label}
       </Link>
       {/* Stays at the top while the questions scroll; the negative margins cover the page padding. */}
       <header className="sticky -top-8 z-10 -mx-4 -mt-4 flex flex-wrap items-end justify-between gap-3 border-b bg-background px-4 pt-4 pb-3 md:-mx-8 md:px-8">
@@ -444,11 +446,11 @@ async function ApplicationDetail({ params }: { params: Params }) {
 }
 
 /** One application: what to do next, its questions by who has to act, and the decision, match and resume alongside. */
-export default function ApplicationPage({ params }: { params: Params }) {
+export default function ApplicationPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-4">
       <Suspense fallback={<DetailSkeleton />}>
-        <ApplicationDetail params={params} />
+        <ApplicationDetail params={params} searchParams={searchParams} />
       </Suspense>
     </main>
   );
