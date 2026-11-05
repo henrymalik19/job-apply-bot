@@ -36,6 +36,7 @@ import { SkillCleanup } from "./skill-cleanup";
 import { listSavedAnswers, type SavedAnswer } from "@/server/modules/questions/saved-answers";
 import { SavedAnswersList } from "./saved-answers-list";
 import { SkillRow } from "./skill-row";
+import { SkillsPicker } from "./skills-picker";
 import { scrollingTable } from "../../_components/data-table";
 import { CLEARANCE_LEVELS } from "@/shared/clearance";
 import { FormSkeleton } from "../../_components/skeletons";
@@ -58,6 +59,19 @@ function Field({ label, name, children, className }: { label: string; name: stri
       <Label htmlFor={name}>{label}</Label>
       {children}
     </div>
+  );
+}
+
+/** A group of fields inside a long form: its title and what it's for on the left, the fields on the right. */
+function FieldGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  return (
+    <fieldset className="grid gap-3 border-t pt-5 first-of-type:border-t-0 first-of-type:pt-0 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-6">
+      <div>
+        <legend className="text-sm font-medium">{title}</legend>
+        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
+    </fieldset>
   );
 }
 
@@ -85,7 +99,7 @@ function RemoveButton({ kind, id, label = "Remove" }: { kind: string; id: string
 
 const grid = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
 
-function EmploymentForm({ job }: { job?: Employment }) {
+function EmploymentForm({ job, skillNames }: { job?: Employment; skillNames: string[] }) {
   return (
     <ActionForm action={saveEmploymentAction} submitLabel={job ? "Save job" : "Add job"}>
       {job && <input type="hidden" name="id" value={job.id} />}
@@ -111,8 +125,8 @@ function EmploymentForm({ job }: { job?: Employment }) {
       <Field label="Responsibilities and results (one per line)" name="responsibilities">
         <Textarea id="responsibilities" name="responsibilities" rows={Math.max(3, (job?.responsibilities.length ?? 0) + 1)} defaultValue={job?.responsibilities.map((r) => r.text).join("\n")} />
       </Field>
-      <Field label="Skills used here (comma-separated)" name="skills">
-        <Input id="skills" name="skills" defaultValue={job?.skills.join(", ")} placeholder="TypeScript, AWS, Postgres" />
+      <Field label="Skills used here" name="skills">
+        <SkillsPicker id="skills" name="skills" initial={job?.skills ?? []} known={skillNames} />
       </Field>
     </ActionForm>
   );
@@ -242,6 +256,7 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
   const [data, params, saved] = await Promise.all([getProfile(db, owner.id), searchParams, listSavedAnswers(db, owner.id)]);
   const { profile: p } = data;
   const tab: Tab = (TABS.map((t) => t[0]) as string[]).includes(one(params.tab)) ? (one(params.tab) as Tab) : "basics";
+  const skillNames = data.skills.map((s) => s.name).sort((a, b) => a.localeCompare(b));
   const missingEnd = data.employment.filter((j) => !j.is_current && !j.end_date);
 
   return (
@@ -265,7 +280,13 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
       </nav>
 
       {/* Below the tabs, the tab's content scrolls (wide screens), so the header and tabs stay put. */}
-      <div className="flex flex-col gap-6 md:min-h-0 md:flex-1 md:overflow-y-auto">
+      <div
+        className={cn(
+          "flex flex-col gap-6 md:min-h-0 md:flex-1 md:overflow-y-auto",
+          // Long tabs keep each card whole and scroll; Skills and Saved answers fill the space and scroll inside.
+          (tab === "basics" || tab === "experience") && "*:shrink-0",
+        )}
+      >
 
       {tab === "basics" && (
         <>
@@ -275,32 +296,50 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
           <CardDescription>Used to fill in application forms and at the top of your resume.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ActionForm action={saveProfileAction} submitLabel="Save">
-            <div className={grid}>
-              <Field label="First name" name="first_name"><Input id="first_name" name="first_name" defaultValue={p.first_name ?? ""} /></Field>
-              <Field label="Last name" name="last_name"><Input id="last_name" name="last_name" defaultValue={p.last_name ?? ""} /></Field>
-              <Field label="Preferred name" name="preferred_name"><Input id="preferred_name" name="preferred_name" defaultValue={p.preferred_name ?? ""} /></Field>
-              <Field label="Email" name="email"><Input id="email" name="email" type="email" defaultValue={p.email ?? ""} /></Field>
-              <Field label="Phone" name="phone"><Input id="phone" name="phone" defaultValue={p.phone ?? ""} /></Field>
-              <Field label="City" name="city"><Input id="city" name="city" defaultValue={p.city ?? ""} /></Field>
-              <Field label="State (code)" name="state"><Input id="state" name="state" defaultValue={p.state ?? ""} maxLength={2} placeholder="TX" /></Field>
-              <Field label="Country (code)" name="country"><Input id="country" name="country" defaultValue={p.country} maxLength={2} /></Field>
-              <Field label="Postal code" name="postal_code"><Input id="postal_code" name="postal_code" defaultValue={p.postal_code ?? ""} /></Field>
-              <Field label="LinkedIn URL" name="linkedin_url"><Input id="linkedin_url" name="linkedin_url" defaultValue={p.linkedin_url ?? ""} /></Field>
-              <Field label="GitHub URL" name="github_url"><Input id="github_url" name="github_url" defaultValue={p.github_url ?? ""} /></Field>
-              <Field label="Website URL" name="website_url"><Input id="website_url" name="website_url" defaultValue={p.website_url ?? ""} /></Field>
-              <Field label="Notice period" name="notice_period"><Input id="notice_period" name="notice_period" defaultValue={p.notice_period ?? ""} placeholder="2 weeks" /></Field>
-              <Field label="US security clearance" name="security_clearance">
-                <NativeSelect id="security_clearance" name="security_clearance" defaultValue={p.security_clearance ?? ""}>
-                  <NativeSelectOption value="">Not set</NativeSelectOption>
-                  {Object.entries(CLEARANCE_LEVELS).map(([value, label]) => (
-                    <NativeSelectOption key={value} value={value}>{value === "none" ? "None" : `Active: ${label}`}</NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field label="Headline" name="headline"><Input id="headline" name="headline" defaultValue={p.headline ?? ""} placeholder="Staff Software Engineer" /></Field>
-            </div>
-            <Field label="Summary" name="summary"><Textarea id="summary" name="summary" rows={4} defaultValue={p.summary ?? ""} /></Field>
+          <ActionForm action={saveProfileAction} submitLabel="Save profile" className="gap-5">
+            <FieldGroup title="Name" hint="As it goes on applications.">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="First name" name="first_name"><Input id="first_name" name="first_name" defaultValue={p.first_name ?? ""} /></Field>
+                <Field label="Last name" name="last_name"><Input id="last_name" name="last_name" defaultValue={p.last_name ?? ""} /></Field>
+                <Field label="Preferred name" name="preferred_name"><Input id="preferred_name" name="preferred_name" defaultValue={p.preferred_name ?? ""} placeholder="Optional" /></Field>
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Contact" hint="Where employers reach you.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Email" name="email"><Input id="email" name="email" type="email" defaultValue={p.email ?? ""} /></Field>
+                <Field label="Phone" name="phone"><Input id="phone" name="phone" type="tel" defaultValue={p.phone ?? ""} /></Field>
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Location" hint="Answers &quot;where are you based?&quot; and fits the right work authorization.">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]">
+                <Field label="City" name="city" className="col-span-2 sm:col-span-1"><Input id="city" name="city" defaultValue={p.city ?? ""} /></Field>
+                <Field label="State" name="state"><Input id="state" name="state" defaultValue={p.state ?? ""} maxLength={2} placeholder="TX" /></Field>
+                <Field label="Country" name="country"><Input id="country" name="country" defaultValue={p.country} maxLength={2} placeholder="US" /></Field>
+                <Field label="Postal code" name="postal_code" className="col-span-2 sm:col-span-1"><Input id="postal_code" name="postal_code" defaultValue={p.postal_code ?? ""} /></Field>
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Links" hint="Full addresses, starting with https://.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="LinkedIn" name="linkedin_url" className="sm:col-span-2"><Input id="linkedin_url" name="linkedin_url" type="url" defaultValue={p.linkedin_url ?? ""} placeholder="https://linkedin.com/in/…" /></Field>
+                <Field label="GitHub" name="github_url"><Input id="github_url" name="github_url" type="url" defaultValue={p.github_url ?? ""} placeholder="Optional" /></Field>
+                <Field label="Website" name="website_url"><Input id="website_url" name="website_url" type="url" defaultValue={p.website_url ?? ""} placeholder="Optional" /></Field>
+              </div>
+            </FieldGroup>
+            <FieldGroup title="For applications" hint="Asked on many forms; the summary also tops your resume.">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="Headline" name="headline"><Input id="headline" name="headline" defaultValue={p.headline ?? ""} placeholder="Staff Software Engineer" /></Field>
+                <Field label="Notice period" name="notice_period"><Input id="notice_period" name="notice_period" defaultValue={p.notice_period ?? ""} placeholder="2 weeks" /></Field>
+                <Field label="US security clearance" name="security_clearance">
+                  <NativeSelect id="security_clearance" name="security_clearance" defaultValue={p.security_clearance ?? ""} className="w-full">
+                    <NativeSelectOption value="">Not set</NativeSelectOption>
+                    {Object.entries(CLEARANCE_LEVELS).map(([value, label]) => (
+                      <NativeSelectOption key={value} value={value}>{value === "none" ? "None" : `Active: ${label}`}</NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+              <Field label="Summary" name="summary"><Textarea id="summary" name="summary" rows={4} defaultValue={p.summary ?? ""} placeholder="A few lines at the top of your resume." /></Field>
+            </FieldGroup>
           </ActionForm>
         </CardContent>
       </Card>
@@ -368,14 +407,14 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
                 <span className="text-sm text-muted-foreground">{job.responsibilities.length} responsibilities · {job.skills.length} skills</span>
               </summary>
               <div className="mt-4 flex flex-col gap-3">
-                <EmploymentForm job={job} />
+                <EmploymentForm job={job} skillNames={skillNames} />
                 <div><RemoveButton kind="employments" id={job.id} label="Delete this job" /></div>
               </div>
             </details>
           ))}
           <details className="rounded-lg border border-dashed p-4">
             <summary className="cursor-pointer font-medium">Add a job</summary>
-            <div className="mt-4"><EmploymentForm /></div>
+            <div className="mt-4"><EmploymentForm skillNames={skillNames} /></div>
           </details>
         </CardContent>
       </Card>
