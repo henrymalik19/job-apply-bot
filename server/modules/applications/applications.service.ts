@@ -214,6 +214,60 @@ export async function answerQuestion(
   return { note: reuse.note, movedToReview };
 }
 
+/** Free-text answers stay with their application; short ones are remembered for other forms. */
+const isFreeText = (q: ApplicationQuestion) => q.field_type === "textarea" || q.answer_source === "drafted";
+
+/**
+ * Saves a group of an application's answers in one go (the one Save under each group of questions).
+ * Only what changed is saved, plus answers you're confirming (they were marked to double-check);
+ * blank ones are left as they were. Short answers are remembered for other applications.
+ *
+ * @returns A short note, and whether the application moved to review.
+ * @throws {@link ValidationError} for an option that isn't offered (nothing after it is saved).
+ */
+export async function answerQuestions(
+  db: Db,
+  userId: string,
+  input: { applicationId: string; answers: { questionId: string; answer: string }[] },
+): Promise<{ note: string; movedToReview: boolean }> {
+  const app = await getApplication(db, userId, z.string().uuid().parse(input.applicationId));
+  if (!app) throw new ValidationError("That application is gone; reload the page.");
+  let saved = 0;
+  let remembered = 0;
+  let confirmed = 0;
+  for (const { questionId, answer: raw } of input.answers) {
+    const q = app.questions.find((x) => x.id === questionId);
+    if (!q || !raw.trim()) continue;
+    const { answer, value } = parseAnswer(q, raw);
+    const changed = answer !== q.answer;
+    if (!changed && !q.needs_check && q.bucket !== "needs_user") continue;
+    if (!changed && q.answer != null) {
+      // The same answer, looked at: it's checked.
+      await updateQuestion(db, q.id, { user_approved: true, needs_check: false });
+      if (q.question_id && q.answer_source !== "drafted") await confirmAlias(db, normalize(q.question));
+      confirmed++;
+      continue;
+    }
+    const save = !isFreeText(q);
+    const reuse = save ? await saveForReuse(db, userId, q, answer) : { questionId: q.question_id, note: "" };
+    await updateQuestion(db, q.id, {
+      answer, answer_value: value, bucket: "auto", answer_source: "user", user_approved: true, needs_check: false, reason: null,
+      question_id: reuse.questionId,
+    });
+    saved++;
+    if (reuse.note.startsWith("Saved")) remembered++;
+  }
+  // Read again: a remembered answer can also have filled this application's other questions (and moved it).
+  const fresh = saved > 0 ? await getApplication(db, userId, app.id) : null;
+  const movedToReview = app.status === "needs_input" && !!fresh && (fresh.status === "queued" || blockingQuestions(fresh).length === 0);
+  if (movedToReview && fresh?.status === "needs_input") await transition(db, app.id, "queued", "user:answer");
+  const parts = [
+    saved ? `Saved ${saved} ${saved === 1 ? "answer" : "answers"}${remembered ? ` (${remembered} remembered for other applications)` : ""}.` : "",
+    confirmed ? `Marked ${confirmed} as checked.` : "",
+  ].filter(Boolean);
+  return { note: parts.join(" ") || "Nothing changed.", movedToReview };
+}
+
 /**
  * Approves a queued application (or one that can't be filled automatically, to wait for the
  * apply runner), which confirms the question wordings its

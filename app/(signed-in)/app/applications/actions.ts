@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { ownerContext } from "@/server/auth/require-owner";
 import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthropic/claude";
 import { ValidationError } from "@/server/core/errors";
-import { answerQuestion, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
+import { answerQuestions, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
 import { retryApply } from "@/server/modules/apply/apply.service";
 import { excludeCompany } from "@/server/modules/criteria/criteria.service";
 import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
@@ -13,17 +13,14 @@ import type { FormMessageState } from "../../_components/form-message";
 
 const text = (formData: FormData, name: string) => String(formData.get(name) ?? "");
 
-/** Answers (or edits the answer to) one question; optionally saves it for reuse and as a lesson. */
-export async function answerQuestionAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+/** Saves a group of answers (fields named answer:<question id>) with one Save. */
+export async function answerQuestionsAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { db, owner } = await ownerContext();
+  const answers = [...formData.entries()]
+    .filter(([key]) => key.startsWith("answer:"))
+    .map(([key, value]) => ({ questionId: key.slice("answer:".length), answer: String(value) }));
   try {
-    const result = await answerQuestion(db, owner.id, {
-      applicationId: text(formData, "application_id"),
-      questionId: text(formData, "question_id"),
-      answer: text(formData, "answer"),
-      save: formData.get("save") === "on",
-      lesson: text(formData, "lesson"),
-    });
+    const result = await answerQuestions(db, owner.id, { applicationId: text(formData, "application_id"), answers });
     refresh();
     return { ok: result.movedToReview ? `${result.note} Nothing else is blocking it: moved to Review.` : result.note };
   } catch (err) {
@@ -101,8 +98,8 @@ export async function redraftAction(_prev: FormMessageState, formData: FormData)
       userId: owner.id,
       call: createClaudeCaller(DRAFTING_MODEL),
       applicationId: text(formData, "application_id"),
-      questionId: text(formData, "question_id"),
-      guidance: text(formData, "guidance"),
+      questionId: text(formData, "draft_question") || text(formData, "question_id"),
+      guidance: text(formData, `guidance:${text(formData, "draft_question")}`) || text(formData, "guidance"),
     });
   } catch (err) {
     if (err instanceof ValidationError) return { error: err.message };

@@ -25,6 +25,7 @@ import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
+import { AnswersForm } from "../answers-form";
 import { EmailsCard } from "../emails-card";
 import { listApplicationEmails } from "@/server/modules/tracking/tracking.service";
 import { DetailSkeleton } from "../../../_components/skeletons";
@@ -260,15 +261,17 @@ function QuestionGroup(props: {
   tone?: Tone;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  /** The group's one Save button. */
+  saveLabel?: string;
 }) {
-  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false } = props;
+  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false, saveLabel = "Save answers" } = props;
   if (questions.length === 0) return null;
   const list = (
     <div className="divide-y">
       {questions.map((q) =>
         editable ? (
           <div key={q.id} id={`q-${q.id}`} className="scroll-mt-40">
-            <QuestionForm q={q} applicationId={app.id} showBucket={false} aiAllowed={aiAllowed(q)} />
+            <QuestionForm q={q} showBucket={false} aiAllowed={aiAllowed(q)} />
           </div>
         ) : (
           <div key={q.id} className="py-3 text-sm"><span className="font-medium">{q.question}</span>: {q.answer ?? "—"}</div>
@@ -276,6 +279,7 @@ function QuestionGroup(props: {
       )}
     </div>
   );
+  const body = editable ? <AnswersForm applicationId={app.id} saveLabel={saveLabel}>{list}</AnswersForm> : list;
   const heading = (
     <span className="flex items-center gap-2">
       <span className="font-semibold">{title}</span>
@@ -294,7 +298,7 @@ function QuestionGroup(props: {
                 <span className="text-sm text-muted-foreground">{hint}</span>
               </span>
             </summary>
-            <div className="mt-2">{list}</div>
+            <div className="mt-2">{body}</div>
           </details>
         </CardContent>
       ) : (
@@ -303,7 +307,7 @@ function QuestionGroup(props: {
             <CardTitle>{heading}</CardTitle>
             <CardDescription>{hint}</CardDescription>
           </CardHeader>
-          <CardContent>{list}</CardContent>
+          <CardContent>{body}</CardContent>
         </>
       )}
     </Card>
@@ -413,6 +417,7 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
             questions={toCheck}
             app={app}
             editable={editable}
+            saveLabel="Save and mark checked"
             aiAllowed={aiAllowed}
             tone="info"
             collapsible

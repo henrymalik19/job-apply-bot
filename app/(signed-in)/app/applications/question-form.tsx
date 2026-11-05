@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApplicationQuestion, QuestionOption } from "@/server/modules/applications/applications.service";
-import { AnswerForm } from "./answer-form";
+import { DraftControls } from "./answers-form";
 
 const BUCKET_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   auto: { label: "filled", variant: "secondary" },
@@ -34,7 +34,7 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
   if (q.field_type === "select" || q.field_type === "multiselect") {
     const selected = Array.isArray(current) ? String(current[0] ?? "") : current == null ? "" : String(current);
     return (
-      <NativeSelect name="answer" defaultValue={selected} aria-label={q.question} className="max-w-xl">
+      <NativeSelect name={`answer:${q.id}`} defaultValue={selected} aria-label={q.question} className="max-w-xl">
         <NativeSelectOption value="">Pick an answer</NativeSelectOption>
         {options.map((o) => <NativeSelectOption key={o.value} value={o.value}>{o.label}</NativeSelectOption>)}
       </NativeSelect>
@@ -42,7 +42,7 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
   }
   if (q.field_type === "boolean") {
     return (
-      <NativeSelect name="answer" defaultValue={current === true ? "yes" : current === false ? "no" : ""} aria-label={q.question} className="w-40">
+      <NativeSelect name={`answer:${q.id}`} defaultValue={current === true ? "yes" : current === false ? "no" : ""} aria-label={q.question} className="w-40">
         <NativeSelectOption value="">Pick</NativeSelectOption>
         <NativeSelectOption value="yes">Yes</NativeSelectOption>
         <NativeSelectOption value="no">No</NativeSelectOption>
@@ -50,20 +50,20 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
     );
   }
   if (q.field_type === "textarea") {
-    return <Textarea name="answer" rows={Math.max(3, Math.ceil((q.answer?.length ?? 0) / 100))} defaultValue={q.answer ?? ""} aria-label={q.question} />;
+    return <Textarea name={`answer:${q.id}`} rows={Math.max(3, Math.ceil((q.answer?.length ?? 0) / 100))} defaultValue={q.answer ?? ""} aria-label={q.question} />;
   }
-  return <Input name="answer" defaultValue={q.answer ?? ""} aria-label={q.question} className="max-w-xl" />;
+  return <Input name={`answer:${q.id}`} defaultValue={q.answer ?? ""} aria-label={q.question} className="max-w-xl" />;
 }
 
 /**
- * One application question: label, status badges and why it needs you, plus
- * an answer form (except for file uploads and "do it yourself" steps).
+ * One application question: label, status badges and why it needs you, plus its answer input
+ * (except for file uploads and "do it yourself" steps), saved by its group's one Save.
  *
  * @param showBucket - Show the filled/drafted/needs-you badge (off where questions are already grouped by it).
  * @param aiAllowed - False when the employer restricts AI use: drafting stays available, with a heads-up.
  */
-export function QuestionForm(props: { q: ApplicationQuestion; applicationId: string; showBucket?: boolean; aiAllowed?: boolean }) {
-  const { q, applicationId, showBucket = true, aiAllowed = false } = props;
+export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boolean; aiAllowed?: boolean }) {
+  const { q, showBucket = true, aiAllowed = false } = props;
   const freeText = q.field_type === "textarea" || q.answer_source === "drafted";
   const bucket = BUCKET_LABEL[q.bucket] ?? { label: q.bucket, variant: "outline" as const };
   const source = sourceLabel(q);
@@ -81,10 +81,11 @@ export function QuestionForm(props: { q: ApplicationQuestion; applicationId: str
       {!editable ? (
         <p className="text-sm">{q.answer ?? <span className="text-muted-foreground">Nothing to fill in here.</span>}</p>
       ) : (
-        <AnswerForm applicationId={applicationId} questionId={q.id} hasAnswer={!!q.answer} canDraft={freeText}>
+        <>
           {/* Keyed by the answer so a new AI draft replaces what the box shows. */}
           <AnswerInput key={q.answer ?? ""} q={q} />
-        </AnswerForm>
+          {freeText && <DraftControls questionId={q.id} hasAnswer={!!q.answer} />}
+        </>
       )}
       {editable && freeText && !aiAllowed && (
         <p className="text-xs text-warning">Heads-up: this employer asks applicants not to use AI. Drafting is up to you.</p>
