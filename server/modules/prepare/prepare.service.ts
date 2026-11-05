@@ -72,8 +72,10 @@ const INTERRUPTED_AFTER_MS = 60 * 60 * 1000;
  * open questions sorted again, once (see {@link recheckOpenQuestions}).
  *
  * 1: consents and "worked here before" as saved answers, the clearance field, follow-up questions.
+ * 2: a question is never left for the Chrome window just because the answer isn't known; age, citizenship,
+ *    residence, current employer and contractor history as saved answers.
  */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** A classifier pick below this confidence isn't saved as an alias and goes to the owner. */
 export const ALIAS_CONFIDENCE = 0.8;
@@ -464,10 +466,9 @@ async function applyClassification(
     case "attestation":
       return { bucket: "needs_user", reason: "attestations are always answered by you" };
     case "cannot_automate":
-      // A question with options to pick can always be answered, by you if not from the profile.
-      return q.options.length > 0
-        ? { bucket: "needs_user", reason: c.reason }
-        : { bucket: "cannot_automate", reason: c.reason };
+      // Every field here takes a typed or picked answer (files were sorted out before), so you answer it in the
+      // app and the runner fills it; nothing is left to do by hand in the Chrome window.
+      return { bucket: "needs_user", reason: c.reason };
     case "qualification": {
       const supported = c.qualification_answer === "yes" && c.supporting_facts.some((n) => n >= 1 && n <= ctx.facts.length);
       const shaped = supported ? shapeAnswer(q, true) : null;
@@ -835,7 +836,8 @@ export async function recheckOpenQuestions(
           needs_check: result.needs_check ?? false, reason: result.reason ?? null, question_id: result.question_id ?? r.question_id,
         });
         did.answered++;
-      } else if (result.bucket === "needs_user" && r.bucket === "cannot_automate") {
+      } else if (result.bucket === "needs_user" && r.bucket === "cannot_automate" && app.status !== "approved") {
+        // (An approved one keeps it as a step in the Chrome window: the runner would stop at an unanswered question.)
         await updateQuestion(db, r.id, { bucket: "needs_user", reason: result.reason ?? null, question_id: result.question_id ?? r.question_id });
         did.answerable++;
       } else if (result.question_id && result.question_id !== r.question_id) {
@@ -845,9 +847,13 @@ export async function recheckOpenQuestions(
     }
 
     const after = unwrap(await db.from("application_questions").select("required, bucket").eq("application_id", app.id), "read rechecked questions");
-    if (app.status === "needs_input" && !after.some((q) => q.required && q.bucket === "needs_user")) {
+    const blocked = after.some((q) => q.required && q.bucket === "needs_user");
+    if (app.status === "needs_input" && !blocked) {
       await transition(db, app.id, "queued", "worker:recheck");
       did.moved = true;
+    } else if (app.status === "queued" && blocked) {
+      // A step once left for the Chrome window is now a question for you here: it waits on your answer.
+      await transition(db, app.id, "needs_input", "worker:recheck");
     }
 
     counts.answered += did.answered;

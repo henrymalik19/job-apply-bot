@@ -109,4 +109,26 @@ describe("recheck open questions", () => {
     expect(again.applications).toBe(0);
     expect(asked).toHaveLength(1);
   });
+
+  it("makes a yes/no Claude can't answer a question for you, not a step in Chrome, and holds it for your answer", async () => {
+    const current = `Are you currently working with Recheckco ${tag}?`;
+    await addApp("chrome", [{ question: current, field_name: "q1", field_type: "boolean", options: null, bucket: "cannot_automate", reason: "no catalog match" }], "queued");
+    // Claude still calls it something only you can do.
+    const unsure: StructuredCall = async ({ user }) => ({
+      output: {
+        questions: [...user.matchAll(/^\[(\d+)\]/gm)].map(([, i]) => ({
+          index: Number(i), kind: "cannot_automate", question_key: null, new_question: null, skill: null, polarity: "same",
+          confidence: 0.6, qualification_answer: "unknown", supporting_facts: [], reason: "needs the candidate",
+        })),
+      } as never,
+      model: "claude-haiku-5-5",
+      usage: { input_tokens: 100, output_tokens: 20 },
+    });
+    const counts = await recheckOpenQuestions({ db, userId, call: unsure }, { applicationIds: [apps.chrome] });
+    expect(counts).toMatchObject({ applications: 1, answerable: 1 });
+    const { data: row } = await db.from("application_questions").select("bucket").eq("application_id", apps.chrome).single();
+    expect(row!.bucket).toBe("needs_user");
+    const { data: app } = await db.from("applications").select("status").eq("id", apps.chrome).single();
+    expect(app!.status).toBe("needs_input");
+  });
 });

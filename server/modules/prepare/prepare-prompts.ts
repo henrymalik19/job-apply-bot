@@ -86,12 +86,14 @@ export function buildClassifyPrompt(input: {
 For each question, pick one kind:
 - "catalog": a fact or preference about the candidate that has one answer for every employer: work authorization,
   sponsorship, salary expectation, location, notice period, start date, relocation, links, contact details,
-  how they heard about the role, years of experience with one named skill, whether they've worked at this
+  how they heard about the role, being over 18, citizenship or passport country, country of residence, current
+  employer and title, years of experience with one named skill, whether they've worked at this
   company before (previously_employed_here, even when the question names the company: "Are you a former Rula
   employee?"), and standing consents asked the same
   way everywhere: willingness to undergo a background check or drug screen, acknowledging a privacy policy or
   data processing notice, certifying that the application is true and complete. A question about the candidate's history with the
-  employer (worked there, applied before, relatives or referrals there) is catalog even when it names the company:
+  employer (worked there, works there now, worked there through an agency or as a contractor, applied before,
+  relatives or referrals there) is catalog even when it names the company:
   use the general key (previously_employed_here; for a new one, e.g. previously_applied_here), never one named for
   the company, and ask about "this company" in its label. Set question_key to the key in
   <catalog> that asks the same thing; only if none does, set new_question with a short snake_case key, a
@@ -112,7 +114,8 @@ For each question, pick one kind:
   or a live action. A question about the candidate themselves (their habits, preferences or opinions, such as
   "How do you use AI tools today?") is never cannot_automate, even when the profile doesn't answer it, and
   neither is a consent or willingness question (agreeing to a background check is a saved answer, not a live
-  action).
+  action). Not knowing the answer is never a reason for cannot_automate: a question the candidate could answer
+  in words or by picking an option is catalog (with new_question when none fits), qualification or open_ended.
 
 confidence is 0 to 1: how sure you are of the kind and catalog question. reason is one short line.
 
