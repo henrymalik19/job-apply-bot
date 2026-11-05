@@ -27,3 +27,22 @@ export async function spendSince(db: Db, userId: string, since: Date): Promise<n
     if (rows.length < 1000) return total;
   }
 }
+
+/** Each LLM call's purpose, job and cost since a time, paged past the 1,000-row limit. */
+export async function spendRowsSince(db: Db, userId: string, since: Date): Promise<{ purpose: string; job_id: string | null; cost_usd: number }[]> {
+  const out: { purpose: string; job_id: string | null; cost_usd: number }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = unwrap(
+      await db
+        .from("llm_calls")
+        .select("purpose, job_id, cost_usd")
+        .eq("user_id", userId)
+        .gte("created_at", since.toISOString())
+        .order("id")
+        .range(from, from + 999),
+      "list llm spend",
+    );
+    for (const r of rows) out.push({ purpose: r.purpose, job_id: r.job_id, cost_usd: Number(r.cost_usd) });
+    if (rows.length < 1000) return out;
+  }
+}

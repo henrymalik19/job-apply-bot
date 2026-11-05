@@ -72,7 +72,7 @@ export async function mapOpenFields(
   db: Db,
   userId: string,
   call: StructuredCall,
-  input: { company: string; title: string; fields: OpenField[] },
+  input: { company: string; title: string; jobId?: string; fields: OpenField[] },
   now = new Date(),
 ): Promise<FieldAnswer[]> {
   const theirs = (f: OpenField, category: FieldAnswer["category"], reason: string): FieldAnswer => ({ key: f.key, value: null, category, reason });
@@ -85,7 +85,7 @@ export async function mapOpenFields(
   const profile = await getProfile(db, userId);
   const facts = profileLines(profile, now).map((f) => `[${f.category}] ${f.fact}`);
   const res = await call({ ...buildMapFieldsPrompt({ facts, company: input.company, title: input.title, fields: ask }), schema: mapFieldsSchema, maxTokens: 2000 });
-  await recordUsage(db, userId, { purpose: "map_fields", model: res.model, usage: res.usage });
+  await recordUsage(db, userId, { purpose: "map_fields", model: res.model, usage: res.usage, jobId: input.jobId ?? null });
   const byIndex = new Map((res.output?.answers ?? []).map((a) => [a.index, a]));
   return [
     ...answers,

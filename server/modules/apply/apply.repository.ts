@@ -15,6 +15,8 @@ export type Platform = Row<"platforms">;
 export type ApplyJob = {
   id: string;
   user_id: string;
+  /** The job, so a Claude call the runner asks for counts toward this application's cost. */
+  job_id?: string;
   job: { title: string; company_name: string; source: string; external_id: string; board_token: string | null };
   questions: Row<"application_questions">[];
   resume: { pdf_path: string | null; sha256: string | null } | null;
@@ -31,7 +33,7 @@ export async function listReadyToApply(db: Db, userId: string, ats: readonly str
   const rows = unwrap(
     await db
       .from("applications")
-      .select("id, user_id, jobs!inner(title, company_name, source, external_id, companies(board_token)), application_questions(*), resumes(pdf_path, sha256)")
+      .select("id, user_id, job_id, jobs!inner(title, company_name, source, external_id, companies(board_token)), application_questions(*), resumes(pdf_path, sha256)")
       .eq("user_id", userId)
       .eq("status", "approved")
       .is("apply_step", null)

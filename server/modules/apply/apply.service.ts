@@ -84,7 +84,7 @@ export type ApplyDeps = {
    * Answers required fields the form still has empty, from your profile (Claude, on the server).
    * Without it they're left to you.
    */
-  mapFields?: (input: { company: string; title: string; fields: OpenField[] }) => Promise<FieldAnswer[]>;
+  mapFields?: (input: { company: string; title: string; jobId?: string; fields: OpenField[] }) => Promise<FieldAnswer[]>;
   /** How long to wait for the user to submit (default 30 minutes). */
   waitMs?: number;
   /** How often to look at the page while waiting (default 2 seconds). */
@@ -240,7 +240,7 @@ async function fillOpenFields(deps: ApplyDeps, app: ApplyJob, filled: FillStep[]
   }
 
   const answers = ask.length && deps.mapFields
-    ? await deps.mapFields({ company: app.job.company_name, title: app.job.title, fields: ask }).catch((err) => {
+    ? await deps.mapFields({ company: app.job.company_name, title: app.job.title, jobId: app.job_id, fields: ask }).catch((err) => {
         deps.log(`${app.id}: couldn't ask Claude about the open fields: ${(err as Error).message}`);
         return [] as FieldAnswer[];
       })

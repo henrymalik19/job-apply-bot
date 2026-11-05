@@ -13,6 +13,7 @@ import { serverEnv } from "@/shared/env";
 const body = z.object({
   company: z.string().max(200),
   title: z.string().max(300),
+  jobId: z.string().uuid().optional(),
   fields: z
     .array(
       z.object({

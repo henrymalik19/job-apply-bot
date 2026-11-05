@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadMatchingHealth } from "@/server/modules/matching/matching.service";
+import { getSpendSummary, type SpendSummary } from "@/server/modules/usage/usage.service";
 import { formatMinutes, loadDiscoveryHealth, loadWorkerHealth, type WorkerHealth } from "@/server/modules/runs/runs.service";
 import { serverEnv } from "@/shared/env";
 import { ago } from "@/shared/format";
@@ -22,6 +23,9 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString();
+
+/** Dollars, with enough places that a fraction of a cent still shows. */
+const usd = (v: number | null) => (v == null ? "—" : `$${v < 0.1 ? v.toFixed(3) : v.toFixed(2)}`);
 
 /** What a worker's last run did, in a few words. */
 function runSummary(w: WorkerHealth): string {
@@ -50,10 +54,11 @@ function runSummary(w: WorkerHealth): string {
 async function Health({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
   const now = new Date();
-  const [{ boards }, workers, matching, params] = await Promise.all([
+  const [{ boards }, workers, matching, spend, params] = await Promise.all([
     loadDiscoveryHealth(db, owner.id, now),
     loadWorkerHealth(db, owner.id, now),
     loadMatchingHealth(db, owner.id, now),
+    getSpendSummary(db, owner.id, now),
     searchParams,
   ]);
   const canRun = !!serverEnv().RAILWAY_TOKEN;
@@ -85,8 +90,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
           <CardTitle>Workers</CardTitle>
           <CardDescription>
             Each runs on its own Railway schedule (UTC) and is flagged after two missed runs. Run now starts one off schedule
-            (notify also checks the job inbox). Claude spend this month: $
-            {matching.spend.spent.toFixed(2)} of ${matching.spend.cap.toFixed(2)}.
+            (notify also checks the job inbox).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -128,6 +132,8 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
           </Table>
         </CardContent>
       </Card>
+
+      <SpendCard spend={spend} />
 
       <Card className={scrollingTable.card}>
         <CardHeader>
@@ -185,6 +191,61 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+/** This month's Claude spend: per application, per scored job, and by kind of call. */
+function SpendCard({ spend }: { spend: SpendSummary & { cap: number; applicationsLeft: number | null } }) {
+  const stats = [
+    { label: "Per application", value: usd(spend.perApplication), hint: `preparing and filling, over ${n(spend.applications)} this month` },
+    { label: "Per application, all in", value: usd(spend.allInPerApplication), hint: "everything this month, scoring and email too" },
+    { label: "Per job scored", value: usd(spend.perScore), hint: `${n(spend.scored)} jobs scored` },
+    {
+      label: "Room left",
+      value: spend.applicationsLeft == null ? "—" : `~${n(spend.applicationsLeft)}`,
+      hint: "more applications at this month's rate",
+    },
+  ];
+  return (
+    <Card className="shrink-0">
+      <CardHeader>
+        <CardTitle>Claude spend</CardTitle>
+        <CardDescription>
+          {usd(spend.total)} of {usd(spend.cap)} this month. Past the cap, scoring and preparing pause until the 1st.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">{s.label}</div>
+              <div className="text-xl font-semibold tabular-nums">{s.value}</div>
+              <div className="text-xs text-muted-foreground">{s.hint}</div>
+            </div>
+          ))}
+        </div>
+        {spend.byPurpose.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>For</TableHead>
+                <TableHead className="text-right">Calls</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {spend.byPurpose.map((p) => (
+                <TableRow key={p.purpose}>
+                  <TableCell className="whitespace-normal">{p.label}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(p.calls)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{usd(p.cost)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
