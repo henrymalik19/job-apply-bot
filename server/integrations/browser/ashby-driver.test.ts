@@ -72,5 +72,14 @@ describe.skipIf(!browser)("ashbyDriver", () => {
     await driver.submit();
     await page.waitForSelector("text=Thank you for applying");
     expect(await driver.confirmation()).toMatch(/successfully submitted/);
+    expect(await driver.refused?.()).toBeNull();
   }, 30_000);
+
+  it("reads the banner when Ashby won't take a submission", async () => {
+    const driver = ashbyDriver(page, 15_000, INSTANT);
+    await page.setContent(
+      '<div role="alert"><p>We couldn’t submit your application</p><p>Your application submission was flagged as possible spam. If you believe this was a mistake, please submit your application again.</p></div>',
+    );
+    expect(await driver.refused?.()).toMatch(/^Your application submission was flagged as possible spam/);
+  });
 });

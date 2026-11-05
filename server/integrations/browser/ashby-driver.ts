@@ -14,6 +14,9 @@ import { scanOpenFields } from "./open-fields";
 import { countryName, resolvePlace } from "@/server/modules/criteria/places";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+/** Ashby's banner when it won't take a submission (its spam check, say): the heading, then what it says. */
+const REFUSED = /we couldn.t submit your application\s+([^\n]+)/i;
+
 const CONFIRMED = /thank(s| you) for (applying|your (application|interest))|application (has been |was )?(successfully )?(received|submitted)/i;
 
 /**
@@ -193,6 +196,12 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
       if ((await fields.count().catch(() => 1)) > 0) return null;
       const text = await page.locator("body").innerText().catch(() => "");
       return CONFIRMED.test(text) ? text.trim() : null;
+    },
+
+    async refused() {
+      if (page.isClosed()) return null;
+      const text = await page.locator("body").innerText().catch(() => "");
+      return REFUSED.exec(text)?.[1]?.trim() ?? null;
     },
 
     async submit() {

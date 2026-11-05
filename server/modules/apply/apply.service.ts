@@ -54,6 +54,11 @@ export interface FormDriver {
   enterEmailCode(code: string): Promise<boolean>;
   /** The page says the application was received; its text, or null. */
   confirmation(): Promise<string | null>;
+  /**
+   * The site refused the submission (Ashby's "flagged as possible spam"): what it said, or null.
+   * The runner never tries to get past this; it hands the application back.
+   */
+  refused?(): Promise<string | null>;
   /** Clicks the form's submit button. */
   submit(): Promise<void>;
   screenshot(): Promise<Uint8Array>;
@@ -168,6 +173,8 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
     if (driver.closed()) return { closed: true as const };
     const text = await driver.confirmation();
     if (text != null) return { text, last };
+    const refused = await driver.refused?.().catch(() => null);
+    if (refused) return { refused };
     if (platform.mode === "auto" && !askedForCheck && (await driver.challenge())) {
       // A check after an automatic submit is the user's to complete, never the runner's.
       askedForCheck = true;
@@ -395,6 +402,9 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const extraSteps = [...extra.learned, ...extra.ai].map((e) => e.step);
   const waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, yours || left.length ? YOUR_STEPS_WAIT_MS : undefined);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
+  if ("refused" in waited) {
+    return fail(`The site didn't take the submission: "${waited.refused}" Submit it from your own browser (the answers are below), then click I applied.`);
+  }
   if ("timedOut" in waited) return { ...(await fail(`Nobody submitted the form within ${yours ? "an hour" : "30 minutes"}.`)), closeTab: true };
 
   const changed = platform.mode === "auto" ? [] : changedFields(prepared, waited.last);

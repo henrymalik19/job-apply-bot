@@ -63,7 +63,7 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean; yo
  * A browser that fills everything and confirms on the second look, optionally with the user's
  * edits, a CAPTCHA, fields it can't fill, or nobody ever submitting.
  */
-function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[]; rejects?: Record<string, string> } = {}) {
+function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[]; rejects?: Record<string, string>; refused?: string } = {}) {
   const filled: Record<string, string> = {};
   const submits: number[] = [];
   let looks = 0;
@@ -82,7 +82,8 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
     challenge: async () => opts.challenge ?? false,
     emailCode: async () => false,
     enterEmailCode: async () => true,
-    confirmation: async () => (!opts.neverSubmitted && ++looks > 1 ? "Thank you for applying." : null),
+    confirmation: async () => (!opts.neverSubmitted && !opts.refused && ++looks > 1 ? "Thank you for applying." : null),
+    refused: async () => opts.refused ?? null,
     submit: async () => {
       submits.push(Date.now());
     },
@@ -194,6 +195,16 @@ describe("apply runner", () => {
     expect(filled).toHaveProperty("question_9", "No");
     const { data: evidence } = await db.from("application_evidence_items").select("detail").eq("application_id", id).eq("kind", "screenshot").single();
     expect(evidence?.detail).toMatchObject({ left_for_you: ["First Name"] });
+  });
+
+  it("hands back, without trying again, when the site refuses the submission", async () => {
+    const id = await addApproved("refused");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const { driver, submits } = fakeDriver({ refused: "Your application submission was flagged as possible spam." });
+    const outcome = await applyOne(deps(driver), job);
+    expect(outcome).toMatchObject({ result: "handed_back", reason: expect.stringContaining("flagged as possible spam") });
+    expect(submits).toEqual([]);
+    expect(await app(id)).toMatchObject({ status: "manual", apply_note: expect.stringContaining("Submit it from your own browser") });
   });
 
   it("hands back and closes the tab when nobody submits in time", async () => {
