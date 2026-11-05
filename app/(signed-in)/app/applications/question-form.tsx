@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApplicationQuestion, QuestionOption } from "@/server/modules/applications/applications.service";
+import { asCountryName, COUNTRY_HINT, COUNTRY_QUESTION_KEYS, countryNames } from "@/shared/countries";
 import { DraftControls } from "./answers-form";
 
 const BUCKET_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -27,10 +28,26 @@ function sourceLabel(q: ApplicationQuestion): string | null {
   }
 }
 
+/** A country question the form asks as a text box: picked from the list, so it reads right on every form. */
+const countryKey = (q: ApplicationQuestion) =>
+  q.questions?.key && COUNTRY_QUESTION_KEYS.has(q.questions.key) && !["select", "multiselect", "boolean"].includes(q.field_type ?? "") ? q.questions.key : null;
+
 /** The input for one question, by its field type. */
 function AnswerInput({ q }: { q: ApplicationQuestion }) {
   const options = (q.options as QuestionOption[] | null) ?? [];
   const current = q.answer_value;
+  if (countryKey(q)) {
+    // An answer that isn't a country in the list ("Atlanta, GA") stays picked, so saving doesn't lose it.
+    const named = asCountryName(q.answer);
+    const other = q.answer && !named ? q.answer : null;
+    return (
+      <NativeSelect name={`answer:${q.id}`} defaultValue={named ?? other ?? ""} aria-label={q.question} className="max-w-xl">
+        <NativeSelectOption value="">Pick a country</NativeSelectOption>
+        {other && <NativeSelectOption value={other}>{other}</NativeSelectOption>}
+        {countryNames().map((n) => <NativeSelectOption key={n} value={n}>{n}</NativeSelectOption>)}
+      </NativeSelect>
+    );
+  }
   if (q.field_type === "select" || q.field_type === "multiselect") {
     const selected = Array.isArray(current) ? String(current[0] ?? "") : current == null ? "" : String(current);
     return (
@@ -93,6 +110,7 @@ export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boole
         <>
           {/* Keyed by the answer so a new AI draft replaces what the box shows. */}
           <AnswerInput key={q.answer ?? ""} q={q} />
+          {countryKey(q) && <p className="text-xs text-muted-foreground">{COUNTRY_HINT[countryKey(q)!]}</p>}
           {freeText && <DraftControls questionId={q.id} hasAnswer={!!q.answer} />}
         </>
       )}

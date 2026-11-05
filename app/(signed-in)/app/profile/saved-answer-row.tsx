@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import type { AnswerKind, SavedAnswer } from "@/server/modules/questions/saved-answers";
+import { asCountryName, countryNames } from "@/shared/countries";
 import type { FormMessageState } from "../../_components/form-message";
 import { deleteSavedAnswerAction, saveSavedAnswerAction } from "./actions";
 
@@ -17,6 +18,7 @@ const KIND_LABEL: Record<AnswerKind, string> = {
   range: "Range",
   short: "Text",
   long: "Long text",
+  country: "Country",
 };
 
 /** Saves when a typed value is left changed (or on Enter, except in a long text box). */
@@ -36,6 +38,17 @@ function saveOnLeave(save: () => void, enter = true) {
 
 /** The answer's input, by kind: a Yes/No pick, number boxes, or a one-line or several-row text box. */
 function AnswerInput({ a, save }: { a: SavedAnswer; save: () => void }) {
+  if (a.kind === "country") {
+    // Saved before the list ("American"): shown as its country when it names one, kept as it is otherwise.
+    const named = asCountryName(a.shown);
+    const other = named ? null : a.shown || null;
+    return (
+      <NativeSelect name="answer" defaultValue={named ?? other ?? ""} aria-label={a.label} className="w-64" onChange={save}>
+        {other && <NativeSelectOption value={other}>{other}</NativeSelectOption>}
+        {countryNames().map((n) => <NativeSelectOption key={n} value={n}>{n}</NativeSelectOption>)}
+      </NativeSelect>
+    );
+  }
   if (a.kind === "yes_no") {
     return (
       <NativeSelect name="answer" defaultValue={/^yes$/i.test(a.shown) ? "Yes" : "No"} aria-label={a.label} className="w-28" onChange={save}>

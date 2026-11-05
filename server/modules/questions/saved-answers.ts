@@ -2,6 +2,7 @@
 // undergo a background check?", "How did you hear about us?"), reused on every form that asks. Profile >
 // Saved answers lists them to check, change or delete.
 import { z } from "zod";
+import { COUNTRY_QUESTION_KEYS } from "@/shared/countries";
 import type { Db, Json } from "@/server/db/types";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
 import { storedValue } from "@/server/modules/applications/applications.service";
@@ -9,6 +10,8 @@ import { storedValue } from "@/server/modules/applications/applications.service"
 /** One saved answer, with its question. */
 export type SavedAnswer = {
   questionId: string;
+  /** The catalog question's key. */
+  key: string;
   label: string;
   category: string;
   answerType: string;
@@ -21,7 +24,7 @@ export type SavedAnswer = {
 };
 
 /** How a saved answer is edited. */
-export type AnswerKind = "yes_no" | "number" | "range" | "short" | "long";
+export type AnswerKind = "yes_no" | "number" | "range" | "short" | "long" | "country";
 
 /** A text answer longer than this (or on several lines) gets a box of several rows. */
 const LONG_TEXT = 80;
@@ -48,16 +51,17 @@ export function shownAnswer(answerType: string, value: Json): string {
 /** Your saved answers, by question label. */
 export async function listSavedAnswers(db: Db, userId: string): Promise<SavedAnswer[]> {
   const rows = unwrap(
-    await db.from("question_answers").select("question_id, value, updated_at, questions!inner(label, category, answer_type)").eq("user_id", userId),
+    await db.from("question_answers").select("question_id, value, updated_at, questions!inner(key, label, category, answer_type)").eq("user_id", userId),
     "list saved answers",
-  ) as unknown as { question_id: string; value: Json; updated_at: string; questions: { label: string; category: string; answer_type: string } }[];
+  ) as unknown as { question_id: string; value: Json; updated_at: string; questions: { key: string; label: string; category: string; answer_type: string } }[];
   return rows
     .map((r) => ({
       ...(() => {
         const shown = shownAnswer(r.questions.answer_type, r.value);
-        return { shown, kind: answerKind(r.questions.answer_type, shown) };
+        return { shown, kind: COUNTRY_QUESTION_KEYS.has(r.questions.key) ? ("country" as const) : answerKind(r.questions.answer_type, shown) };
       })(),
       questionId: r.question_id,
+      key: r.questions.key,
       label: r.questions.label,
       category: r.questions.category,
       answerType: r.questions.answer_type,

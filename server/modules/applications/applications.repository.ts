@@ -79,8 +79,8 @@ export type ApplicationJob = Pick<
   "id" | "title" | "company_name" | "company_id" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency" | "posted_at" | "url" | "apply_url" | "closed_at" | "source"
 >;
 
-/** A question row of an application. */
-export type ApplicationQuestion = Row<"application_questions">;
+/** A question row of an application, with the key of the catalog question it's linked to. */
+export type ApplicationQuestion = Row<"application_questions"> & { questions?: { key: string } | null };
 
 /** One application with its job, score and questions. */
 export type ApplicationWithDetails = Application & {
@@ -107,7 +107,7 @@ export async function listApplications(db: Db, userId: string, statuses: readonl
   const rows = unwrap(
     await db
       .from("applications")
-      .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*)`)
+      .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*, questions(key))`)
       .eq("user_id", userId)
       .in("status", [...statuses])
       .order("created_at", { ascending: false }),
@@ -125,7 +125,7 @@ export async function listApplications(db: Db, userId: string, statuses: readonl
 export async function getApplication(db: Db, userId: string, id: string, opts: { fresh?: boolean } = {}): Promise<ApplicationWithDetails | null> {
   let query = db
     .from("applications")
-    .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*)`)
+    .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*, questions(key))`)
     .eq("user_id", userId)
     .eq("id", id);
   // A read with its own abort signal isn't shared with an earlier identical one.
