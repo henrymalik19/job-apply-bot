@@ -15,8 +15,10 @@ import { confirmAlias, ensureQuestion, insertAlias, listAliases, listQuestions, 
 import { normalize } from "@/shared/text";
 import {
   getApplication,
+  listMatchedChecks,
   listOpenQuestions,
   listTransitions,
+  markChecked,
   transition,
   updateQuestion,
   type ApplicationQuestion,
@@ -237,6 +239,7 @@ export async function answerQuestions(
   let saved = 0;
   let remembered = 0;
   let confirmed = 0;
+  const confirmedWordings = new Map<string, string>();
   for (const { questionId, answer: raw } of input.answers) {
     const q = app.questions.find((x) => x.id === questionId);
     if (!q || !raw.trim()) continue;
@@ -247,7 +250,7 @@ export async function answerQuestions(
       if (!input.confirmUnchanged || !q.needs_check) continue;
       // The same answer, looked at: it's checked.
       await updateQuestion(db, q.id, { user_approved: true, needs_check: false });
-      if (q.question_id && q.answer_source !== "drafted") await confirmAlias(db, normalize(q.question));
+      if (q.question_id && q.answer_source !== "drafted") confirmedWordings.set(normalize(q.question), q.question_id);
       confirmed++;
       continue;
     }
@@ -260,6 +263,7 @@ export async function answerQuestions(
     saved++;
     if (reuse.note.startsWith("Saved")) remembered++;
   }
+  const alsoCleared = await confirmWordings(db, userId, confirmedWordings, app.id);
   // Read again: a remembered answer can also have filled this application's other questions (and moved it).
   const fresh = saved > 0 ? await getApplication(db, userId, app.id) : null;
   const movedToReview = app.status === "needs_input" && !!fresh && (fresh.status === "queued" || blockingQuestions(fresh).length === 0);
@@ -267,6 +271,7 @@ export async function answerQuestions(
   const parts = [
     saved ? `Saved ${saved} ${saved === 1 ? "answer" : "answers"}${remembered ? ` (${remembered} remembered for other applications)` : ""}.` : "",
     confirmed ? `Marked ${confirmed} as checked.` : "",
+    alsoCleared ? `Also checked on ${alsoCleared} other ${alsoCleared === 1 ? "application" : "applications"}.` : "",
   ].filter(Boolean);
   return { note: parts.join(" ") || "Nothing changed.", movedToReview };
 }
@@ -280,9 +285,32 @@ export async function approveApplication(db: Db, userId: string, applicationId: 
   const app = await getApplication(db, userId, z.string().uuid().parse(applicationId));
   if (!app) throw new ValidationError("That application is gone.");
   await transition(db, app.id, "approved", "user:approve");
-  for (const q of app.questions.filter((x) => x.needs_check && x.question_id && x.answer_source !== "drafted")) {
-    await confirmAlias(db, normalize(q.question));
-  }
+  const wordings = new Map(
+    app.questions
+      .filter((x) => x.needs_check && x.question_id && x.answer_source !== "drafted")
+      .map((x) => [normalize(x.question), x.question_id!]),
+  );
+  await confirmWordings(db, userId, wordings, app.id);
+}
+
+/** Applications whose answers can still change before they're sent. */
+const BEFORE_SENDING: readonly AppStatus[] = ["queued", "needs_input", "manual"];
+
+/**
+ * Confirms question wordings you checked (wording → the catalog question it was matched to): later
+ * applications stop flagging them, and so do your other unsent applications where the same wording was
+ * matched to the same question. Drafted answers, yours, and AI judgments stay flagged.
+ *
+ * @returns How many other applications had answers marked checked.
+ */
+async function confirmWordings(db: Db, userId: string, wordings: Map<string, string>, exceptApplicationId: string): Promise<number> {
+  if (wordings.size === 0) return 0;
+  for (const text of wordings.keys()) await confirmAlias(db, text);
+  const same = (await listMatchedChecks(db, userId, BEFORE_SENDING)).filter(
+    (r) => r.application_id !== exceptApplicationId && wordings.get(normalize(r.question)) === r.question_id,
+  );
+  await markChecked(db, same.map((r) => r.id));
+  return new Set(same.map((r) => r.application_id)).size;
 }
 
 /** Skips an application with an optional reason, saved as a lesson when one is given. */

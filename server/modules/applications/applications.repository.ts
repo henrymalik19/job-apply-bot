@@ -144,6 +144,37 @@ export async function updateQuestion(
   check(await db.from("application_questions").update(changes).eq("id", id), "update application question");
 }
 
+/** An answer marked to double-check on one of a user's applications, with the catalog question it was matched to. */
+export type FlaggedAnswer = { id: string; question: string; question_id: string; application_id: string };
+
+/**
+ * Answers marked to double-check on a user's applications in some statuses that came straight from a matched
+ * catalog question: not drafted, not yours, and not an AI judgment (a qualification or a picked option, which
+ * carry a reason).
+ */
+export async function listMatchedChecks(db: Db, userId: string, statuses: readonly AppStatus[]): Promise<FlaggedAnswer[]> {
+  const rows = unwrap(
+    await db
+      .from("application_questions")
+      .select("id, question, question_id, application_id, applications!inner(user_id, status)")
+      .eq("applications.user_id", userId)
+      .in("applications.status", [...statuses])
+      .eq("needs_check", true)
+      .eq("bucket", "auto")
+      .is("reason", null)
+      .not("question_id", "is", null)
+      .not("answer_source", "in", "(drafted,user)"),
+    "list answers to double-check",
+  );
+  return rows.map((r) => ({ id: r.id, question: r.question, question_id: r.question_id!, application_id: r.application_id }));
+}
+
+/** Marks answers checked. */
+export async function markChecked(db: Db, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  check(await db.from("application_questions").update({ needs_check: false }).in("id", ids), "mark answers checked");
+}
+
 /** An unanswered question on one of a user's waiting applications, with its application. */
 export type OpenQuestion = ApplicationQuestion & { applications: { id: string; status: string } };
 
