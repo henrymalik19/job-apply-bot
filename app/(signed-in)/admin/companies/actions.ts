@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { ownerContext } from "@/server/auth/require-owner";
 import { ValidationError } from "@/server/core/errors";
+import { clearLimit } from "@/server/modules/companies/apply-limits";
 import {
   addCompany,
   findBoards,
@@ -75,6 +76,13 @@ export async function findCompanyAction(_prev: FindState, formData: FormData): P
     };
   }
   return { query, name, found };
+}
+
+/** Clear button under a company's limit: it no longer has one, or the date is wrong. */
+export async function clearLimitAction(formData: FormData) {
+  const { db, owner } = await ownerContext();
+  await clearLimit(db, owner.id, String(formData.get("id")));
+  refresh();
 }
 
 /** Pause/Resume button action for one company row. */

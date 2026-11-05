@@ -19,7 +19,7 @@ import {
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
 import { applicationHref, notify } from "@/server/modules/notifications/in-app";
-import { recordLimitReached } from "@/server/modules/companies/apply-limits";
+import { LIMIT_CAUSE, recordLimitReached } from "@/server/modules/companies/apply-limits";
 
 /** ATSs the runner can fill (by field name). */
 export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
@@ -186,7 +186,8 @@ async function notTaken(deps: ApplyDeps, app: ApplyJob, said: string): Promise<E
   const reason = `${app.job.company_name} won't take this application: "${said}"`.slice(0, 500);
   deps.log(`${app.id}: not taken: ${said}`);
   await setApplyStep(deps.db, app.id, null, reason);
-  await transition(deps.db, app.id, "skipped", "worker:not_taken", { reason });
+  // One refused for a limit comes back once the limit allows (see reviveAfterLimit).
+  await transition(deps.db, app.id, "skipped", LIMIT.test(said) ? LIMIT_CAUSE : "worker:not_taken", { reason });
   // A limit on applications: paused there until a slot frees up, and the others there not sent yet skipped.
   if (LIMIT.test(said) && app.job_id) {
     const limit = await recordLimitReached(deps.db, deps.userId, app.job_id, said, new Date()).catch((err) => {

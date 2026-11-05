@@ -9,7 +9,7 @@ import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
 import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
-import { toggleCompanyAction } from "./actions";
+import { clearLimitAction, toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FindCompanyForm } from "./forms";
 import { TableSkeleton } from "../../_components/skeletons";
 import { MovedBoard } from "../health/moved-board";
@@ -18,15 +18,19 @@ import { MovedBoard } from "../health/moved-board";
 const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
 /** A company's limit on applications, and the date you can apply there again when you've reached it. */
-function LimitNote({ limit }: { limit: CompanyLimit | undefined }) {
+function LimitNote({ companyId, limit }: { companyId: string; limit: CompanyLimit | undefined }) {
   if (!limit) return null;
   const rule = limit.limit ? `Takes ${limit.limit} ${limit.limit === 1 ? "application" : "applications"} per ${limit.days} days` : "Has a limit on applications";
   const until = limit.pausedUntil ? new Date(limit.pausedUntil).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
   return (
-    <div className="mt-1 text-xs text-warning" title={limit.reason ?? undefined}>
-      {rule}
-      {until && <>; you can apply again on {until}</>}
-    </div>
+    <form action={clearLimitAction} className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-warning" title={limit.reason ?? undefined}>
+      <span>
+        {rule}
+        {until && <>; you can apply again on {until}</>}
+      </span>
+      <input type="hidden" name="id" value={companyId} />
+      <Button type="submit" variant="link" size="xs" className="h-auto p-0 text-xs" title="It no longer has a limit, or the date is wrong">Clear</Button>
+    </form>
   );
 }
 
@@ -94,7 +98,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                     <TableCell className={cardsOnPhone.first}>
                       <div className="font-medium">{b.name}</div>
                       <div className="font-mono text-xs text-muted-foreground">{b.ats}:{b.board_token}</div>
-                      <LimitNote limit={limits.get(b.id)} />
+                      <LimitNote companyId={b.id} limit={limits.get(b.id)} />
                     </TableCell>
                     <TableCell data-label="Last check">
                       <BoardStatus board={b} now={now} />

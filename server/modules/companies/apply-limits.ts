@@ -8,6 +8,9 @@ import { IllegalTransitionError, transition } from "@/server/modules/application
 /** Days a company is paused for when its message doesn't say how long the limit lasts. */
 export const DEFAULT_LIMIT_DAYS = 60;
 
+/** The cause on an application skipped because a company's limit was reached (it comes back after). */
+export const LIMIT_CAUSE = "worker:limit";
+
 /** Statuses of an application that was sent (it counts toward a company's limit). */
 const SENT = ["submitted", "confirmed", "responded", "interviewing", "offer", "rejected", "no_reply"];
 /** Statuses of an application not sent yet, which a reached limit skips. */
@@ -87,7 +90,7 @@ export async function recordLimitReached(
   let skipped = 0;
   for (const a of waiting) {
     try {
-      await transition(db, a.id, "skipped", "worker:limit", { reason });
+      await transition(db, a.id, "skipped", LIMIT_CAUSE, { reason });
       skipped++;
     } catch (err) {
       if (!(err instanceof IllegalTransitionError)) throw err;
@@ -118,30 +121,77 @@ export async function listCompanyLimits(db: Db, userId: string, now: Date): Prom
 }
 
 /**
- * Companies where you can't apply right now: paused after a refusal, or where you've already sent as many
- * as the company's known limit takes within its window.
+ * Companies where you can't apply right now, kept on your follow of each (user_companies.paused_until) so
+ * Companies shows the date: one paused after a refusal, and one with a known rule where you've already
+ * sent as many as it takes within its window (paused until the oldest of those leaves the window, before
+ * any refusal).
  */
 export async function companiesAtLimit(db: Db, userId: string, now: Date): Promise<Set<string>> {
-  const at = new Set<string>();
+  const limited = unwrap(
+    await db.from("companies").select("id, name, apply_limit, apply_limit_days, user_companies!inner(user_id, paused_until)").eq("user_companies.user_id", userId).not("apply_limit", "is", null),
+    "read company limits",
+  ) as unknown as { id: string; name: string; apply_limit: number; apply_limit_days: number; user_companies: { paused_until: string | null }[] }[];
+  for (const c of limited) {
+    const sent = unwrap(
+      await db
+        .from("applications")
+        .select("submitted_at, jobs!inner(company_id)")
+        .eq("user_id", userId)
+        .eq("jobs.company_id", c.id)
+        .in("status", SENT)
+        .gte("submitted_at", new Date(now.getTime() - c.apply_limit_days * 86_400_000).toISOString())
+        .order("submitted_at", { ascending: true }),
+      "read applications sent there",
+    );
+    if (sent.length < c.apply_limit) continue;
+    // A slot frees when enough of them leave the window to go below the limit.
+    const until = new Date(new Date(sent[sent.length - c.apply_limit].submitted_at!).getTime() + c.apply_limit_days * 86_400_000);
+    const current = c.user_companies[0]?.paused_until;
+    if (current && new Date(current) >= until) continue;
+    const reason = `${c.name} takes ${c.apply_limit} ${c.apply_limit === 1 ? "application" : "applications"} per ${c.apply_limit_days} days, and you've sent ${sent.length}; you can apply again on ${until.toISOString().slice(0, 10)}.`;
+    check(await db.from("user_companies").update({ paused_until: until.toISOString(), pause_reason: reason }).eq("user_id", userId).eq("company_id", c.id), "pause company");
+  }
   const paused = unwrap(
     await db.from("user_companies").select("company_id").eq("user_id", userId).gt("paused_until", now.toISOString()),
     "read paused companies",
   );
-  for (const p of paused) at.add(p.company_id);
-  const limited = unwrap(
-    await db.from("companies").select("id, apply_limit, apply_limit_days").not("apply_limit", "is", null),
-    "read company limits",
-  );
-  for (const c of limited) {
-    if (at.has(c.id)) continue;
-    const { count } = await db
+  return new Set(paused.map((p) => p.company_id));
+}
+
+/**
+ * Applications skipped because a company's limit was reached, back once you can apply there again: each
+ * is removed, so its job is prepared afresh (best match first, as the limit allows) if its posting is
+ * still open. One whose posting closed stays skipped.
+ *
+ * @param atLimit - Companies still at their limit ({@link companiesAtLimit}).
+ * @returns How many came back.
+ */
+export async function reviveAfterLimit(db: Db, userId: string, atLimit: ReadonlySet<string>): Promise<number> {
+  const rows = unwrap(
+    await db
       .from("applications")
-      .select("id, jobs!inner(company_id)", { count: "exact", head: true })
+      .select("id, jobs!inner(company_id, closed_at), application_events(cause, created_at)")
       .eq("user_id", userId)
-      .eq("jobs.company_id", c.id)
-      .in("status", [...SENT, "approved"])
-      .gte("submitted_at", new Date(now.getTime() - c.apply_limit_days! * 86_400_000).toISOString());
-    if ((count ?? 0) >= c.apply_limit!) at.add(c.id);
+      .eq("status", "skipped")
+      .is("jobs.closed_at", null),
+    "read skipped applications",
+  ) as unknown as { id: string; jobs: { company_id: string | null }; application_events: { cause: string; created_at: string }[] }[];
+  let revived = 0;
+  for (const a of rows) {
+    const last = [...a.application_events].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];
+    if (last?.cause !== LIMIT_CAUSE || !a.jobs.company_id || atLimit.has(a.jobs.company_id)) continue;
+    // An email linked to it keeps it (that link has no cascade).
+    const { error } = await db.from("applications").delete().eq("id", a.id);
+    if (!error) revived++;
   }
-  return at;
+  return revived;
+}
+
+/**
+ * Clears a company's limit, when it no longer has one or the date is wrong: your pause there, and the rule
+ * saved for the company (it's learned again if it refuses once more).
+ */
+export async function clearLimit(db: Db, userId: string, companyId: string): Promise<void> {
+  check(await db.from("user_companies").update({ paused_until: null, pause_reason: null }).eq("user_id", userId).eq("company_id", companyId), "clear pause");
+  check(await db.from("companies").update({ apply_limit: null, apply_limit_days: null }).eq("id", companyId), "clear apply limit");
 }

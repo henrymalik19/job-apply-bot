@@ -8,7 +8,7 @@ import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { FORM_ATS, fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
-import { companiesAtLimit } from "@/server/modules/companies/apply-limits";
+import { companiesAtLimit, reviveAfterLimit } from "@/server/modules/companies/apply-limits";
 import { countByStatus, getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
 import { transition, updateQuestion } from "@/server/modules/applications/applications.repository";
 import type { Row as DbRow } from "@/server/db/types";
@@ -556,6 +556,9 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
     if (counts.restarted) log(`started over ${counts.restarted} application(s) whose form can be read now`);
     const room = Math.min(deps.limit ?? Infinity, Math.max(0, Number(cap ?? 20) - today));
     const atLimit = await companiesAtLimit(db, userId, now());
+    // Applications skipped for a limit that's over now: their jobs are prepared again below.
+    const revived = await reviveAfterLimit(db, userId, atLimit);
+    if (revived) log(`${revived} application(s) skipped for a company's limit can go ahead again`);
     let candidates = await listPrepareCandidates(db, userId, ctx.criteria.threshold, deps.onlyJobIds ? 500 : room + 50, atLimit);
     if (deps.onlyJobIds) {
       const only = new Set(deps.onlyJobIds);
