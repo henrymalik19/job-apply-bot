@@ -119,7 +119,8 @@ const employmentInput = z
     responsibilities: z.preprocess(lines, z.array(z.string().max(600))),
     skills: z.preprocess(list, z.array(z.string().max(80))),
   })
-  .refine((j) => !(j.is_current && j.end_date), { message: "A current job has no end month." })
+  // "I work here now" wins over an end month left in the form: a current job has none.
+  .transform((j) => (j.is_current ? { ...j, end_date: null } : j))
   .refine((j) => !j.end_date || j.end_date >= j.start_date, { message: "The end month is before the start month." });
 
 /**
