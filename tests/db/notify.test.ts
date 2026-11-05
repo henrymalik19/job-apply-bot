@@ -105,8 +105,9 @@ describe("notify", () => {
     const soon = await notify(new Date(noon.getTime() + 5 * 60_000));
     expect(soon.counts).toMatchObject({ due: 1, sent: 0, held_interval: 1 });
 
-    // The last send was recorded at the real clock time, so step past it.
-    const later = await notify(new Date(Date.now() + 16 * 60_000));
+    // The last send was recorded at the real clock time, so step past it: to a noon in New York well
+    // after now (the real clock plus a few minutes can land in quiet hours).
+    const later = await notify(new Date("2030-01-15T17:00:00Z"));
     expect(later.counts).toMatchObject({ due: 1, sent: 1 });
     expect(sent.at(-1)!.email.subject).toBe("[Jobrx] 1 can't fill automatically");
   });
