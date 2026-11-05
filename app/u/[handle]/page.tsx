@@ -9,6 +9,7 @@ import { getPublicPage } from "@/server/modules/public-page/public-page.service"
 import { serverEnv } from "@/shared/env";
 import { OverviewSkeleton } from "../../(signed-in)/_components/skeletons";
 import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
+import { cn } from "@/shared/cn";
 
 export const metadata: Metadata = {
   title: "Job search status",
@@ -91,9 +92,9 @@ async function PublicStatus({ params }: { params: Params }) {
               <TableBody>
                 {page.applications.map((a, i) => (
                   <TableRow key={i}>
-                    <TableCell className="font-medium">{a.job_title}</TableCell>
+                    <TableCell className={cn("font-medium", cardsOnPhone.first)}>{a.job_title}</TableCell>
                     <TableCell>{a.company_name}</TableCell>
-                    <TableCell className="tabular-nums">{shortDate(a.submitted_at)}</TableCell>
+                    <TableCell data-label="Sent" className="tabular-nums">{shortDate(a.submitted_at)}</TableCell>
                     <TableCell>{STATUS_LABEL[a.status] ?? a.status}</TableCell>
                   </TableRow>
                 ))}

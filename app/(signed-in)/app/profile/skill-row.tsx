@@ -26,14 +26,14 @@ export function SkillRow(props: { s: SkillRowData; years: number | undefined; pr
 
   return (
     <TableRow>
-      <TableCell className="font-medium">
+      <TableCell className="font-medium max-md:w-full">
         {/* The row's form; the inputs in the other cells belong to it by id. */}
         <form id={formId} ref={form} action={save} className="hidden">
           <input type="hidden" name="skill_id" value={s.skill_id} />
         </form>
         {s.name}
       </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="text-right" data-label="Years">
         <Input
           form={formId}
           name="years_override"
@@ -57,7 +57,7 @@ export function SkillRow(props: { s: SkillRowData; years: number | undefined; pr
           }}
         />
       </TableCell>
-      <TableCell>
+      <TableCell data-label="Proficiency">
         <NativeSelect
           form={formId}
           name="proficiency"
@@ -70,7 +70,7 @@ export function SkillRow(props: { s: SkillRowData; years: number | undefined; pr
           {proficiencies.map((x) => <NativeSelectOption key={x} value={x}>{x}</NativeSelectOption>)}
         </NativeSelect>
       </TableCell>
-      <TableCell className="w-0 text-right whitespace-nowrap">
+      <TableCell className="w-0 text-right whitespace-nowrap max-md:ml-auto max-md:w-auto">
         <span className="mr-1 inline-flex w-4 justify-center text-xs" aria-live="polite">
           {saving ? <span className="text-muted-foreground">…</span> : state.error ? <span className="text-destructive" title={state.error}>!</span> : state.ok ? <Check className="size-4 text-emerald-500" aria-label="Saved" /> : null}
         </span>

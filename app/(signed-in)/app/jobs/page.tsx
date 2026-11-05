@@ -14,6 +14,7 @@ import { parsePage } from "@/shared/paginate";
 import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
 import { AutoSubmitForm } from "./auto-submit-form";
 import { TableSkeleton } from "../../_components/skeletons";
+import { cn } from "@/shared/cn";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -131,10 +132,10 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
               <TableBody>
                 {page.items.map((j) => (
                   <TableRow key={j.id} className={j.closed_at ? "text-muted-foreground" : ""}>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right max-md:order-1" data-label="Match">
                       <ScoreBadge job={j} threshold={threshold} />
                     </TableCell>
-                    <TableCell className="max-w-md whitespace-normal">
+                    <TableCell className={cn("max-w-md whitespace-normal", cardsOnPhone.first)}>
                       <Link href={`/app/jobs/${j.id}${detailQuery ? `?${detailQuery}` : ""}`} className="font-medium hover:underline">
                         {j.title}
                       </Link>
@@ -147,9 +148,9 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
                         <Badge variant="secondary" className="ml-2">{REMOTE_LABEL[j.remote_type]}</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="tabular-nums">{formatSalary(j.salary_min, j.salary_max, j.salary_currency) || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{j.posted_at ? ago(j.posted_at, now) : "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{ago(j.first_seen_at, now)}</TableCell>
+                    <TableCell className="tabular-nums" data-label="Salary">{formatSalary(j.salary_min, j.salary_max, j.salary_currency) || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground" data-label="Posted">{j.posted_at ? ago(j.posted_at, now) : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground" data-label="Found">{ago(j.first_seen_at, now)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

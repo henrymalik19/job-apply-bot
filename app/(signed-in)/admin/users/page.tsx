@@ -32,16 +32,16 @@ async function Users() {
           <TableBody>
             {users.map((u) => (
               <TableRow key={u.id}>
-                <TableCell>
+                <TableCell className={cardsOnPhone.first}>
                   <Link href={`/admin/users/${u.id}`} className="font-medium hover:underline">{u.name}</Link>
                   {u.role === "owner" && <Badge variant="outline" className="ml-2">you</Badge>}
                   {u.email && <span className="block text-xs text-muted-foreground">{u.email}</span>}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{n(u.counts, "queued", "needs_input", "manual")}</TableCell>
-                <TableCell className="text-right tabular-nums">{n(u.counts, "approved")}</TableCell>
-                <TableCell className="text-right tabular-nums">{n(u.counts, "submitted", "confirmed", "responded")}</TableCell>
-                <TableCell className="text-right tabular-nums">{n(u.counts, "interviewing", "offer")}</TableCell>
-                <TableCell className="text-right text-muted-foreground">{u.lastActivityAt ? ago(u.lastActivityAt, now) : "—"}</TableCell>
+                <TableCell data-label="To approve" className="text-right tabular-nums">{n(u.counts, "queued", "needs_input", "manual")}</TableCell>
+                <TableCell data-label="Applying" className="text-right tabular-nums">{n(u.counts, "approved")}</TableCell>
+                <TableCell data-label="Sent" className="text-right tabular-nums">{n(u.counts, "submitted", "confirmed", "responded")}</TableCell>
+                <TableCell data-label="Interviews" className="text-right tabular-nums">{n(u.counts, "interviewing", "offer")}</TableCell>
+                <TableCell data-label="Last activity" className="text-right text-muted-foreground">{u.lastActivityAt ? ago(u.lastActivityAt, now) : "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

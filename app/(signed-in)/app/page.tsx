@@ -101,14 +101,14 @@ async function Overview() {
               <TableBody>
                 {o.recent.map((j) => (
                   <TableRow key={j.id}>
-                    <TableCell className="max-w-xs whitespace-normal">
+                    <TableCell className={cn("max-w-xs whitespace-normal", cardsOnPhone.first)}>
                       <Link href={`/app/jobs/${j.id}`} className="font-medium hover:underline">{j.title}</Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{j.company_name}</TableCell>
-                    <TableCell className="hidden tabular-nums text-muted-foreground sm:table-cell">
+                    <TableCell data-label="Salary" className="hidden tabular-nums text-muted-foreground sm:table-cell">
                       {formatSalary(j.salary_min, j.salary_max, j.salary_currency) || "—"}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">{ago(j.first_seen_at, now)}</TableCell>
+                    <TableCell data-label="Found" className="text-right text-muted-foreground">{ago(j.first_seen_at, now)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

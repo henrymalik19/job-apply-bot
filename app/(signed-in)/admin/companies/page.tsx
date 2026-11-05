@@ -77,16 +77,16 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
               <TableBody>
                 {page.items.map((b) => (
                   <TableRow key={b.id} className={b.active ? "" : "text-muted-foreground"}>
-                    <TableCell>
+                    <TableCell className={cardsOnPhone.first}>
                       <div className="font-medium">{b.name}</div>
                       <div className="font-mono text-xs text-muted-foreground">{b.ats}:{b.board_token}</div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-label="Last check">
                       <BoardStatus board={b} now={now} />
                       {b.problem && <div className="mt-1 text-xs text-destructive">{b.problem}</div>}
                     </TableCell>
-                    <TableCell>{ago(b.status?.last_success_at, now)}</TableCell>
-                    <TableCell className="whitespace-normal">
+                    <TableCell data-label="Last success">{ago(b.status?.last_success_at, now)}</TableCell>
+                    <TableCell data-label="Last result" className="whitespace-normal">
                       {b.status?.last_ok === false ? (
                         <>
                           <span className="text-destructive">{b.status.last_error}</span>

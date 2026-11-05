@@ -131,7 +131,7 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
                         <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={e.snippet}>{e.snippet}</span>
                       </TableCell>
                       <TableCell className={cn("align-top", cardsOnPhone.full)}><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} askKind /></TableCell>
-                      <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>{ago(e.receivedAt, now)}</TableCell>
+                      <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)} data-label="Received">{ago(e.receivedAt, now)}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -167,7 +167,7 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
                       </Badge>
                     </TableCell>
                     <TableCell className={cn("align-top", cardsOnPhone.full)}><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} /></TableCell>
-                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>{ago(e.receivedAt, now)}</TableCell>
+                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)} data-label="Received">{ago(e.receivedAt, now)}</TableCell>
                   </TableRow>
                 );
               })}
@@ -256,7 +256,9 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
               <TableBody>
                 {rows.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="text-right align-top"><Badge className="tabular-nums">{a.score ?? "—"}</Badge></TableCell>
+                    <TableCell className="text-right align-top max-md:order-1" data-label={a.score != null ? "Match" : undefined}>
+                      {a.score != null ? <Badge className="tabular-nums">{a.score}</Badge> : <span className="text-muted-foreground max-md:hidden">—</span>}
+                    </TableCell>
                     <TableCell className={cn("max-w-xs whitespace-normal align-top", cardsOnPhone.first)}>
                       <Link href={`/app/applications/${a.id}?from=todo`} className="font-medium hover:underline">{a.job.title}</Link>
                       <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
@@ -265,10 +267,8 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
                       </div>
                     </TableCell>
                     <TableCell className={cn("max-w-md whitespace-normal align-top text-sm", cardsOnPhone.full)}><Needs tab={current.id} app={a} /></TableCell>
-                    <TableCell className={cn("align-top tabular-nums", cardsOnPhone.meta)}>{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
-                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>
-                      <span className="md:hidden">Prepared </span>{a.prepared_at ? ago(a.prepared_at, now) : "—"}
-                    </TableCell>
+                    <TableCell className={cn("align-top tabular-nums", cardsOnPhone.meta)} data-label="Salary">{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
+                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)} data-label="Prepared">{a.prepared_at ? ago(a.prepared_at, now) : "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

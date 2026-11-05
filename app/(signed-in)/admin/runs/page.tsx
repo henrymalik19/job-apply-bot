@@ -8,6 +8,7 @@ import { listRunFilters, listRunRows, type RunQuery } from "@/server/modules/app
 import { ago } from "@/shared/format";
 import type { Page } from "@/shared/paginate";
 import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
+import { cn } from "@/shared/cn";
 import { TableSkeleton } from "../../_components/skeletons";
 import { TONE_BADGE } from "../../_components/status";
 import { RunFiltersBar } from "./run-filters";
@@ -64,20 +65,20 @@ async function Runs({ searchParams }: { searchParams: SearchParams }) {
                     const c = r.counts;
                     return (
                       <TableRow key={r.id} className="relative">
-                        <TableCell className="text-muted-foreground" title={new Date(r.startedAt).toLocaleString()}>{ago(r.startedAt, now)}</TableCell>
-                        <TableCell className="max-w-sm whitespace-normal">
+                        <TableCell data-label="When" className="text-muted-foreground" title={new Date(r.startedAt).toLocaleString()}>{ago(r.startedAt, now)}</TableCell>
+                        <TableCell className={cn("max-w-sm whitespace-normal", cardsOnPhone.first)}>
                           {/* The whole row opens the run; the link covers it. */}
                           <Link href={`/admin/runs/${r.id}`} className="font-medium after:absolute after:inset-0 hover:underline">
                             {r.application.title || "A job"}
                           </Link>
                           <span className="block text-xs text-muted-foreground">{r.application.company}</span>
                         </TableCell>
-                        <TableCell>{r.user.name}</TableCell>
-                        <TableCell className="max-w-xs whitespace-normal">
+                        <TableCell data-label="Person">{r.user.name}</TableCell>
+                        <TableCell data-label="Result" className="max-w-xs whitespace-normal">
                           <Badge className={submitted ? TONE_BADGE.success : TONE_BADGE.warning}>{submitted ? "Submitted" : "Handed back"}</Badge>
                           {!submitted && <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={r.outcome}>{r.outcome.replace(/^handed back: /, "")}</span>}
                         </TableCell>
-                        <TableCell className="whitespace-normal text-sm">
+                        <TableCell data-label="Fields" className="whitespace-normal text-sm">
                           {c ? (
                             <span className="flex flex-wrap gap-x-2">
                               <span className="text-success">{c.ok} filled</span>

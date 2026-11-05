@@ -206,13 +206,13 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
         </CardHeader>
         <CardContent className={cn(scrollingTable.content, "gap-4")}>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <form className="flex gap-2" action="/app/profile">
+            <form className="flex w-full gap-2 sm:w-auto" action="/app/profile">
               <input type="hidden" name="tab" value="skills" />
-              <Input name="q" defaultValue={q} placeholder="Search skills" className="w-56" aria-label="Search skills" />
+              <Input name="q" defaultValue={q} placeholder="Search skills" className="min-w-0 flex-1 sm:w-56 sm:flex-none" aria-label="Search skills" />
               <Button type="submit" variant="outline">Search</Button>
             </form>
-            <ActionForm action={addSkillsAction} submitLabel="Add skills" className="flex-row items-start">
-              <Input name="names" placeholder="Go, Kubernetes, GraphQL" className="w-64" aria-label="Skills to add" />
+            <ActionForm action={addSkillsAction} submitLabel="Add skills" className="w-full flex-row items-start sm:w-auto">
+              <Input name="names" placeholder="Go, Kubernetes, GraphQL" className="min-w-0 flex-1 sm:w-64 sm:flex-none" aria-label="Skills to add" />
             </ActionForm>
           </div>
           <SkillCleanup />
@@ -356,10 +356,10 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
               <TableBody>
                 {data.workAuthorizations.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="font-medium">{a.country}</TableCell>
-                    <TableCell>{a.authorized ? "Yes" : "No"}</TableCell>
-                    <TableCell>{a.requires_sponsorship ? "Yes" : "No"}</TableCell>
-                    <TableCell className="text-muted-foreground">{a.status ?? "—"}</TableCell>
+                    <TableCell className={cn("font-medium", cardsOnPhone.first)}>{a.country}</TableCell>
+                    <TableCell data-label="Can work there">{a.authorized ? "Yes" : "No"}</TableCell>
+                    <TableCell data-label="Needs sponsorship">{a.requires_sponsorship ? "Yes" : "No"}</TableCell>
+                    <TableCell data-label="Status" className="text-muted-foreground">{a.status ?? "—"}</TableCell>
                     <TableCell className="text-right"><RemoveButton kind="work_authorizations" id={a.id} /></TableCell>
                   </TableRow>
                 ))}

@@ -12,6 +12,7 @@ import { setPlatformModeAction, setPublicPageAction } from "./actions";
 import { FormSkeleton } from "../../_components/skeletons";
 import { HandleForm } from "./handle-form";
 import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
+import { cn } from "@/shared/cn";
 
 async function PublicPageSetting() {
   const { db, owner } = await ownerContext();
@@ -80,11 +81,11 @@ async function ApplyRunnerSetting() {
               const done = Math.min(p.streak, p.required);
               return (
                 <TableRow key={p.ats}>
-                  <TableCell className="font-medium">{ATS_LABEL[p.ats] ?? p.ats}</TableCell>
-                  <TableCell>
+                  <TableCell className={cn("font-medium", cardsOnPhone.first)}>{ATS_LABEL[p.ats] ?? p.ats}</TableCell>
+                  <TableCell data-label="Submits">
                     <Badge className={p.mode === "auto" ? TONE_BADGE.success : TONE_BADGE.info}>{p.mode === "auto" ? "By itself" : "After you check (supervised)"}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Clean submits in a row">
                     <div className="flex items-center gap-2" title={p.canAuto ? "Earned: it may submit by itself." : `${p.required - done} more to go.`}>
                       <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                         <div className={p.canAuto ? "h-full bg-success" : "h-full bg-info"} style={{ width: `${(done / p.required) * 100}%` }} />
@@ -112,8 +113,8 @@ async function ApplyRunnerSetting() {
             })}
             {COMING.filter((ats) => !platforms.some((p) => p.ats === ats)).map((ats) => (
               <TableRow key={ats} className="text-muted-foreground">
-                <TableCell>{ATS_LABEL[ats]}</TableCell>
-                <TableCell colSpan={3}>Not filled yet: approved applications wait in Approved, or you apply on the site.</TableCell>
+                <TableCell className={cardsOnPhone.first}>{ATS_LABEL[ats]}</TableCell>
+                <TableCell data-label="Submits" colSpan={3}>Not filled yet: approved applications wait in Approved, or you apply on the site.</TableCell>
               </TableRow>
             ))}
           </TableBody>

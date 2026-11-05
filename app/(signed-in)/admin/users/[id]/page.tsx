@@ -14,6 +14,7 @@ import { ago } from "@/shared/format";
 import { DetailSkeleton } from "../../../_components/skeletons";
 import { statusInfo, TONE_BADGE } from "../../../_components/status";
 import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
+import { cn } from "@/shared/cn";
 
 type Params = Promise<{ id: string }>;
 
@@ -58,12 +59,12 @@ async function User({ params }: { params: Params }) {
                     const info = statusInfo(a.status);
                     return (
                       <TableRow key={a.id}>
-                        <TableCell className="max-w-md whitespace-normal">
+                        <TableCell className={cn("max-w-md whitespace-normal", cardsOnPhone.first)}>
                           <Link href={`/admin/applications/${a.id}`} className="font-medium hover:underline">{a.job.title}</Link>
                           <span className="block text-xs text-muted-foreground">{a.job.company_name}</span>
                         </TableCell>
                         <TableCell><Badge className={TONE_BADGE[info.tone]}>{info.label}</Badge></TableCell>
-                        <TableCell className="text-right text-muted-foreground">{ago(a.last_status_at, now)}</TableCell>
+                        <TableCell data-label="Changed" className="text-right text-muted-foreground">{ago(a.last_status_at, now)}</TableCell>
                       </TableRow>
                     );
                   })}

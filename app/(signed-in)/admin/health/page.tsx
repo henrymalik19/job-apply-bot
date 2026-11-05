@@ -16,6 +16,7 @@ import { LiveRefresh } from "../../_components/live-refresh";
 import { RunNow } from "./run-now";
 import { TableSkeleton } from "../../_components/skeletons";
 import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
+import { cn } from "@/shared/cn";
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString();
 
@@ -101,12 +102,12 @@ async function Health() {
             <TableBody>
               {workers.map((w) => (
                 <TableRow key={w.name}>
-                  <TableCell className="whitespace-normal">
+                  <TableCell className={cn("whitespace-normal", cardsOnPhone.first)}>
                     <div className="font-medium">{w.name}</div>
                     <div className="text-xs text-muted-foreground">{w.does}</div>
                   </TableCell>
-                  <TableCell className="tabular-nums">{formatMinutes(w.intervalMinutes)}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Every" className="tabular-nums">{formatMinutes(w.intervalMinutes)}</TableCell>
+                  <TableCell data-label="Last run">
                     {w.lastRun ? (
                       <Badge variant={w.problem ? "destructive" : "secondary"}>
                         {w.lastRun.ok ? "OK" : "Failed"} · {ago(w.lastRun.started_at, now)}
@@ -116,7 +117,7 @@ async function Health() {
                     )}
                     {w.problem && w.lastRun?.ok !== false && <div className="mt-1 text-xs text-destructive">{w.problem}</div>}
                   </TableCell>
-                  <TableCell className={w.lastRun?.ok === false ? "whitespace-normal text-destructive" : "whitespace-normal text-muted-foreground"}>
+                  <TableCell data-label="What it did" className={w.lastRun?.ok === false ? "whitespace-normal text-destructive max-md:w-full" : "whitespace-normal text-muted-foreground max-md:w-full"}>
                     {runSummary(w) || "—"}
                   </TableCell>
                   <TableCell className="align-top"><RunNow worker={w.name} enabled={canRun} /></TableCell>
@@ -165,15 +166,15 @@ function FailedFieldsCard({ fields, now }: { fields: FailedFieldSummary[]; now: 
             <TableBody>
               {fields.map((f) => (
                 <TableRow key={`${f.company}-${f.label}`}>
-                  <TableCell className="whitespace-normal">
+                  <TableCell className={cn("whitespace-normal", cardsOnPhone.first)}>
                     <div className="font-medium">{f.label}</div>
                     <div className="text-xs text-muted-foreground">{f.company} · {f.kind}</div>
                   </TableCell>
-                  <TableCell className="max-w-64 whitespace-normal">
+                  <TableCell data-label="Tried" className="max-w-64 whitespace-normal">
                     <div className="truncate">{shownValue(f.lastValue)}</div>
                     {f.lastDetail && <div className="text-xs text-destructive">{f.lastDetail}</div>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Runs">
                     {f.recovered === f.runs ? (
                       <Badge variant="secondary">fixed on retry · {f.runs}</Badge>
                     ) : (
@@ -182,7 +183,7 @@ function FailedFieldsCard({ fields, now }: { fields: FailedFieldSummary[]; now: 
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Last">
                     <Link href={`/admin/runs/${f.lastRunId}`} className="underline underline-offset-2">{ago(f.lastAt, now)}</Link>
                     {f.users.length > 0 && <div className="text-xs text-muted-foreground">{f.users.join(", ")}</div>}
                   </TableCell>

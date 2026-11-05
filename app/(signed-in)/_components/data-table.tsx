@@ -19,12 +19,13 @@ export const scrollingTable = {
 
 /**
  * Classes that turn a table into stacked cards on a phone, instead of a table you scroll sideways: no
- * header row, each row a card headed by its first cell, the others wrapping onto lines below (a cell with
- * `full` takes a line of its own). Desktop keeps the table.
+ * header row, each row a card: the cell marked `first` heads it (the title), the others wrap onto lines below
+ * (`full` gives one a line of its own), and a cell with `data-label` (its column's name) shows the label
+ * before its value, since the header row is hidden ("Posted 7d ago"). Actions go last. Desktop keeps the table.
  */
 export const cardsOnPhone = {
   table:
-    "max-md:block max-md:[&_thead]:hidden max-md:[&_tbody]:block max-md:[&_tr]:flex max-md:[&_tr]:flex-wrap max-md:[&_tr]:items-center max-md:[&_tr]:gap-x-3 max-md:[&_tr]:gap-y-1.5 max-md:[&_tr]:px-3 max-md:[&_tr]:py-3 max-md:[&_td]:max-w-none max-md:[&_td]:p-0 max-md:[&_td]:text-left max-md:[&_td]:whitespace-normal max-md:[&_td:first-child]:w-full",
+    "max-md:block max-md:[&_thead]:hidden max-md:[&_tbody]:block max-md:[&_tr]:flex max-md:[&_tr]:flex-wrap max-md:[&_tr]:items-center max-md:[&_tr]:gap-x-3 max-md:[&_tr]:gap-y-1.5 max-md:[&_tr]:px-3 max-md:[&_tr]:py-3 max-md:[&_td]:max-w-none max-md:[&_td]:p-0 max-md:[&_td]:text-left max-md:[&_td]:whitespace-normal max-md:[&_td[data-label]]:before:mr-1 max-md:[&_td[data-label]]:before:font-normal max-md:[&_td[data-label]]:before:text-muted-foreground max-md:[&_td[data-label]]:before:content-[attr(data-label)_':']",
   /** A cell on its own line in the card (the title, a description, a control). */
   full: "max-md:w-full",
   /** The cell that heads the card. */
