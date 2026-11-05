@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,18 +27,16 @@ import {
   addCertificationAction,
   addEducationAction,
   addSkillsAction,
-  deleteSavedAnswerAction,
-  mergeSkillsAction,
   removeItemAction,
-  removeSkillAction,
   saveAuthorizationAction,
   saveEmploymentAction,
   saveProfileAction,
-  saveSavedAnswerAction,
-  updateSkillAction,
 } from "./actions";
 import { SkillCleanup } from "./skill-cleanup";
 import { listSavedAnswers, type SavedAnswer } from "@/server/modules/questions/saved-answers";
+import { SavedAnswersList } from "./saved-answers-list";
+import { SkillRow } from "./skill-row";
+import { scrollingTable } from "../../_components/data-table";
 import { CLEARANCE_LEVELS } from "@/shared/clearance";
 import { FormSkeleton } from "../../_components/skeletons";
 
@@ -140,68 +138,11 @@ function SortHeader(props: { label: string; col: Sort; sort: Sort; dir: "asc" | 
   );
 }
 
-/** One skill row: name, years and proficiency, with edit, merge and remove behind "Edit". */
-function SkillRow({ s, years, others }: { s: UserSkill; years: number | undefined; others: UserSkill[] }) {
-  return (
-    <TableRow>
-      <TableCell className="font-medium">{s.name}</TableCell>
-      <TableCell className="text-right tabular-nums">
-        {s.years_override != null ? (
-          <span title={`From your jobs: ${years ?? "—"}`}>
-            {Number(s.years_override)} <span className="text-xs text-muted-foreground">(set)</span>
-          </span>
-        ) : (
-          (years ?? "—")
-        )}
-      </TableCell>
-      <TableCell className="capitalize text-muted-foreground">{s.proficiency ?? "—"}</TableCell>
-      <TableCell className="text-right">
-        <details className="inline-block text-left">
-          <summary className={cn(buttonVariants({ variant: "ghost", size: "xs" }), "list-none [&::-webkit-details-marker]:hidden")}>Edit</summary>
-          <div className="absolute right-6 z-20 mt-1 flex w-80 flex-col gap-4 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
-            <ActionForm action={updateSkillAction} submitLabel="Save" className="gap-2">
-              <input type="hidden" name="skill_id" value={s.skill_id} />
-              <div className="flex gap-2">
-                <Input name="years_override" type="number" step="0.5" min={0} className="w-24" defaultValue={s.years_override ?? ""} placeholder="years" aria-label="Years override" />
-                <NativeSelect name="proficiency" defaultValue={s.proficiency ?? ""} aria-label="Proficiency">
-                  <NativeSelectOption value="">Proficiency</NativeSelectOption>
-                  {PROFICIENCIES.map((x) => <NativeSelectOption key={x} value={x}>{x}</NativeSelectOption>)}
-                </NativeSelect>
-              </div>
-              <p className="text-xs text-muted-foreground">Years come from your jobs; set a number only if that&apos;s wrong.</p>
-            </ActionForm>
-            <ActionForm action={mergeSkillsAction} submitLabel="Merge" className="gap-2 border-t pt-3">
-              <input type="hidden" name="merge_id" value={s.skill_id} />
-              <NativeSelect name="keep_id" defaultValue="" aria-label="Merge into" required>
-                <NativeSelectOption value="">Merge into…</NativeSelectOption>
-                {others.map((o) => <NativeSelectOption key={o.skill_id} value={o.skill_id}>{o.name}</NativeSelectOption>)}
-              </NativeSelect>
-              <p className="text-xs text-muted-foreground">&ldquo;{s.name}&rdquo; becomes another name for the skill you pick.</p>
-            </ActionForm>
-            <form action={removeSkillAction} className="flex flex-col gap-2 border-t pt-3">
-              <input type="hidden" name="skill_id" value={s.skill_id} />
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" name="from_jobs" /> Also remove it from my jobs
-              </label>
-              <Button type="submit" variant="destructive" size="sm" className="self-start">Remove skill</Button>
-            </form>
-          </div>
-        </details>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-/** The input for a saved answer, by its question's kind. */
-function SavedAnswerInput({ a }: { a: SavedAnswer }) {
-  if (a.answerType === "boolean") return <YesNoSelect name="answer" value={a.value as boolean} allowBlank={false} />;
-  return <Input name="answer" defaultValue={a.shown} aria-label={a.label} className="min-w-0 flex-1" />;
-}
 
 /** Saved answers tab: what you've answered once and every form reuses, to check, change or delete. */
 function SavedAnswersTab({ answers }: { answers: SavedAnswer[] }) {
   return (
-    <Card>
+    <Card className="md:min-h-[20rem] md:flex-1">
       <CardHeader>
         <CardTitle>Saved answers ({answers.length})</CardTitle>
         <CardDescription>
@@ -209,30 +150,11 @@ function SavedAnswersTab({ answers }: { answers: SavedAnswer[] }) {
           your answer, then filled in for you. Change one here and the next form uses it; delete one and forms ask you again.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex min-h-0 flex-1 flex-col">
         {answers.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing saved yet. Short answers you give under Needs your answer show up here.</p>
         ) : (
-          <div className="divide-y">
-            {answers.map((a) => (
-              <div key={a.questionId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-4">
-                <div className="sm:w-2/5">
-                  <div className="text-sm font-medium">{a.label}</div>
-                  <div className="text-xs capitalize text-muted-foreground">{a.category}</div>
-                </div>
-                <div className="flex min-w-0 flex-1 items-start gap-2">
-                  <ActionForm action={saveSavedAnswerAction} submitLabel="Save" className="min-w-0 flex-1">
-                    <input type="hidden" name="question_id" value={a.questionId} />
-                    <SavedAnswerInput a={a} />
-                  </ActionForm>
-                  <form action={deleteSavedAnswerAction}>
-                    <input type="hidden" name="question_id" value={a.questionId} />
-                    <Button type="submit" variant="ghost" size="sm">Delete</Button>
-                  </form>
-                </div>
-              </div>
-            ))}
-          </div>
+          <SavedAnswersList answers={answers} />
         )}
       </CardContent>
     </Card>
@@ -262,25 +184,15 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Tidy up</CardTitle>
-          <CardDescription>
-            The same skill under two names splits your years between them. Claude can spot duplicates and entries that
-            aren&apos;t skills (like job titles); you decide what changes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SkillCleanup />
-        </CardContent>
-      </Card>
-
-      <Card>
+      <Card className={scrollingTable.card}>
         <CardHeader>
           <CardTitle>Skills ({data.skills.length})</CardTitle>
-          <CardDescription>Years come from the jobs that used each skill. Click a column to sort.</CardDescription>
+          <CardDescription>
+            Years come from the jobs that used each skill; type a number only to correct it. Changes save as you make them. Find
+            duplicates has Claude spot the same skill under two names (which splits your years) and entries that aren&apos;t skills.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className={cn(scrollingTable.content, "gap-4")}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <form className="flex gap-2" action="/app/profile">
               <input type="hidden" name="tab" value="skills" />
@@ -291,12 +203,13 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
               <Input name="names" placeholder="Go, Kubernetes, GraphQL" className="w-64" aria-label="Skills to add" />
             </ActionForm>
           </div>
+          <SkillCleanup />
           {page.total === 0 ? (
             <p className="text-sm text-muted-foreground">{q ? `No skills match “${q}”.` : "No skills yet."}</p>
           ) : (
             <>
-              <Table>
-                <TableHeader>
+              <Table containerClassName={scrollingTable.container}>
+                <TableHeader className={scrollingTable.header}>
                   <TableRow>
                     <SortHeader label="Skill" col="name" sort={sort} dir={dir} q={q} />
                     <SortHeader label="Years" col="years" sort={sort} dir={dir} q={q} className="text-right" />
@@ -306,7 +219,12 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
                 </TableHeader>
                 <TableBody>
                   {page.items.map((s) => (
-                    <SkillRow key={s.skill_id} s={s} years={years.get(s.normalized)} others={data.skills.filter((o) => o.skill_id !== s.skill_id)} />
+                    <SkillRow
+                      key={s.skill_id}
+                      s={{ skill_id: s.skill_id, name: s.name, years_override: s.years_override == null ? null : Number(s.years_override), proficiency: s.proficiency }}
+                      years={years.get(s.normalized)}
+                      proficiencies={PROFICIENCIES}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -328,14 +246,14 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <nav className="flex w-fit gap-1 rounded-lg bg-muted p-1" aria-label="Profile sections">
+      <nav className="flex w-fit max-w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-muted p-1" aria-label="Profile sections">
         {TABS.map(([id, label]) => (
           <Link
             key={id}
             href={id === "basics" ? "/app/profile" : `/app/profile?tab=${id}`}
             aria-current={tab === id ? "page" : undefined}
             className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+              "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
               tab === id && "bg-background text-foreground shadow-sm",
             )}
           >
@@ -345,6 +263,9 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
           </Link>
         ))}
       </nav>
+
+      {/* Below the tabs, the tab's content scrolls (wide screens), so the header and tabs stay put. */}
+      <div className="flex flex-col gap-6 md:min-h-0 md:flex-1 md:overflow-y-auto">
 
       {tab === "basics" && (
         <>
@@ -519,6 +440,7 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
 
       {tab === "skills" && <SkillsTab data={data} params={params} />}
       {tab === "answers" && <SavedAnswersTab answers={saved} />}
+      </div>
     </>
   );
 }
@@ -526,8 +448,8 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
 /** Profile: everything the system knows about you, which is all Claude may use, in Basics, Experience and Skills tabs. */
 export default function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <main className="flex flex-col gap-6">
-      <div>
+    <main className="flex flex-col gap-6 md:h-full">
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
         <p className="text-sm text-muted-foreground">
           Everything here counts as true. Claude only uses what&apos;s here, and never invents anything beyond it.

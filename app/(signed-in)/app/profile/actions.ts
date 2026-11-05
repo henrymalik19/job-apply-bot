@@ -116,10 +116,17 @@ export async function suggestSkillCleanupAction(): Promise<CleanupState> {
   }
 }
 
-/** Changes one saved answer (`question_id`, `answer`). */
+/** The answer a saved-answer form sent: `answer`, or a range's `answer_min` and `answer_max`. */
+function savedAnswerText(formData: FormData): string {
+  if (!formData.has("answer_min")) return String(formData.get("answer") ?? "");
+  const [min, max] = [String(formData.get("answer_min") ?? "").trim(), String(formData.get("answer_max") ?? "").trim()];
+  return min && max ? `${min}-${max}` : min || max;
+}
+
+/** Changes one saved answer (`question_id`, and `answer` or a range's `answer_min`/`answer_max`). */
 export async function saveSavedAnswerAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   return run("Saved; the next form that asks uses it.", (db, userId) =>
-    updateSavedAnswer(db, userId, String(formData.get("question_id")), String(formData.get("answer") ?? "")),
+    updateSavedAnswer(db, userId, String(formData.get("question_id")), savedAnswerText(formData)),
   );
 }
 

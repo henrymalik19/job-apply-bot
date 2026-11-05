@@ -15,8 +15,24 @@ export type SavedAnswer = {
   value: Json;
   /** The answer as you'd read it ("Yes", "$120,000–$150,000"). */
   shown: string;
+  /** How it's edited: a Yes/No pick, a number, a range, or a short or long text. */
+  kind: AnswerKind;
   updatedAt: string;
 };
+
+/** How a saved answer is edited. */
+export type AnswerKind = "yes_no" | "number" | "range" | "short" | "long";
+
+/** A text answer longer than this (or on several lines) gets a box of several rows. */
+const LONG_TEXT = 80;
+
+/** How an answer is edited: by its question's type, and for text, by what was answered ("Yes" is a Yes/No). */
+export function answerKind(answerType: string, shown: string): AnswerKind {
+  if (answerType === "boolean" || /^(yes|no)$/i.test(shown.trim())) return "yes_no";
+  if (answerType === "number") return "number";
+  if (answerType === "range") return "range";
+  return shown.length > LONG_TEXT || /\n/.test(shown) ? "long" : "short";
+}
 
 /** An answer as you'd read it. */
 export function shownAnswer(answerType: string, value: Json): string {
@@ -37,12 +53,15 @@ export async function listSavedAnswers(db: Db, userId: string): Promise<SavedAns
   ) as unknown as { question_id: string; value: Json; updated_at: string; questions: { label: string; category: string; answer_type: string } }[];
   return rows
     .map((r) => ({
+      ...(() => {
+        const shown = shownAnswer(r.questions.answer_type, r.value);
+        return { shown, kind: answerKind(r.questions.answer_type, shown) };
+      })(),
       questionId: r.question_id,
       label: r.questions.label,
       category: r.questions.category,
       answerType: r.questions.answer_type,
       value: r.value,
-      shown: shownAnswer(r.questions.answer_type, r.value),
       updatedAt: r.updated_at,
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
