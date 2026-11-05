@@ -75,6 +75,24 @@ export async function readInbox(config: InboxConfig, since: Date, opts: { from?:
 }
 
 /**
+ * Marks one email read (by its Message-ID): one that needs nothing from you, like an application receipt.
+ *
+ * @returns Whether it was found.
+ */
+export async function markRead(config: InboxConfig, messageId: string): Promise<boolean> {
+  return withInbox(config, async (client) => {
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      const uids = await client.search({ header: { "message-id": messageId } }, { uid: true });
+      if (!uids || uids.length === 0) return false;
+      return client.messageFlagsAdd(uids, ["\\Seen"], { uid: true });
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
  * Moves one INBOX message (by Message-ID) to `folder`, creating the folder if needed.
  *
  * @returns Whether the message was found and moved.

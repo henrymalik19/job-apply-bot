@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { Db, Json } from "@/server/db/types";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { moveToFolder, readInbox, type InboxConfig, type InboxMail } from "@/server/integrations/email/inbox";
+import { markRead, moveToFolder, readInbox, type InboxConfig, type InboxMail } from "@/server/integrations/email/inbox";
 import { getApplication, listApplications, listTransitions, transition, type AppStatus } from "@/server/modules/applications/applications.service";
 import { NOTIFY_HEADER } from "@/server/modules/notifications/digest";
 import { finishRun, startRun } from "@/server/modules/runs/runs.service";
@@ -32,6 +32,8 @@ const FIRST_RUN_DAYS = 14;
 export const FORGET_OTHER_DAYS = 30;
 /** Any other email not linked to an application (shown under Needs sorting for 60 days) after this many. */
 export const FORGET_UNLINKED_DAYS = 60;
+/** Kinds of email marked read once tied to an application: they need nothing from you. */
+const READ_KINDS = new Set<EmailKind>(["confirmation", "rejection"]);
 /** Where a matched rejection is moved (never deleted). */
 export const REJECTIONS_FOLDER = "Rejections (Autopilot)";
 
@@ -43,7 +45,7 @@ export const MOVES: Partial<Record<EmailKind, AppStatus>> = {
   recruiter: "responded",
 };
 /** Statuses an email can be about: approved onwards (one you applied to by hand counts too). */
-const TRACKED: readonly AppStatus[] = ["approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer"];
+const TRACKED: readonly AppStatus[] = ["approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer", "no_reply"];
 
 /** `user_settings.job_inbox`; IMAP defaults to Purelymail. */
 const inboxSchema = z.object({
@@ -62,6 +64,8 @@ export type TrackDeps = {
   call?: StructuredCall;
   readMail?: (config: InboxConfig, since: Date) => Promise<InboxMail[]>;
   moveMail?: (config: InboxConfig, messageId: string, folder: string) => Promise<boolean>;
+  /** Marks an email read in the inbox. */
+  markMailRead?: (config: InboxConfig, messageId: string) => Promise<boolean>;
   now?: () => Date;
   log?: (line: string) => void;
 };
@@ -78,6 +82,8 @@ export type TrackCounts = {
   cost_usd: number;
   /** Old emails not linked to an application, forgotten this run. */
   forgotten?: number;
+  /** Confirmations and rejections tied to an application, marked read (they need nothing from you). */
+  marked_read?: number;
 };
 
 /**
@@ -196,7 +202,7 @@ async function retryUnsorted(db: Db, userId: string, since: Date, now: Date): Pr
  * @throws Only when the run itself can't proceed (no inbox setting, the inbox or database unreachable).
  */
 export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCounts }> {
-  const { db, userId, now = () => new Date(), log = () => {}, readMail = readInbox, moveMail = moveToFolder } = deps;
+  const { db, userId, now = () => new Date(), log = () => {}, readMail = readInbox, moveMail = moveToFolder, markMailRead = markRead } = deps;
   const runId = await startRun(db, WORKER, null, userId);
   const counts: TrackCounts = { read: 0, new: 0, matched: 0, moved: 0, unmatched: 0, archived: 0, deferred: 0, cost_usd: 0 };
   try {
@@ -284,6 +290,15 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
         counts.moved++;
         app.status = moved;
         log(`track_email: ${app.company} -> ${moved} (${kind}: "${mail.subject}")`);
+      }
+      // A receipt or a no, tied to its application, needs nothing from you: read. Anything that might
+      // (an interview, a recruiter, one it couldn't place) stays unread so it stands out.
+      if (READ_KINDS.has(kind)) {
+        try {
+          if (await markMailRead(config, mail.messageId)) counts.marked_read = (counts.marked_read ?? 0) + 1;
+        } catch (err) {
+          log(`track_email: couldn't mark the ${kind} from ${app.company} read: ${(err as Error).message}`);
+        }
       }
       if (kind === "rejection") {
         try {

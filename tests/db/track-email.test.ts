@@ -63,6 +63,7 @@ const call: StructuredCall = async () => ({
   model: "claude-haiku-5-5",
   usage: { input_tokens: 100, output_tokens: 20 },
 }) as never;
+const markedRead: string[] = [];
 const deps = () => ({
   db,
   userId,
@@ -71,6 +72,10 @@ const deps = () => ({
   readMail: async () => inbox,
   moveMail: async (_c: unknown, messageId: string, folder: string) => {
     moved.push(`${messageId} -> ${folder}`);
+    return true;
+  },
+  markMailRead: async (_c: unknown, messageId: string) => {
+    markedRead.push(messageId);
     return true;
   },
 });
@@ -115,7 +120,9 @@ afterAll(async () => {
 describe("track_email", () => {
   it("moves the applications the inbox is about", async () => {
     const { counts } = await runTrackEmail(deps());
-    expect(counts).toMatchObject({ read: 6, new: 5, matched: 4, moved: 4, unmatched: 1, archived: 1 });
+    expect(counts).toMatchObject({ read: 6, new: 5, matched: 4, moved: 4, unmatched: 1, archived: 1, marked_read: 3 });
+    // Receipts and the rejection are read; the interview invite stays unread.
+    expect(markedRead.sort()).toEqual([`<${tag}-a@mail.test>`, `<${tag}-c@mail.test>`, `<${tag}-r@mail.test>`].sort());
 
     expect(await status("conf")).toBe("confirmed");
     const { data: evidence } = await db.from("application_evidence_items").select("kind, email_message_id").eq("application_id", apps.conf);
