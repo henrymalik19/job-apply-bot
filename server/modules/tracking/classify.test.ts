@@ -21,6 +21,27 @@ describe("classifyByRules", () => {
     expect(classifyByRules(mail("Schedule your interview", "Can we set up a call this week?", "recruiting@netflix.com"))).toBe("interview");
   });
 
+  it("reads a receipt that says what happens if you're not selected as a receipt, not a rejection", () => {
+    // Rula's (via Ashby) receipt, which the rules once took for a rejection.
+    const rula = mail(
+      "Thanks for applying to Rula!",
+      "Thanks for applying to our Sr. Software Engineer role! We're thrilled you're interested in joining Rula and appreciate the time you took to submit your application. We aim to review and respond to applications within about one business week. If you're not selected to move forward, please know this doesn't necessarily reflect your experience, sometimes we have to make difficult decisions among many qualified candidates. If selected to move forward, our interview process typically takes around four weeks.",
+    );
+    expect(classifyByRules(rula)).toBe("confirmation");
+    expect(classifyByRules(mail("Application received", "Thank you for applying. Unfortunately, due to the volume of applications we can't reply to every applicant individually."))).toBe("confirmation");
+    expect(classifyByRules(mail("Thanks for applying", "We have received your application. Should we decide not to move forward with your application, we'll let you know by email."))).toBe("confirmation");
+  });
+
+  it("still reads a decision as a rejection, however it's worded", () => {
+    for (const text of [
+      "After careful consideration, we've decided not to move forward.",
+      "We will not be moving forward with your application at this time.",
+      "Unfortunately, the position has been filled.",
+      "We regret to inform you that you were not chosen.",
+      "Your application has not been selected for further consideration.",
+    ]) expect(classifyByRules(mail("Your application", text)), text).toBe("rejection");
+  });
+
   it("leaves what it can't tell to Claude", () => {
     expect(classifyByRules(mail("Quick question about your background", "Hi Malik, are you open to relocating to Denver?", "jane@acme.com"))).toBeNull();
   });

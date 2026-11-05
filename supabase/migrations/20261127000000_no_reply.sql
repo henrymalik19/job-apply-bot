@@ -20,3 +20,9 @@ insert into application_status_transitions (from_status, to_status) values
   ('no_reply', 'submitted'), ('no_reply', 'confirmed'), ('no_reply', 'responded'),
   ('no_reply', 'interviewing'), ('no_reply', 'offer'), ('no_reply', 'rejected')
 on conflict do nothing;
+
+-- A rejection email tracking read wrongly (a receipt saying "if you're not selected...") can be undone:
+-- Rejected back to Confirmed or Submitted.
+insert into application_status_transitions (from_status, to_status) values
+  ('rejected', 'confirmed'), ('rejected', 'submitted')
+on conflict do nothing;

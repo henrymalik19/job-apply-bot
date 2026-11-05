@@ -43,6 +43,7 @@ beforeAll(async () => {
   await addApp("oldconfirmed", "confirmed", 40, false);
   await addApp("closed", "submitted", 15, true);
   await addApp("recent", "submitted", 15, false);
+  await addApp("wrongly", "rejected", 1, false);
 });
 
 afterAll(async () => {
@@ -65,5 +66,10 @@ describe("no reply", () => {
     expect(await status("old")).toBe("interviewing");
     await moveApplication(db, userId, apps.closed, "submitted");
     expect(await status("closed")).toBe("submitted");
+  });
+
+  it("lets you undo a rejection tracking read wrongly", async () => {
+    await moveApplication(db, userId, apps.wrongly, "submitted");
+    expect(await status("wrongly")).toBe("submitted");
   });
 });

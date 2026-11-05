@@ -14,8 +14,20 @@ export type MailText = { fromAddress: string; fromName: string; subject: string;
 // Checked in this order: a rejection often opens with "thank you for applying", and an
 // interview invite with "thanks for your interest".
 const CODE = /\b(security|verification) code\b/i;
+// A rejection says a decision was made. Receipts use the same words conditionally ("if you're not
+// selected, we'll let you know", "unfortunately we can't reply to everyone"), so a sentence counts only
+// when it states a decision, and never when it's an "if".
 const REJECTION =
-  /\bunfortunately\b|\bnot (to )?(move|moving) forward\b|\bdecided to (pursue|proceed|move forward|go) with (other|another)\b|\bother candidates\b|\bwill not be (moving|proceeding)\b|\bno longer (being )?considered\b|\bposition has (been|now been) filled\b|\bnot (been )?selected\b|\bregret to inform\b/i;
+  /\bunfortunately\b[^.!?]{0,160}\b(decided|decision|not (to )?(move|moving|proceed|proceeding)|not been selected|won.t be (moving|proceeding)|will not be (moving|proceeding)|other candidates|another candidate|(been|is|was) filled)\b|\bnot (to )?(move|moving) forward with (your|you)\b|\bdecided to (pursue|proceed|move forward|go) with (other|another)\b|\bmov(e|ing) forward with other candidates\b|\bwill not be (moving|proceeding) forward\b|\bno longer (being )?considered\b|\bposition has (been|now been) filled\b|\b(you|your application) (have|has) not been selected\b|\bdecided not to (move|proceed|pursue)\b|\bregret to inform\b/i;
+/** Words that make a sentence conditional: what would happen, not what did. */
+const CONDITIONAL = /\b(if|should (we|you|your)|in the event|whether|unless|in case)\b/i;
+
+/** Whether the email says they decided not to go ahead: a sentence stating it, not one saying what would happen if. */
+function saysRejected(text: string): boolean {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .some((sentence) => !CONDITIONAL.test(sentence) && REJECTION.test(sentence));
+}
 const INTERVIEW =
   /\b(schedule|book|set up|arrange)\b.{0,60}\b(interview|call|chat|conversation|phone screen|meeting)\b|\binterview\b.{0,60}\b(invit|availability|schedul)|\bcalendly\.com\b|\bgoodtime\.io\b|\byour availability\b/i;
 // Checked after rejections and interviews, so "thank you for your interest" here is the plain receipt.
@@ -38,7 +50,7 @@ export function classifyByRules(mail: MailText): EmailKind | null {
   const head = `${mail.subject}\n${mail.text.slice(0, 4000)}`;
   if (CODE.test(mail.subject)) return "code";
   if (JOB_ALERT_SENDER.test(mail.fromAddress) || JOB_ALERT_SUBJECT.test(mail.subject)) return "job_alert";
-  if (REJECTION.test(head)) return "rejection";
+  if (saysRejected(head)) return "rejection";
   if (INTERVIEW.test(head)) return "interview";
   if (CONFIRMATION.test(head)) return "confirmation";
   return null;
