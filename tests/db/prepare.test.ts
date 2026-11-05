@@ -245,3 +245,29 @@ describe("prepare", () => {
     expect(row!.reason).toMatch(/picked by AI/);
   });
 });
+
+describe("prepare: forms it couldn't read before", () => {
+  it("starts over a can't-be-filled application once its form can be read, and leaves one whose form is still gone", async () => {
+    // Prepared when the form couldn't be read (before the site was supported, say).
+    for (const key of ["later", "zone"]) {
+      await db.from("applications").delete().eq("job_id", jobIds[key]);
+      const { data: match } = await db.from("matches").select("id").eq("job_id", jobIds[key]).single();
+      await db.from("applications").insert({
+        user_id: userId, job_id: jobIds[key], match_id: match!.id, status: "manual", flags: [], apply_method: "self",
+        prepared_at: new Date().toISOString(), prepare_error: "no application form available from greenhouse",
+      });
+    }
+    const gone = forms.zone;
+    delete forms.zone;
+    try {
+      const { counts } = await prepare(["later", "zone"]);
+      expect(counts.restarted).toBe(1);
+      const later = await application("later");
+      expect(later.status).not.toBe("manual");
+      expect(later.application_questions.length).toBe(1);
+      expect((await application("zone")).status).toBe("manual");
+    } finally {
+      forms.zone = gone;
+    }
+  });
+});

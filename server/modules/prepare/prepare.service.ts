@@ -6,7 +6,7 @@
 // (ready to approve), needs_input (Needs you) or manual.
 import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
+import { FORM_ATS, fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
 import { ValidationError } from "@/server/core/errors";
 import { getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
 import { getMatchCriteria, type MatchCriteria } from "@/server/modules/criteria/criteria.service";
@@ -50,7 +50,10 @@ import {
 import {
   asJson,
   countApplicationsSince,
+  deleteApplication,
   getJobPosting,
+  listNoFormApplications,
+  noFormError,
   insertApplication,
   setPrepareError,
   listPrepareCandidates,
@@ -96,7 +99,30 @@ export type PrepareCounts = {
   tailored: number;
   untailored: number;
   cost_usd: number;
+  /** "Can't be filled" applications started over because their form can be read now. */
+  restarted?: number;
 };
+
+/**
+ * Starts over the applications prepare couldn't read a form for, on sites it reads now (one
+ * prepared before Lever was supported, say), when their form is there now. A closed posting
+ * still has none, so it stays as it is.
+ *
+ * @returns How many were started over (prepared again in this run).
+ */
+async function restartNoFormApplications(deps: PrepareDeps, fetchForm: NonNullable<PrepareDeps["fetchForm"]>): Promise<number> {
+  const only = deps.onlyJobIds && new Set(deps.onlyJobIds);
+  const stale = (await listNoFormApplications(deps.db, deps.userId, FORM_ATS)).filter((a) => !only || only.has(a.job.id));
+  let restarted = 0;
+  for (const app of stale) {
+    const form = await fetchForm(app.job.source, app.job.board_token, app.job.external_id).catch(() => null);
+    if (!form) continue;
+    // An email linked to it keeps it (that link has no cascade); it stays for you to apply by hand.
+    const gone = await deleteApplication(deps.db, app.id).then(() => true, () => false);
+    if (gone) restarted++;
+  }
+  return restarted;
+}
 
 // Standard fields recognized by their form field name → catalog question key.
 const STANDARD_FIELDS: Record<string, string> = {
@@ -259,7 +285,7 @@ export async function prepareJob(
   if (!form) {
     // Still tailor a resume: a manual application needs one too.
     const posting = { title: job.title, company_name: job.company_name, text: job.description_md ?? "" };
-    return { status: "manual", flags: [], questions: [], posting, error: `no application form available from ${job.source}` };
+    return { status: "manual", flags: [], questions: [], posting, error: noFormError(job.source) };
   }
 
   const flags = postingFlags(form.descriptionHtml);
@@ -481,6 +507,9 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       getUserSetting(db, userId, "daily_cap"),
       countApplicationsSince(db, userId, utcDayStart(now())),
     ]);
+    const fetchForm = deps.fetchForm ?? ((ats: string, token: string, id: string) => fetchApplicationForm(ats, token, id));
+    counts.restarted = await restartNoFormApplications(deps, fetchForm);
+    if (counts.restarted) log(`started over ${counts.restarted} application(s) whose form can be read now`);
     const room = Math.min(deps.limit ?? Infinity, Math.max(0, Number(cap ?? 20) - today));
     let candidates = await listPrepareCandidates(db, userId, criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
     if (deps.onlyJobIds) {

@@ -91,3 +91,35 @@ export const asJson = (value: unknown) => value as Json;
 export async function setPrepareError(db: Db, applicationId: string, error: string): Promise<void> {
   check(await db.from("applications").update({ prepare_error: error.slice(0, 500) }).eq("id", applicationId), "set prepare error");
 }
+
+/** The note prepare leaves when it couldn't read a site's form. */
+export const noFormError = (source: string) => `no application form available from ${source}`;
+
+/** Applications prepare left as "can't be filled" because it couldn't read their form, untouched since. */
+export async function listNoFormApplications(
+  db: Db,
+  userId: string,
+  sources: readonly string[],
+): Promise<{ id: string; job: { id: string; source: string; external_id: string; board_token: string } }[]> {
+  const rows = unwrap(
+    await db
+      .from("applications")
+      .select("id, prepare_error, jobs!inner(id, source, external_id, closed_at, companies!inner(board_token))")
+      .eq("user_id", userId)
+      .eq("status", "manual")
+      .is("apply_note", null)
+      .is("jobs.closed_at", null)
+      .in("jobs.source", [...sources])
+      .like("prepare_error", "no application form available from %")
+      .limit(50),
+    "list no-form applications",
+  ) as unknown as { id: string; prepare_error: string; jobs: { id: string; source: string; external_id: string; companies: { board_token: string } } }[];
+  return rows
+    .filter((r) => r.prepare_error.startsWith(noFormError(r.jobs.source)))
+    .map((r) => ({ id: r.id, job: { id: r.jobs.id, source: r.jobs.source, external_id: r.jobs.external_id, board_token: r.jobs.companies.board_token } }));
+}
+
+/** Removes an application (its questions, resume and events go with it) so prepare starts it over. */
+export async function deleteApplication(db: Db, applicationId: string): Promise<void> {
+  check(await db.from("applications").delete().eq("id", applicationId), "delete application");
+}
