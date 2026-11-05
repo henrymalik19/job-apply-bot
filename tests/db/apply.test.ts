@@ -63,7 +63,7 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean; yo
  * A browser that fills everything and confirms on the second look, optionally with the user's
  * edits, a CAPTCHA, fields it can't fill, or nobody ever submitting.
  */
-function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[] } = {}) {
+function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[]; rejects?: Record<string, string> } = {}) {
   const filled: Record<string, string> = {};
   const submits: number[] = [];
   let looks = 0;
@@ -71,6 +71,8 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
     open: async () => "ok",
     fill: async (step: FillStep) => {
       if (opts.unfillable?.includes(step.fieldName)) return false;
+      // A box that won't take this one value (a search that finds nothing for it).
+      if ("value" in step && opts.rejects?.[step.fieldName] === step.value) return false;
       filled[step.fieldName] = step.kind === "text" ? step.value : step.kind === "select" ? step.value.join(", ") : "resume.pdf";
       return true;
     },
@@ -324,6 +326,44 @@ describe("apply runner", () => {
       const { fake } = await runOnce("ai3");
       expect(asked).toHaveLength(2);
       expect(fake.filled["company-name-0"]).toBe("Acme");
+      expect(fake.submits).toHaveLength(1);
+    } finally {
+      await db.from("platforms").update({ mode: "supervised", clean_streak: before?.clean_streak ?? 0 }).eq("user_id", userId).eq("ats", "greenhouse");
+    }
+  });
+
+  it("tries Claude's other wordings when a field won't take its value, holds that for you, then learns it", async () => {
+    const before = await streak();
+    await db.from("platforms").upsert({ user_id: userId, ats: "greenhouse", mode: "auto", clean_streak: 3 }, { onConflict: "user_id,ats" });
+    await db.from("field_mappings").delete().eq("user_id", userId).eq("company", `apply${tag}`).eq("field_name", "first_name");
+    const asked: string[] = [];
+    // "Ada" finds nothing in this box; Claude's second suggestion does.
+    const alternatives = async (input: { value: string }) => {
+      asked.push(input.value);
+      return ["A.", "Augusta Ada"];
+    };
+    const runOnce = async (key: string) => {
+      const id = await addApproved(key);
+      const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+      const fake = fakeDriver({ rejects: { first_name: "Ada" } });
+      fake.driver.fill = ((orig) => async (step: FillStep, resume: string) => ("value" in step && step.value === "A." ? false : orig(step, resume)))(fake.driver.fill);
+      const outcome = await applyOne({ ...deps(fake.driver), alternatives }, job);
+      return { outcome, fake, id };
+    };
+    try {
+      for (const key of ["alt1", "alt2"]) {
+        const { outcome, fake } = await runOnce(key);
+        expect(outcome).toMatchObject({ result: "submitted", changed: [] });
+        expect(fake.filled.first_name).toBe("Augusta Ada");
+        expect(fake.submits).toEqual([]); // held for you to check
+      }
+      expect(asked).toEqual(["Ada", "Ada"]);
+      const { data: mapping } = await db.from("field_mappings").select("value, confirmations, learned").eq("user_id", userId).eq("company", `apply${tag}`).eq("field_name", "first_name").single();
+      expect(mapping).toEqual({ value: ["Augusta Ada"], confirmations: 2, learned: true });
+      // Learned: tried first, no Claude, and auto mode submits by itself.
+      const { fake } = await runOnce("alt3");
+      expect(asked).toHaveLength(2);
+      expect(fake.filled.first_name).toBe("Augusta Ada");
       expect(fake.submits).toHaveLength(1);
     } finally {
       await db.from("platforms").update({ mode: "supervised", clean_streak: before?.clean_streak ?? 0 }).eq("user_id", userId).eq("ats", "greenhouse");

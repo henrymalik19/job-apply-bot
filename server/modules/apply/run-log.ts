@@ -131,3 +131,31 @@ export function shownValue(value: string): string {
   }
   return value;
 }
+
+/** A field a run couldn't fill with its first value: what was tried, and whether another value then took. */
+export type FailedField = { field: string; kind: string; label: string; value: string; detail?: string; recovered: boolean };
+
+/**
+ * The fields a run couldn't fill (not filled, or the fill threw), one per field: the first value tried,
+ * and whether a later try took (a learned value, or one Claude suggested).
+ */
+export function failedFields(fills: FillLine[]): FailedField[] {
+  const out = new Map<string, FailedField>();
+  for (const f of fills) {
+    const seen = out.get(f.field);
+    if (seen) {
+      if (f.result === "ok") seen.recovered = true;
+      continue;
+    }
+    if (f.result !== "not_filled" && f.result !== "error") continue;
+    out.set(f.field, {
+      field: f.field,
+      kind: f.kind,
+      label: f.label.replace(/ \(filled by AI\)$/, ""),
+      value: f.value,
+      ...(f.detail ? { detail: f.detail } : {}),
+      recovered: false,
+    });
+  }
+  return [...out.values()];
+}

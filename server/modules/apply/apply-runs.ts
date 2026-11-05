@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db, Json } from "@/server/db/types";
 import { check, unwrap } from "@/server/core/errors";
-import { parseRunLog, type FillResult } from "./run-log";
+import { failedFields, parseRunLog, type FailedField, type FillResult } from "./run-log";
 
 /** The private Storage bucket for run records, one folder per user. */
 export const APPLY_RUNS_BUCKET = "apply-runs";
@@ -66,9 +66,14 @@ export async function saveApplyRun(
   const folder = `${run.userId}/${run.applicationId}/${id}`;
   const saved: string[] = [];
   let counts: Record<FillResult, number> | null = null;
+  let failed: FailedField[] = [];
   for (const file of run.files) {
     const bytes = file.name === "run.log" ? new TextEncoder().encode(redactCodes(new TextDecoder().decode(file.bytes))) : file.bytes;
-    if (file.name === "run.log") counts = parseRunLog(new TextDecoder().decode(bytes)).counts;
+    if (file.name === "run.log") {
+      const log = parseRunLog(new TextDecoder().decode(bytes));
+      counts = log.counts;
+      failed = failedFields(log.fills);
+    }
     const up = await db.storage.from(APPLY_RUNS_BUCKET).upload(`${folder}/${file.name}`, bytes, { contentType: contentType(file.name) });
     if (!up.error) saved.push(file.name);
   }
@@ -85,6 +90,7 @@ export async function saveApplyRun(
       folder,
       files: saved,
       counts: counts as Json,
+      failed_fields: failed as unknown as NonNullable<Json>,
     }),
     "save apply run",
   );
@@ -228,4 +234,64 @@ export async function getApplyRun(db: Db, id: string): Promise<ApplyRunView | nu
     shots: pngs.flatMap((name, i) => (signed[i]?.signedUrl ? [{ name, url: signed[i].signedUrl }] : [])),
     formUrl: form,
   };
+}
+
+/** One field that didn't fill, across runs: where, how often, and what was last tried. */
+export type FailedFieldSummary = {
+  company: string;
+  label: string;
+  kind: string;
+  /** Runs where it didn't fill with its first value. */
+  runs: number;
+  /** Of those, runs where another value (learned, or Claude's) then took. */
+  recovered: number;
+  lastValue: string;
+  lastDetail: string | null;
+  lastRunId: string;
+  lastAt: string;
+  users: string[];
+};
+
+/**
+ * Fields the apply runner couldn't fill since a time, across everyone's runs (Admin > Health): grouped by
+ * company and field, ones still failing first.
+ */
+export async function listFailedFields(admin: Db, since: Date): Promise<FailedFieldSummary[]> {
+  const rows = unwrap(
+    await admin
+      .from("apply_runs")
+      .select("id, user_name, company_name, started_at, failed_fields")
+      .gte("started_at", since.toISOString())
+      .neq("failed_fields", "[]")
+      .order("started_at", { ascending: false })
+      .limit(500),
+    "list failed fields",
+  );
+  const groups = new Map<string, FailedFieldSummary>();
+  for (const r of rows) {
+    for (const f of (r.failed_fields as unknown as FailedField[]) ?? []) {
+      const key = `${r.company_name}\u0000${f.label}`;
+      const g = groups.get(key);
+      if (g) {
+        g.runs++;
+        if (f.recovered) g.recovered++;
+        if (r.user_name && !g.users.includes(r.user_name)) g.users.push(r.user_name);
+        continue;
+      }
+      // Rows come newest first, so the first one seen is the latest.
+      groups.set(key, {
+        company: r.company_name,
+        label: f.label,
+        kind: f.kind,
+        runs: 1,
+        recovered: f.recovered ? 1 : 0,
+        lastValue: f.value,
+        lastDetail: f.detail ?? null,
+        lastRunId: r.id,
+        lastAt: r.started_at,
+        users: r.user_name ? [r.user_name] : [],
+      });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.runs - b.recovered - (a.runs - a.recovered) || b.lastAt.localeCompare(a.lastAt));
 }

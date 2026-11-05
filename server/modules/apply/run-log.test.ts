@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRunLog, shownValue } from "./run-log";
+import { failedFields, parseRunLog, shownValue } from "./run-log";
 
 const LOG = [
   "18:02:48.243 0959d7e8-1f60-498f-b2a9-ca24d7590e27: filling Senior Software Engineer at Coinbase",
@@ -52,5 +52,22 @@ describe("shownValue", () => {
     expect(shownValue("true")).toBe("Ticked");
     expect(shownValue("(decline)")).toBe("Declined to answer");
     expect(shownValue("Malik Henry Resume.pdf")).toBe("Malik Henry Resume.pdf");
+  });
+});
+
+describe("failedFields", () => {
+  it("lists each field that didn't take its first value, and whether a retry did", () => {
+    const { fills } = parseRunLog(
+      [
+        `02:16:19.544 fill _systemfield_location (text) "Location" = "Atlanta, GA" -> NOT FILLED`,
+        `02:16:24.000 fill _systemfield_location (text) "Location (filled by AI)" = "United States" -> ok`,
+        `02:16:30.000 fill school (closest) "School" = "Georgia State University" -> NOT FILLED`,
+        `02:16:31.000 fill name (text) "Name" = "Malik Henry" -> ok`,
+      ].join("\n"),
+    );
+    expect(failedFields(fills)).toEqual([
+      { field: "_systemfield_location", kind: "text", label: "Location", value: `"Atlanta, GA"`, recovered: true },
+      { field: "school", kind: "closest", label: "School", value: `"Georgia State University"`, recovered: false },
+    ]);
   });
 });

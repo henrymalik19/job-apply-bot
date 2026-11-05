@@ -4,7 +4,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ownerContext } from "@/server/auth/require-owner";
+import { adminContext } from "@/server/auth/require-owner";
+import { listFailedFields, type FailedFieldSummary } from "@/server/modules/apply/apply-runs";
+import { shownValue } from "@/server/modules/apply/run-log";
 import { loadMatchingHealth } from "@/server/modules/matching/matching.service";
 import { getSpendSummary, type SpendSummary } from "@/server/modules/usage/usage.service";
 import { formatMinutes, loadDiscoveryHealth, loadWorkerHealth, type WorkerHealth } from "@/server/modules/runs/runs.service";
@@ -44,13 +46,14 @@ function runSummary(w: WorkerHealth): string {
 }
 
 async function Health() {
-  const { db, owner } = await ownerContext();
+  const { db, owner, admin } = await adminContext();
   const now = new Date();
-  const [{ boards }, workers, matching, spend] = await Promise.all([
+  const [{ boards }, workers, matching, spend, failed] = await Promise.all([
     loadDiscoveryHealth(db, owner.id, now),
     loadWorkerHealth(db, owner.id, now),
     loadMatchingHealth(db, owner.id, now),
     getSpendSummary(db, owner.id, now),
+    listFailedFields(admin, new Date(now.getTime() - FAILED_DAYS * 86_400_000)),
   ]);
   const canRun = !!serverEnv().RAILWAY_TOKEN;
   const failing = boards.filter((b) => b.active && b.board_token && b.ats !== "other" && b.problem).length;
@@ -123,8 +126,72 @@ async function Health() {
         </CardContent>
       </Card>
 
+      <FailedFieldsCard fields={failed} now={now} />
+
       <SpendCard spend={spend} />
     </>
+  );
+}
+
+/** How far back Health lists fields the runner couldn't fill. */
+const FAILED_DAYS = 7;
+
+/** Fields the apply runner couldn't fill in the last week, across everyone's runs: still failing first. */
+function FailedFieldsCard({ fields, now }: { fields: FailedFieldSummary[]; now: Date }) {
+  const failing = fields.filter((f) => f.recovered < f.runs).length;
+  return (
+    <Card className="shrink-0">
+      <CardHeader>
+        <CardTitle>Fields the runner couldn&apos;t fill</CardTitle>
+        <CardDescription>
+          The last {FAILED_DAYS} days, by company and field.{" "}
+          {fields.length === 0
+            ? "Every field took its value."
+            : `${failing.toLocaleString()} still failing; the rest took another value (one learned, or Claude's) on a retry.`}
+        </CardDescription>
+      </CardHeader>
+      {fields.length > 0 && (
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Field</TableHead>
+                <TableHead>Tried</TableHead>
+                <TableHead>Runs</TableHead>
+                <TableHead>Last</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {fields.map((f) => (
+                <TableRow key={`${f.company}-${f.label}`}>
+                  <TableCell className="whitespace-normal">
+                    <div className="font-medium">{f.label}</div>
+                    <div className="text-xs text-muted-foreground">{f.company} · {f.kind}</div>
+                  </TableCell>
+                  <TableCell className="max-w-64 whitespace-normal">
+                    <div className="truncate">{shownValue(f.lastValue)}</div>
+                    {f.lastDetail && <div className="text-xs text-destructive">{f.lastDetail}</div>}
+                  </TableCell>
+                  <TableCell>
+                    {f.recovered === f.runs ? (
+                      <Badge variant="secondary">fixed on retry · {f.runs}</Badge>
+                    ) : (
+                      <Badge variant="destructive">
+                        {f.runs - f.recovered} failing{f.recovered ? ` · ${f.recovered} fixed` : ""}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Link href={`/admin/runs/${f.lastRunId}`} className="underline underline-offset-2">{ago(f.lastAt, now)}</Link>
+                    {f.users.length > 0 && <div className="text-xs text-muted-foreground">{f.users.join(", ")}</div>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      )}
+    </Card>
   );
 }
 

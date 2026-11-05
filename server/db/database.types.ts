@@ -157,14 +157,14 @@ isOneToOne: false
                   ]
                 },"apply_runs": {
                   Row: {
-                    "application_id": string,"company_name": string,"counts": Json | null,"created_at": string,"files": (string)[],"finished_at": string,"folder": string,"id": string,"job_title": string,"outcome": string,"started_at": string,"user_id": string,"user_name": string
+                    "application_id": string,"company_name": string,"counts": Json | null,"created_at": string,"failed_fields": NonNullable<Json>,"files": (string)[],"finished_at": string,"folder": string,"id": string,"job_title": string,"outcome": string,"started_at": string,"user_id": string,"user_name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "application_id": string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder": string,"id"?: string,"job_title"?: string,"outcome": string,"started_at": string,"user_id": string,"user_name"?: string
+                    "application_id": string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"failed_fields"?: NonNullable<Json>,"files"?: (string)[],"finished_at"?: string,"folder": string,"id"?: string,"job_title"?: string,"outcome": string,"started_at": string,"user_id": string,"user_name"?: string
                   }
                   Update: {
-                    "application_id"?: string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"files"?: (string)[],"finished_at"?: string,"folder"?: string,"id"?: string,"job_title"?: string,"outcome"?: string,"started_at"?: string,"user_id"?: string,"user_name"?: string
+                    "application_id"?: string,"company_name"?: string,"counts"?: Json | null,"created_at"?: string,"failed_fields"?: NonNullable<Json>,"files"?: (string)[],"finished_at"?: string,"folder"?: string,"id"?: string,"job_title"?: string,"outcome"?: string,"started_at"?: string,"user_id"?: string,"user_name"?: string
                   }
                   Relationships: [
                     {
@@ -519,14 +519,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "city": string | null,"country": string,"created_at": string,"email": string | null,"first_name": string | null,"github_url": string | null,"headline": string | null,"last_name": string | null,"linkedin_url": string | null,"notice_period": string | null,"phone": string | null,"postal_code": string | null,"preferred_name": string | null,"state": string | null,"summary": string | null,"updated_at": string,"user_id": string,"website_url": string | null
+                    "city": string | null,"country": string,"created_at": string,"email": string | null,"first_name": string | null,"github_url": string | null,"headline": string | null,"last_name": string | null,"linkedin_url": string | null,"notice_period": string | null,"phone": string | null,"postal_code": string | null,"preferred_name": string | null,"security_clearance": string | null,"state": string | null,"summary": string | null,"updated_at": string,"user_id": string,"website_url": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id"?: string,"website_url"?: string | null
+                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"security_clearance"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id"?: string,"website_url"?: string | null
                   }
                   Update: {
-                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id"?: string,"website_url"?: string | null
+                    "city"?: string | null,"country"?: string,"created_at"?: string,"email"?: string | null,"first_name"?: string | null,"github_url"?: string | null,"headline"?: string | null,"last_name"?: string | null,"linkedin_url"?: string | null,"notice_period"?: string | null,"phone"?: string | null,"postal_code"?: string | null,"preferred_name"?: string | null,"security_clearance"?: string | null,"state"?: string | null,"summary"?: string | null,"updated_at"?: string,"user_id"?: string,"website_url"?: string | null
                   }
                   Relationships: [
                     {
