@@ -86,8 +86,9 @@ export function buildClassifyPrompt(input: {
 For each question, pick one kind:
 - "catalog": a fact or preference about the candidate that has one answer for every employer: work authorization,
   sponsorship, salary expectation, location, notice period, start date, relocation, links, contact details,
-  how they heard about the role, being over 18, citizenship or passport country, country of residence, current
-  employer and title, years of experience with one named skill, whether they've worked at this
+  how they heard about the role, being over 18, citizenship (passport country, citizenship and nationality are all
+  one question: nationality), the country they live in (country_of_residence: a country, never current_location,
+  which is a city and state), current employer and title, years of experience with one named skill, whether they've worked at this
   company before (previously_employed_here, even when the question names the company: "Are you a former Rula
   employee?"), and standing consents asked the same
   way everywhere: willingness to undergo a background check or drug screen, acknowledging a privacy policy or

@@ -2,6 +2,8 @@
 //   - a wording already known is answered from a saved answer, without asking Claude
 //   - an "only you can do it" step Claude now sorts as a saved-answer question becomes one you answer here
 //   - an application with nothing required left moves to Ready to review
+//   - on an Apply yourself one too: country of residence comes from your profile's country, and passport
+//     country is your nationality question, without asking Claude
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
@@ -130,5 +132,35 @@ describe("recheck open questions", () => {
     expect(row!.bucket).toBe("needs_user");
     const { data: app } = await db.from("applications").select("status").eq("id", apps.chrome).single();
     expect(app!.status).toBe("needs_input");
+  });
+
+  it("answers country of residence from your profile's country and makes passport country your nationality question", async () => {
+    // Your profile's country (a profile is added for the test when there's none).
+    const { data: had } = await db.from("profiles").select("user_id").eq("user_id", userId).maybeSingle();
+    if (!had) await db.from("profiles").insert({ user_id: userId, country: "US" });
+    const { data: profile } = await db.from("profiles").select("country").eq("user_id", userId).single();
+    try {
+      const text = { field_type: "text", options: null };
+      await addApp("countries", [
+        { ...text, question: "Passport Country", field_name: "q1", bucket: "cannot_automate", reason: "not in the catalog" },
+        { ...text, question: "Country of Residence", field_name: "q2", bucket: "needs_user", reason: "not answered then" },
+      ], "manual");
+      const before = asked.length;
+      const counts = await recheckOpenQuestions({ db, userId, call }, { applicationIds: [apps.countries] });
+      expect(counts.applications).toBe(1);
+      expect(asked).toHaveLength(before); // both wordings are known
+
+      const { data: rows } = await db
+        .from("application_questions")
+        .select("answer, bucket, answer_source, questions(key)")
+        .eq("application_id", apps.countries)
+        .order("sort_order");
+      const [passport, residence] = rows as unknown as { answer: string | null; bucket: string; answer_source: string | null; questions: { key: string } | null }[];
+      expect(passport).toMatchObject({ bucket: "needs_user", questions: { key: "nationality" } });
+      const name = new Intl.DisplayNames(["en"], { type: "region" }).of(profile!.country);
+      expect(residence).toMatchObject({ answer: name, bucket: "auto", answer_source: "profile", questions: { key: "country_of_residence" } });
+    } finally {
+      if (!had) await db.from("profiles").delete().eq("user_id", userId);
+    }
   });
 });

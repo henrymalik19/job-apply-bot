@@ -77,8 +77,10 @@ const INTERRUPTED_AFTER_MS = 60 * 60 * 1000;
  * 1: consents and "worked here before" as saved answers, the clearance field, follow-up questions.
  * 2: a question is never left for the Chrome window just because the answer isn't known; age, citizenship,
  *    residence, current employer and contractor history as saved answers.
+ * 3: country of residence from your profile's country (not your city); passport country, citizenship and
+ *    nationality as one question; Apply yourself applications are sorted again too.
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** A classifier pick below this confidence isn't saved as an alias and goes to the owner. */
 export const ALIAS_CONFIDENCE = 0.8;
@@ -750,7 +752,8 @@ const isFromYou = (q: { answer: string | null; answer_source: string | null; que
  * you can answer in the app. Answers taken from your profile, search criteria or saved answers are
  * brought up to date with them (one you typed yourself is left alone). Wordings already known cost
  * nothing; the rest is one Claude call per application. Nothing is drafted. Approved applications the
- * runner hasn't started are included, since it fills from these answers. Without `call` (after a
+ * runner hasn't started are included, since it fills from these answers, and so are Apply yourself ones,
+ * whose answers you copy. Without `call` (after a
  * profile save), it only does what needs no Claude.
  */
 export async function recheckOpenQuestions(
@@ -764,7 +767,7 @@ export async function recheckOpenQuestions(
     .from("applications")
     .select("id, status, apply_step, job_id, jobs!inner(title, company_name, location, description_md), application_questions(*)")
     .eq("user_id", userId)
-    .in("status", ["needs_input", "queued", "approved"]);
+    .in("status", ["needs_input", "queued", "manual", "approved"]);
   if (opts.applicationIds) query = query.in("id", opts.applicationIds);
   if (opts.onlyOutdated) query = query.lt("rules_version", RULES_VERSION);
   const { data, error } = await query;

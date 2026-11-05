@@ -35,6 +35,8 @@ export function profileValue(key: string, data: ProfileData, opts: { country: st
       return [p.first_name, p.last_name].filter(Boolean).join(" ") || null;
     case "current_location":
       return p.city && p.state ? `${p.city}, ${p.state}` : p.city ?? null;
+    case "country_of_residence":
+      return p.country ? countryName(p.country) : null;
     case "work_authorization":
       return auth ? auth.authorized : null;
     case "requires_sponsorship":
@@ -59,6 +61,15 @@ export function profileValue(key: string, data: ProfileData, opts: { country: st
       return p[key] ?? null;
     default:
       return null;
+  }
+}
+
+/** "US" → "United States": a country's name in English from its ISO code (the code when it isn't one). */
+export function countryName(code: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) ?? code;
+  } catch {
+    return code;
   }
 }
 
