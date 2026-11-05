@@ -37,6 +37,7 @@ import { listSavedAnswers, type SavedAnswer } from "@/server/modules/questions/s
 import { SavedAnswersList } from "./saved-answers-list";
 import { SkillRow } from "./skill-row";
 import { SkillsPicker } from "./skills-picker";
+import { EndMonth } from "./end-month";
 import { scrollingTable } from "../../_components/data-table";
 import { CLEARANCE_LEVELS } from "@/shared/clearance";
 import { FormSkeleton } from "../../_components/skeletons";
@@ -108,7 +109,7 @@ function EmploymentForm({ job, skillNames }: { job?: Employment; skillNames: str
         <Field label="Title" name="title"><Input id="title" name="title" defaultValue={job?.title} required /></Field>
         <Field label="Location" name="location"><Input id="location" name="location" defaultValue={job?.location ?? ""} placeholder="Remote, or Austin, TX" /></Field>
         <Field label="Start month" name="start_date"><Input id="start_date" name="start_date" type="month" defaultValue={job?.start_date.slice(0, 7)} required /></Field>
-        <Field label="End month" name="end_date"><Input id="end_date" name="end_date" type="month" defaultValue={job?.end_date?.slice(0, 7) ?? ""} /></Field>
+        <EndMonth end={job?.end_date?.slice(0, 7) ?? ""} current={job?.is_current ?? false} />
         <Field label="Type" name="employment_type">
           <NativeSelect id="employment_type" name="employment_type" defaultValue={job?.employment_type ?? ""}>
             <NativeSelectOption value="">Not set</NativeSelectOption>
@@ -116,9 +117,6 @@ function EmploymentForm({ job, skillNames }: { job?: Employment; skillNames: str
           </NativeSelect>
         </Field>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="is_current" defaultChecked={job?.is_current} /> I work here now
-      </label>
       <Field label="One-line scope (optional)" name="description">
         <Input id="description" name="description" defaultValue={job?.description ?? ""} placeholder="Led the platform team of 6" />
       </Field>
