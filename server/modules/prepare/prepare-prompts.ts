@@ -83,9 +83,14 @@ export function buildClassifyPrompt(input: {
 For each question, pick one kind:
 - "catalog": a fact or preference about the candidate that has one answer for every employer: work authorization,
   sponsorship, salary expectation, location, notice period, start date, relocation, links, contact details,
-  how they heard about the role, years of experience with one named skill, and standing consents asked the same
+  how they heard about the role, years of experience with one named skill, whether they've worked at this
+  company before (previously_employed_here, even when the question names the company: "Are you a former Rula
+  employee?"), and standing consents asked the same
   way everywhere: willingness to undergo a background check or drug screen, acknowledging a privacy policy or
-  data processing notice, certifying that the application is true and complete. Set question_key to the key in
+  data processing notice, certifying that the application is true and complete. A question about the candidate's history with the
+  employer (worked there, applied before, relatives or referrals there) is catalog even when it names the company:
+  use the general key (previously_employed_here; for a new one, e.g. previously_applied_here), never one named for
+  the company, and ask about "this company" in its label. Set question_key to the key in
   <catalog> that asks the same thing; only if none does, set new_question with a short snake_case key, a
   plain-English label, a category and answer_type. For years of experience with one skill, use
   "years_with_skill" and put the skill's name in skill. Set polarity to "inverted" only when the wording asks
@@ -96,7 +101,8 @@ For each question, pick one kind:
   list those fact numbers in supporting_facts. Answer "no" only if the facts clearly contradict it. Otherwise
   "unknown". Never guess.
 - "open_ended": free text about motivation, experience or fit that should be written for this employer ("Why do
-  you want to work here?", "Describe a project you're proud of", cover letter text).
+  you want to work here?", "Describe a project you're proud of", cover letter text). Never a question with options
+  to pick.
 - "attestation": a legal statement specific to this employer that isn't a standing consent: a signature, a typed
   name and date, an arbitration, non-compete or employer-specific agreement. These always go to the candidate.
 - "cannot_automate": assessments, coding tests, video or audio recordings, or anything that needs an account

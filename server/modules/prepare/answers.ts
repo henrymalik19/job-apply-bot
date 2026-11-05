@@ -24,8 +24,9 @@ export function normalizeQuestion(label: string): string {
  * the profile doesn't state it.
  *
  * @param country - The posting's country (ISO code), for work authorization.
+ * @param company - The posting's company, for "have you worked here before?".
  */
-export function profileValue(key: string, data: ProfileData, opts: { country: string; now: Date }): AnswerValue | null {
+export function profileValue(key: string, data: ProfileData, opts: { country: string; now: Date; company?: string }): AnswerValue | null {
   const p = data.profile;
   const auth = data.workAuthorizations.find((a) => a.country === opts.country);
   switch (key) {
@@ -43,12 +44,36 @@ export function profileValue(key: string, data: ProfileData, opts: { country: st
       return currentJob(data)?.title ?? null;
     case "years_experience_total":
       return data.employment.length ? totalYears(data, opts.now) : null;
+    case "previously_employed_here": {
+      if (!opts.company || data.employment.length === 0) return null;
+      const company = opts.company;
+      return data.employment.some((e) => sameCompany(e.employer, company));
+    }
     case "first_name": case "last_name": case "preferred_name": case "email": case "phone":
     case "postal_code": case "linkedin_url": case "github_url": case "website_url": case "notice_period":
       return p[key] ?? null;
     default:
       return null;
   }
+}
+
+/** Words a company name can end in that don't tell two companies apart ("Rula Health, Inc." is Rula). */
+const COMPANY_SUFFIX = /\s+(inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|technologies|technology|labs|health|group|holdings)$/;
+
+/** A company name reduced to what identifies it. */
+function companyKey(name: string): string {
+  let key = normalize(name).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  for (let before = ""; before !== key; ) {
+    before = key;
+    key = key.replace(COMPANY_SUFFIX, "");
+  }
+  return key;
+}
+
+/** Whether two company names are the same company ("Rula" and "Rula Health, Inc."). */
+export function sameCompany(a: string, b: string): boolean {
+  const x = companyKey(a);
+  return x !== "" && x === companyKey(b);
 }
 
 /** The value of a question answered from the matching criteria (by its key), or null when not set. */

@@ -157,6 +157,8 @@ type RunContext = {
   facts: { category: string; fact: string }[];
   /** The posting's country (ISO code), set per job. */
   country: string;
+  /** The posting's company, set per job. */
+  company?: string;
   now: Date;
   answerLessons: { rule: string; scope: string; active: boolean }[];
   tailoringLessons: { rule: string; scope: string; active: boolean }[];
@@ -195,7 +197,7 @@ function baseRow(q: FormQuestion, index: number): Draft {
 function questionValue(question: Question, mapping: Mapping, ctx: RunContext): AnswerValue | null {
   switch (question.answer_source) {
     case "profile":
-      return profileValue(question.key, ctx.profile, { country: ctx.country, now: ctx.now });
+      return profileValue(question.key, ctx.profile, { country: ctx.country, now: ctx.now, company: ctx.company });
     case "criteria":
       return criteriaValue(question.key, ctx.criteria);
     case "skill_years":
@@ -279,7 +281,7 @@ export async function prepareJob(
   const { job } = candidate;
   // Work-authorization questions are about the posting's country; US unless its location names exactly one other.
   const countries = resolvePlace(job.location ?? "").countries;
-  const ctx: RunContext = { ...runCtx, country: countries.size === 1 ? [...countries][0] : "US" };
+  const ctx: RunContext = { ...runCtx, country: countries.size === 1 ? [...countries][0] : "US", company: job.company_name };
   const fetchForm = deps.fetchForm ?? ((ats, token, id) => fetchApplicationForm(ats, token, id));
   const form = await fetchForm(job.source, job.board_token, job.external_id);
   if (!form) {

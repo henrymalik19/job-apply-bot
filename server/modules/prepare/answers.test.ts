@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchCriteriaSchema } from "@/server/modules/criteria/criteria.service";
 import type { ProfileData } from "@/server/modules/profile/profile.service";
-import { criteriaValue, declineOption, normalizeQuestion, profileValue, shapeAnswer, skillYearsValue } from "./answers";
+import { criteriaValue, declineOption, normalizeQuestion, profileValue, sameCompany, shapeAnswer, skillYearsValue } from "./answers";
 
 const now = new Date("2026-10-01T00:00:00Z");
 const job = (employer: string, start: string, end: string | null, skills: string[], current = false) => ({
@@ -104,5 +104,22 @@ describe("declineOption and normalizeQuestion", () => {
     const q = { fieldType: "multiselect" as const, options: [{ label: "Asian", value: "1" }, { label: "Decline", value: "2", decline: true }] };
     expect(declineOption(q)).toEqual({ answer: "Decline", value: ["2"] });
     expect(normalizeQuestion("  Do you REQUIRE sponsorship? ")).toBe("do you require sponsorship");
+  });
+});
+
+describe("worked here before", () => {
+  it("is yes for a past employer under another spelling, no for any other company", () => {
+    const history = { ...data, employment: [job("Rula Health, Inc.", "2020-01-01", "2022-01-01", [])] };
+    expect(profileValue("previously_employed_here", history, { ...opts, company: "Rula" })).toBe(true);
+    expect(profileValue("previously_employed_here", history, { ...opts, company: "Stripe" })).toBe(false);
+    // Without the company or any job history it can't say.
+    expect(profileValue("previously_employed_here", history, opts)).toBeNull();
+    expect(profileValue("previously_employed_here", { ...data, employment: [] }, { ...opts, company: "Rula" })).toBeNull();
+  });
+
+  it("matches names that differ only in a company suffix or punctuation", () => {
+    expect(sameCompany("Acme Corp.", "ACME")).toBe(true);
+    expect(sameCompany("Scale AI", "Scale")).toBe(false);
+    expect(sameCompany("Inc.", "LLC")).toBe(false);
   });
 });
