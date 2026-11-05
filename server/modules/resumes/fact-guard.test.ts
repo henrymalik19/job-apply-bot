@@ -13,7 +13,7 @@ const data: ProfileData = {
   profile: {
     user_id: "u", first_name: "Sam", last_name: "Lee", preferred_name: null, email: "sam@example.test", phone: null,
     city: "Houston", state: "TX", country: "US", postal_code: null, linkedin_url: null, github_url: null, website_url: null,
-    headline: "Staff Software Engineer", summary: "Engineer with 9 years building APIs.", notice_period: null, created_at: "", updated_at: "",
+    headline: "Staff Software Engineer", summary: "Engineer with 9 years building APIs.", notice_period: null, security_clearance: null, created_at: "", updated_at: "",
   },
   workAuthorizations: [],
   employment: [

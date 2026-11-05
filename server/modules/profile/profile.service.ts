@@ -7,6 +7,7 @@ import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { recordUsage } from "@/server/modules/usage/usage.service";
 import { ValidationError } from "@/server/core/errors";
+import { CLEARANCE_LEVELS, type ClearanceLevel } from "@/shared/clearance";
 import { normalize } from "@/shared/text";
 import { profileLines, type ProfileLine } from "./profile-data";
 import {
@@ -85,6 +86,7 @@ const profileInput = z.object({
   headline: optionalText(200),
   summary: optionalText(3000),
   notice_period: optionalText(100),
+  security_clearance: z.preprocess((v) => (v === "" || v == null ? null : v), z.enum(Object.keys(CLEARANCE_LEVELS) as [ClearanceLevel, ...ClearanceLevel[]]).nullable().default(null)),
 });
 
 /** Saves the contact and summary section. @throws {@link ValidationError} */

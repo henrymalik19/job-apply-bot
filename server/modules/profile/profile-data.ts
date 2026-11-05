@@ -3,6 +3,7 @@
 // see. Everything here counts as true; nothing else may be claimed.
 import type { Row } from "@/server/db/types";
 import { normalize } from "@/shared/text";
+import { CLEARANCE_LEVELS, type ClearanceLevel } from "@/shared/clearance";
 
 /** One job with what was done there and the skills used. */
 export type Employment = Row<"employments"> & {
@@ -149,6 +150,10 @@ export function profileLines(data: ProfileData, now: Date): ProfileLine[] {
     profile.notice_period && `notice period: ${profile.notice_period}`,
   ].filter(Boolean);
   if (logistics.length) lines.push({ category: "logistics", fact: `${logistics.join("; ")}.` });
+  if (profile.security_clearance) {
+    const level = CLEARANCE_LEVELS[profile.security_clearance as ClearanceLevel];
+    lines.push({ category: "authorization", fact: profile.security_clearance === "none" ? "Holds no US security clearance." : `Holds an active US security clearance: ${level}.` });
+  }
 
   return lines;
 }

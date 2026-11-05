@@ -20,6 +20,7 @@ import {
   type NotASkillSuggestion,
   type SkillMergeSuggestion,
 } from "@/server/modules/profile/profile.service";
+import { deleteSavedAnswer, updateSavedAnswer } from "@/server/modules/questions/saved-answers";
 import type { FormMessageState } from "../../_components/form-message";
 
 const values = (formData: FormData) => Object.fromEntries([...formData.entries()].map(([k, v]) => [k, String(v)]));
@@ -113,4 +114,18 @@ export async function suggestSkillCleanupAction(): Promise<CleanupState> {
     if (err instanceof ValidationError) return { error: err.message };
     throw err;
   }
+}
+
+/** Changes one saved answer (`question_id`, `answer`). */
+export async function saveSavedAnswerAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+  return run("Saved; the next form that asks uses it.", (db, userId) =>
+    updateSavedAnswer(db, userId, String(formData.get("question_id")), String(formData.get("answer") ?? "")),
+  );
+}
+
+/** Deletes one saved answer (`question_id`). */
+export async function deleteSavedAnswerAction(formData: FormData) {
+  const { db, owner } = await ownerContext();
+  await deleteSavedAnswer(db, owner.id, String(formData.get("question_id")));
+  refresh();
 }

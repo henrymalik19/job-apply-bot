@@ -12,7 +12,7 @@ const data: ProfileData = {
   profile: {
     user_id: "u", first_name: "Sam", last_name: "Lee", preferred_name: null, email: "sam@example.test", phone: null,
     city: "Houston", state: "TX", country: "US", postal_code: null, linkedin_url: "https://www.linkedin.com/in/someone",
-    github_url: null, website_url: null, headline: null, summary: null, notice_period: null,
+    github_url: null, website_url: null, headline: null, summary: null, notice_period: null, security_clearance: null,
     created_at: "", updated_at: "",
   },
   workAuthorizations: [{ id: "a", user_id: "u", country: "US", authorized: true, requires_sponsorship: false, status: null, notes: null, created_at: "", updated_at: "" }],
@@ -121,5 +121,15 @@ describe("worked here before", () => {
     expect(sameCompany("Acme Corp.", "ACME")).toBe(true);
     expect(sameCompany("Scale AI", "Scale")).toBe(false);
     expect(sameCompany("Inc.", "LLC")).toBe(false);
+  });
+});
+
+describe("security clearance", () => {
+  it("answers whether you hold one and its level from the profile field, and nothing while it's unset", () => {
+    const withLevel = (security_clearance: string | null) => ({ ...data, profile: { ...data.profile, security_clearance } });
+    expect(profileValue("has_security_clearance", withLevel("secret"), opts)).toBe(true);
+    expect(profileValue("security_clearance_level", withLevel("ts_sci"), opts)).toBe("Top Secret/SCI");
+    expect(profileValue("has_security_clearance", withLevel("none"), opts)).toBe(false);
+    expect(profileValue("has_security_clearance", withLevel(null), opts)).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import type { MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { resolvePlace } from "@/server/modules/criteria/places";
 import { currentJob, skillYears, totalYears, type ProfileData } from "@/server/modules/profile/profile.service";
 import { normalize } from "@/shared/text";
+import { CLEARANCE_LEVELS, type ClearanceLevel } from "@/shared/clearance";
 
 /** An answer's value: boolean, number, salary-style range, or text. */
 export type AnswerValue = boolean | number | { min: number; max: number } | string;
@@ -44,6 +45,10 @@ export function profileValue(key: string, data: ProfileData, opts: { country: st
       return currentJob(data)?.title ?? null;
     case "years_experience_total":
       return data.employment.length ? totalYears(data, opts.now) : null;
+    case "has_security_clearance":
+      return p.security_clearance == null ? null : p.security_clearance !== "none";
+    case "security_clearance_level":
+      return p.security_clearance == null ? null : CLEARANCE_LEVELS[p.security_clearance as ClearanceLevel];
     case "previously_employed_here": {
       if (!opts.company || data.employment.length === 0) return null;
       const company = opts.company;

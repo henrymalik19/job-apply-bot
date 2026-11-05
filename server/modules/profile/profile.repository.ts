@@ -46,7 +46,7 @@ function emptyProfile(userId: string): Row<"profiles"> {
   return {
     user_id: userId, first_name: null, last_name: null, preferred_name: null, email: null, phone: null, city: null, state: null,
     country: "US", postal_code: null, linkedin_url: null, github_url: null, website_url: null, headline: null, summary: null,
-    notice_period: null, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString(),
+    notice_period: null, security_clearance: null, created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString(),
   };
 }
 

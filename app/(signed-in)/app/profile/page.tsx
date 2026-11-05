@@ -27,15 +27,19 @@ import {
   addCertificationAction,
   addEducationAction,
   addSkillsAction,
+  deleteSavedAnswerAction,
   mergeSkillsAction,
   removeItemAction,
   removeSkillAction,
   saveAuthorizationAction,
   saveEmploymentAction,
   saveProfileAction,
+  saveSavedAnswerAction,
   updateSkillAction,
 } from "./actions";
 import { SkillCleanup } from "./skill-cleanup";
+import { listSavedAnswers, type SavedAnswer } from "@/server/modules/questions/saved-answers";
+import { CLEARANCE_LEVELS } from "@/shared/clearance";
 import { FormSkeleton } from "../../_components/skeletons";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -45,6 +49,7 @@ const TABS = [
   ["basics", "Basics"],
   ["experience", "Experience"],
   ["skills", "Skills"],
+  ["answers", "Saved answers"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -187,6 +192,53 @@ function SkillRow({ s, years, others }: { s: UserSkill; years: number | undefine
   );
 }
 
+/** The input for a saved answer, by its question's kind. */
+function SavedAnswerInput({ a }: { a: SavedAnswer }) {
+  if (a.answerType === "boolean") return <YesNoSelect name="answer" value={a.value as boolean} allowBlank={false} />;
+  return <Input name="answer" defaultValue={a.shown} aria-label={a.label} className="min-w-0 flex-1" />;
+}
+
+/** Saved answers tab: what you've answered once and every form reuses, to check, change or delete. */
+function SavedAnswersTab({ answers }: { answers: SavedAnswer[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Saved answers ({answers.length})</CardTitle>
+        <CardDescription>
+          Questions asked the same way on every form (a background check, how you heard about a job): answered once under Needs
+          your answer, then filled in for you. Change one here and the next form uses it; delete one and forms ask you again.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {answers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing saved yet. Short answers you give under Needs your answer show up here.</p>
+        ) : (
+          <div className="divide-y">
+            {answers.map((a) => (
+              <div key={a.questionId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:gap-4">
+                <div className="sm:w-2/5">
+                  <div className="text-sm font-medium">{a.label}</div>
+                  <div className="text-xs capitalize text-muted-foreground">{a.category}</div>
+                </div>
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  <ActionForm action={saveSavedAnswerAction} submitLabel="Save" className="min-w-0 flex-1">
+                    <input type="hidden" name="question_id" value={a.questionId} />
+                    <SavedAnswerInput a={a} />
+                  </ActionForm>
+                  <form action={deleteSavedAnswerAction}>
+                    <input type="hidden" name="question_id" value={a.questionId} />
+                    <Button type="submit" variant="ghost" size="sm">Delete</Button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Skills tab: Claude cleanup, then a searchable, sortable, paged table. */
 function SkillsTab({ data, params }: { data: ProfileData; params: Record<string, string | string[] | undefined> }) {
   const years = skillYears(data, new Date());
@@ -269,7 +321,7 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
 
 async function Profile({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
-  const [data, params] = await Promise.all([getProfile(db, owner.id), searchParams]);
+  const [data, params, saved] = await Promise.all([getProfile(db, owner.id), searchParams, listSavedAnswers(db, owner.id)]);
   const { profile: p } = data;
   const tab: Tab = (TABS.map((t) => t[0]) as string[]).includes(one(params.tab)) ? (one(params.tab) as Tab) : "basics";
   const missingEnd = data.employment.filter((j) => !j.is_current && !j.end_date);
@@ -289,6 +341,7 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
           >
             {label}
             {id === "skills" && <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{data.skills.length}</span>}
+            {id === "answers" && <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{saved.length}</span>}
           </Link>
         ))}
       </nav>
@@ -316,6 +369,14 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
               <Field label="GitHub URL" name="github_url"><Input id="github_url" name="github_url" defaultValue={p.github_url ?? ""} /></Field>
               <Field label="Website URL" name="website_url"><Input id="website_url" name="website_url" defaultValue={p.website_url ?? ""} /></Field>
               <Field label="Notice period" name="notice_period"><Input id="notice_period" name="notice_period" defaultValue={p.notice_period ?? ""} placeholder="2 weeks" /></Field>
+              <Field label="US security clearance" name="security_clearance">
+                <NativeSelect id="security_clearance" name="security_clearance" defaultValue={p.security_clearance ?? ""}>
+                  <NativeSelectOption value="">Not set</NativeSelectOption>
+                  {Object.entries(CLEARANCE_LEVELS).map(([value, label]) => (
+                    <NativeSelectOption key={value} value={value}>{value === "none" ? "None" : `Active: ${label}`}</NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
               <Field label="Headline" name="headline"><Input id="headline" name="headline" defaultValue={p.headline ?? ""} placeholder="Staff Software Engineer" /></Field>
             </div>
             <Field label="Summary" name="summary"><Textarea id="summary" name="summary" rows={4} defaultValue={p.summary ?? ""} /></Field>
@@ -457,6 +518,7 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
       )}
 
       {tab === "skills" && <SkillsTab data={data} params={params} />}
+      {tab === "answers" && <SavedAnswersTab answers={saved} />}
     </>
   );
 }

@@ -87,7 +87,7 @@ function parseAnswer(q: ApplicationQuestion, raw: string): { answer: string; val
 }
 
 /** A typed answer as a catalog question stores it (so the next form can fit it to its own options). */
-function storedValue(question: Pick<Question, "answer_type">, answer: string): NonNullable<Json> {
+export function storedValue(question: Pick<Question, "answer_type">, answer: string): NonNullable<Json> {
   switch (question.answer_type) {
     case "boolean":
       return /^(yes|true|y)\b/i.test(answer.trim());
