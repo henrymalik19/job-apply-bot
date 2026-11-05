@@ -172,6 +172,25 @@ async function enterCodeFromInbox(deps: ApplyDeps, app: ApplyJob): Promise<boole
 
 /** How long a form with a step only you can do (an assessment) stays open for you; the runner waits meanwhile. */
 const YOUR_STEPS_WAIT_MS = 60 * 60_000;
+/**
+ * A refusal that submitting again won't change: the company's limit on applications ("You have reached the
+ * application limit"), or one already sent for this job.
+ */
+const FINAL_REFUSAL = /application limit|limit(ing)? applications|maximum number of applications|already (applied|submitted)|no longer accepting applications/i;
+
+/** The company won't take this application: it's skipped with what they said (nothing to retry or finish by hand). */
+async function notTaken(deps: ApplyDeps, app: ApplyJob, said: string): Promise<Extract<ApplyOutcome, { result: "handed_back" }>> {
+  const reason = `${app.job.company_name} won't take this application: "${said}"`.slice(0, 500);
+  deps.log(`${app.id}: not taken: ${said}`);
+  await setApplyStep(deps.db, app.id, null, reason);
+  await transition(deps.db, app.id, "skipped", "worker:not_taken", { reason });
+  await notify(deps.db, deps.userId, {
+    kind: "runner_stuck", title: `Not sent: ${app.job.title} at ${app.job.company_name}`, body: reason,
+    href: applicationHref(app.id), applicationId: app.id,
+  });
+  return { result: "handed_back", reason, closeTab: true };
+}
+
 /** How long to wait before submitting again after the site refused a submission (it suggests a few minutes). */
 const RESUBMIT_WAIT_MS = 2 * 60_000;
 
@@ -421,6 +440,8 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const waitMs = yours || left.length ? YOUR_STEPS_WAIT_MS : undefined;
   let waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, waitMs);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
+  const refusal = "refused" in waited ? waited.refused : null;
+  if (refusal && FINAL_REFUSAL.test(refusal)) return notTaken(deps, app, refusal);
   if ("refused" in waited) {
     // The site's own advice when it refuses one by mistake (Ashby's spam check): wait a few minutes and
     // submit again. Done once, with the same answers; a second refusal hands it back.

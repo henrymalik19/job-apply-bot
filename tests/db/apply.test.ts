@@ -222,6 +222,16 @@ describe("apply runner", () => {
     expect((await app(id)).status).toBe("manual");
   });
 
+  it("skips without submitting again when the company's application limit is reached", async () => {
+    const id = await addApproved("limit");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const { driver, submits } = fakeDriver({ refused: "You have reached the application limit. We are limiting applications to a total of 2 jobs over a span of 60 days." });
+    const outcome = await applyOne(deps(driver), job);
+    expect(outcome).toMatchObject({ result: "handed_back", closeTab: true, reason: expect.stringContaining("won't take this application") });
+    expect(submits).toHaveLength(0);
+    expect((await app(id)).status).toBe("skipped");
+  });
+
   it("hands back and closes the tab when nobody submits in time", async () => {
     const id = await addApproved("timeout");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
