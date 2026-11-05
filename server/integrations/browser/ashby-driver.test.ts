@@ -75,6 +75,15 @@ describe.skipIf(!browser)("ashbyDriver", () => {
     expect(await driver.refused?.()).toBeNull();
   }, 30_000);
 
+  it("doesn't fail when the form is already submitting and then moves on", async () => {
+    const driver = ashbyDriver(page, 15_000, INSTANT);
+    // The button on its spinner, then the thank-you page in its place.
+    await page.setContent('<form><button disabled class="_loading">Submit Application</button></form>');
+    await page.evaluate('setTimeout(() => { document.body.innerHTML = "<p>Your application was successfully submitted.</p>"; }, 300)');
+    await driver.submit();
+    expect(await driver.confirmation()).toMatch(/successfully submitted/);
+  });
+
   it("reads the banner when Ashby won't take a submission", async () => {
     const driver = ashbyDriver(page, 15_000, INSTANT);
     await page.setContent(

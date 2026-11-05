@@ -11,6 +11,7 @@ import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 import { scanOpenFields } from "./open-fields";
+import { clickSubmit } from "./submit";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const byName = (name: string) => `[name=${JSON.stringify(name)}]`;
@@ -189,7 +190,7 @@ export function leverDriver(page: Page, formTimeoutMs = 15_000, analysisTimeoutM
     },
 
     async submit() {
-      await form.locator('button[type=submit], #btn-submit').first().click();
+      await clickSubmit(form.locator('button[type=submit], #btn-submit'));
     },
 
     async screenshot() {

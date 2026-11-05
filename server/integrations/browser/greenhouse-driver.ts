@@ -9,6 +9,7 @@ import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 import { scanOpenFields } from "./open-fields";
+import { clickSubmit } from "./submit";
 
 /** The element id of a form field: demographic questions use their bare number. */
 const domId = (fieldName: string) => fieldName.replace(/^demographic_(?=\d+$)/, "");
@@ -245,7 +246,7 @@ export function greenhouseDriver(page: Page, formTimeoutMs = 15_000, pace: Pace 
       if (n === 0) return false;
       if (n === 1) await boxes.first().fill(code);
       else for (let i = 0; i < Math.min(n, code.length); i++) await boxes.nth(i).fill(code[i]);
-      await form.locator('button[type="submit"]').click();
+      await clickSubmit(form.locator('button[type="submit"]'));
       return true;
     },
 

@@ -12,6 +12,7 @@ import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 import { scanOpenFields } from "./open-fields";
 import { countryName, resolvePlace } from "@/server/modules/criteria/places";
+import { clickSubmit } from "./submit";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 /** Ashby's banner when it won't take a submission (its spam check, say): the heading, then what it says. */
@@ -205,7 +206,7 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
     },
 
     async submit() {
-      await page.getByRole("button", { name: /submit application/i }).click();
+      await clickSubmit(page.getByRole("button", { name: /submit application/i }));
     },
 
     async screenshot() {
