@@ -11,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import type { InboxMail } from "@/server/integrations/email/inbox";
-import { linkEmail, listApplicationEmails, listUnsortedEmails, REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
+import { forgetOldEmails, linkEmail, listApplicationEmails, listUnsortedEmails, REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
 import type {} from "./setup";
 import { setUserSettings, testUser } from "./users";
 
@@ -164,5 +164,31 @@ describe("track_email", () => {
     expect(await linkEmail(db, userId, row!.id, apps.odd, "rejection")).toBe("rejected");
     expect((await listUnsortedEmails(db, userId, tracked)).map((e) => e.id)).not.toContain(row!.id);
     expect((await listApplicationEmails(db, userId, apps.odd)).map((e) => [e.id, e.kind])).toEqual([[row!.id, "rejection"]]);
+  });
+});
+
+describe("forgetting old emails", () => {
+  it("forgets unsorted emails after 30 days and unlinked ones after 60, keeping those linked to an application", async () => {
+    const day = 24 * 60;
+    const { data: linkedApp } = await db.from("applications").select("id").eq("user_id", userId).limit(1).single();
+    const row = (key: string, daysAgo: number, classification: string, applicationId: string | null = null) => ({
+      user_id: userId, message_id: `<forget-${key}-${randomUUID()}@test>`, received_at: ago(daysAgo * day).toISOString(),
+      from_addr: "someone@example.test", subject: key, snippet: key, classification, application_id: applicationId,
+    });
+    const { data } = await db
+      .from("emails")
+      .insert([
+        row("other-old", 31, "other"),
+        row("other-recent", 10, "other"),
+        row("rejection-unlinked-45", 45, "rejection"),
+        row("rejection-unlinked-61", 61, "rejection"),
+        row("linked-old", 90, "other", linkedApp!.id),
+      ])
+      .select("id, subject");
+    const forgotten = await forgetOldEmails(db, userId, now);
+    const { data: left } = await db.from("emails").select("subject").in("id", data!.map((r) => r.id));
+    await db.from("emails").delete().in("id", data!.map((r) => r.id));
+    expect(forgotten).toBeGreaterThanOrEqual(2);
+    expect(left!.map((r) => r.subject).sort()).toEqual(["linked-old", "other-recent", "rejection-unlinked-45"]);
   });
 });

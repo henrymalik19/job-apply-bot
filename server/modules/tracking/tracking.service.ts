@@ -28,6 +28,10 @@ import {
 const WORKER = "track_email";
 /** How far back the first run reads. */
 const FIRST_RUN_DAYS = 14;
+/** Unsorted emails ("other") not linked to an application are forgotten after this many days. */
+export const FORGET_OTHER_DAYS = 30;
+/** Any other email not linked to an application (shown under Needs sorting for 60 days) after this many. */
+export const FORGET_UNLINKED_DAYS = 60;
 /** Where a matched rejection is moved (never deleted). */
 export const REJECTIONS_FOLDER = "Rejections (Autopilot)";
 
@@ -72,7 +76,30 @@ export type TrackCounts = {
   archived: number;
   deferred: number;
   cost_usd: number;
+  /** Old emails not linked to an application, forgotten this run. */
+  forgotten?: number;
 };
+
+/**
+ * Forgets emails no application needs: unsorted ones after {@link FORGET_OTHER_DAYS} days, any other
+ * unlinked one after {@link FORGET_UNLINKED_DAYS}. Reading never goes back that far (it starts just
+ * before the newest saved email, or {@link FIRST_RUN_DAYS} back), so none is read again. Emails linked
+ * to an application are its history and stay.
+ *
+ * @returns How many were forgotten.
+ */
+export async function forgetOldEmails(db: Db, userId: string, now: Date): Promise<number> {
+  const before = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+  const other = unwrap(
+    await db.from("emails").delete().eq("user_id", userId).is("application_id", null).eq("classification", "other").lt("received_at", before(FORGET_OTHER_DAYS)).select("id"),
+    "forget old unsorted emails",
+  );
+  const unlinked = unwrap(
+    await db.from("emails").delete().eq("user_id", userId).is("application_id", null).lt("received_at", before(FORGET_UNLINKED_DAYS)).select("id"),
+    "forget old unlinked emails",
+  );
+  return other.length + unlinked.length;
+}
 
 /**
  * Moves an application for an email about it: one still approved or "apply yourself"
@@ -180,6 +207,7 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
       return { counts };
     }
     const inbox = inboxSchema.parse(inboxRaw);
+    counts.forgotten = await forgetOldEmails(db, userId, now());
     const config: InboxConfig = { host: inbox.imap_host, port: inbox.imap_port, user: inbox.address, password: deps.password };
     const [mails, apps, transitions, budget] = await Promise.all([
       readSince(db, userId, now())
