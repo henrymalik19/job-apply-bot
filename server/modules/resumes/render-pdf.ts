@@ -8,9 +8,11 @@ import type { ResumeDoc } from "./resume-doc";
 
 const styles = {
   page: { paddingVertical: 36, paddingHorizontal: 44, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.35, color: "#111" },
-  name: { fontSize: 20, fontFamily: "Helvetica-Bold" },
-  headline: { fontSize: 11, marginTop: 2, color: "#333" },
+  // A line height set on the name itself: the page's, sized for body text, let the headline ride up into it.
+  name: { fontSize: 20, lineHeight: 1.25, fontFamily: "Helvetica-Bold" },
+  headline: { fontSize: 11, marginTop: 3, color: "#333" },
   contact: { fontSize: 9, marginTop: 4, color: "#444" },
+  links: { fontSize: 9, marginTop: 1, color: "#444" },
   section: { marginTop: 12 },
   heading: { fontSize: 10, fontFamily: "Helvetica-Bold", textTransform: "uppercase", letterSpacing: 1, borderBottomWidth: 0.75, borderBottomColor: "#999", paddingBottom: 2, marginBottom: 5 },
   job: { marginBottom: 7 },
@@ -22,6 +24,28 @@ const styles = {
   bulletText: { flex: 1 },
 } satisfies Record<string, ReactPdf.Styles[string]>;
 
+/** A web address in the contact list (not an email). */
+const isLink = (v: string) => !v.includes("@") && /^(https?:\/\/)?(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(v.trim());
+
+/** A link as it reads on paper: linkedin.com/in/you, no https://www. or trailing slash. */
+export const shortLink = (v: string) => v.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "");
+
+/** A US phone number as (704) 555-0100; anything else as it was typed. */
+export function formatPhone(v: string): string {
+  if (!/^[\d\s()+.-]{7,}$/.test(v.trim())) return v;
+  const d = v.replace(/\D/g, "");
+  const us = d.length === 11 && d.startsWith("1") ? d.slice(1) : d;
+  return us.length === 10 ? `(${us.slice(0, 3)}) ${us.slice(3, 6)}-${us.slice(6)}` : v;
+}
+
+/** The header's contact details split into a line of place, email and phone and a line of links. */
+export function contactLines(contact: string[]): { info: string[]; links: string[] } {
+  return {
+    info: contact.filter((v) => !isLink(v)).map(formatPhone),
+    links: contact.filter(isLink).map(shortLink),
+  };
+}
+
 function section(pdf: typeof ReactPdf, title: string, children: ReactElement | ReactElement[]): ReactElement {
   const { Text, View } = pdf;
   return h(View, { style: styles.section }, h(Text, { style: styles.heading }, title), children);
@@ -29,11 +53,14 @@ function section(pdf: typeof ReactPdf, title: string, children: ReactElement | R
 
 function resume(pdf: typeof ReactPdf, doc: ResumeDoc): ReactElement {
   const { Document, Page, Text, View } = pdf;
+  // Where you are and how to reach you on one line, your links on the next.
+  const { info, links } = contactLines(doc.contact);
   const blocks: ReactElement[] = [
     h(View, { key: "head" }, [
       h(Text, { key: "n", style: styles.name }, doc.name),
       doc.headline ? h(Text, { key: "h", style: styles.headline }, doc.headline) : null,
-      doc.contact.length ? h(Text, { key: "c", style: styles.contact }, doc.contact.join("  ·  ")) : null,
+      info.length ? h(Text, { key: "c", style: styles.contact }, info.join("  ·  ")) : null,
+      links.length ? h(Text, { key: "l", style: info.length ? styles.links : styles.contact }, links.join("  ·  ")) : null,
     ]),
   ];
   if (doc.summary) blocks.push(h(View, { key: "summary" }, section(pdf, "Summary", h(Text, null, doc.summary))));
