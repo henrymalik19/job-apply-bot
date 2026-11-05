@@ -18,6 +18,21 @@ export { renderResumePdf } from "./render-pdf";
 export { assembleResume, masterResume, type ResumeDoc, type TailorPlan } from "./resume-doc";
 export { getApplicationResume, signedPdfUrl, type Resume } from "./resumes.repository";
 
+/**
+ * Whether a resume no longer matches your profile: it lists a job that's gone from your profile, or your
+ * profile changed after it was made (`profileChangedAt`, kept since Nov 4).
+ */
+export function resumeOutdated(
+  resume: { content: unknown; updated_at: string },
+  profile: Pick<ProfileData, "employment">,
+  profileChangedAt: string | null,
+): boolean {
+  const jobs = new Set(profile.employment.map((e) => e.id));
+  const doc = resume.content as Partial<ResumeDoc> | null;
+  if ((doc?.experience ?? []).some((j) => !jobs.has(j.employment_id))) return true;
+  return !!profileChangedAt && new Date(profileChangedAt) > new Date(resume.updated_at);
+}
+
 /** A tailored resume, or the untailored fallback with why tailoring was rejected. */
 export type TailoredResume = { doc: ResumeDoc; kind: "tailored" | "fallback"; problems: string[] };
 

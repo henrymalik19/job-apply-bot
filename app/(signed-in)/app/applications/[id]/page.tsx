@@ -25,8 +25,7 @@ import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RebuildResumeButton, RetryApplyButton } from "../decide-actions";
-import { getUserSetting } from "@/server/modules/settings/settings.service";
-import { PROFILE_CHANGED_KEY, recheckOpenQuestions, RULES_VERSION } from "@/server/modules/prepare/prepare.service";
+import { isResumeOutdated, recheckOpenQuestions, RESUME_STATUSES, RULES_VERSION } from "@/server/modules/prepare/prepare.service";
 import { createClaudeCaller } from "@/server/integrations/anthropic/claude";
 import { QuestionForm } from "../question-form";
 import { PdfViewer } from "../pdf-viewer";
@@ -222,8 +221,20 @@ function NextStep({ app, blockers, flags, skip, limit }: {
   );
 }
 
-function ResumeCard({ resume, url, stale, applicationId }: { resume: Resume | null; url: string | null; stale: boolean; applicationId: string }) {
-  if (!resume) return <p className="text-sm text-muted-foreground">No resume was prepared for this application.</p>;
+function ResumeCard({ resume, url, stale, applicationId, status }: { resume: Resume | null; url: string | null; stale: boolean; applicationId: string; status: string }) {
+  // Made once every required question is answered, from your profile as it is then.
+  if (status === "needs_input") {
+    return <p className="text-sm text-muted-foreground">The resume is made once every required question is answered, from your profile as it is then.</p>;
+  }
+  if (!resume) {
+    if (!RESUME_STATUSES.includes(status as (typeof RESUME_STATUSES)[number])) return <p className="text-sm text-muted-foreground">No resume was prepared for this application.</p>;
+    return (
+      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+        <p>The resume is being made; it shows here in a minute or two. Approving makes it first if it isn&apos;t ready.</p>
+        <RebuildResumeButton applicationId={applicationId} />
+      </div>
+    );
+  }
   const doc = resume.content as unknown as ResumeDoc;
   const problems = (resume.guard_problems as string[]) ?? [];
   return (
@@ -364,16 +375,18 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
     await recheckOpenQuestions({ db, userId: owner.id, call: createClaudeCaller() }, { applicationIds: [app.id], onlyOutdated: true }).catch(() => null);
     app = (await getApplication(db, owner.id, id, { fresh: true })) ?? app;
   }
-  const [match, resume, runs, emails, profileChangedAt, skip, limit] = await Promise.all([
+  const [match, resume, runs, emails, skip, limit] = await Promise.all([
     getJobMatch(db, owner.id, app.job.id),
     getApplicationResume(db, app.id),
     countApplyRuns(db, app.id),
     listApplicationEmails(db, owner.id, app.id),
-    getUserSetting(db, owner.id, PROFILE_CHANGED_KEY),
     app.status === "skipped" ? getSkipReason(db, app.id) : null,
     getCompanyLimit(db, owner.id, app.job.company_id, new Date()),
   ]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
+  // Only while it can still be sent: before submitting, and not while the runner is filling it.
+  const sendable = ["queued", "manual"].includes(app.status) || (app.status === "approved" && !app.apply_step);
+  const stale = !!resume && sendable && (await isResumeOutdated(db, owner.id, resume).catch(() => false));
   const now = new Date();
   const blockers = blockingQuestions(app);
   const flags = (app.flags as Flag[]) ?? [];
@@ -503,11 +516,8 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
             resume={resume}
             url={url}
             applicationId={app.id}
-            // Only while it can still be sent: before submitting, and not while the runner is filling it.
-            stale={
-              !!resume && typeof profileChangedAt === "string" && profileChangedAt > resume.updated_at &&
-              (["needs_input", "queued", "manual"].includes(app.status) || (app.status === "approved" && !app.apply_step))
-            }
+            status={app.status}
+            stale={stale}
           />
           {runs > 0 && (
             <Link href={`/admin/runs?application=${app.id}`} className="self-start text-xs text-muted-foreground hover:text-foreground hover:underline">

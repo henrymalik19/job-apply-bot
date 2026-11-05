@@ -2,13 +2,14 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { ownerContext } from "@/server/auth/require-owner";
 import { createClaudeCaller, DRAFTING_MODEL } from "@/server/integrations/anthropic/claude";
 import { ValidationError } from "@/server/core/errors";
 import { answerQuestions, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
 import { retryApply } from "@/server/modules/apply/apply.service";
 import { excludeCompany } from "@/server/modules/criteria/criteria.service";
-import { rebuildResume, redraftAnswer } from "@/server/modules/prepare/prepare.service";
+import { ensureResume, rebuildResume, redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
 
 const text = (formData: FormData, name: string) => String(formData.get(name) ?? "");
@@ -20,7 +21,12 @@ export async function answerQuestionsAction(_prev: FormMessageState, formData: F
     .filter(([key]) => key.startsWith("answer:"))
     .map(([key, value]) => ({ questionId: key.slice("answer:".length), answer: String(value) }));
   try {
-    const result = await answerQuestions(db, owner.id, { applicationId: text(formData, "application_id"), answers, confirmUnchanged: formData.get("confirm") === "1" });
+    const applicationId = text(formData, "application_id");
+    const result = await answerQuestions(db, owner.id, { applicationId, answers, confirmUnchanged: formData.get("confirm") === "1" });
+    // Ready to review now: its resume is made from your profile as it is, after this response.
+    if (result.movedToReview) {
+      after(() => ensureResume({ db, userId: owner.id, call: createClaudeCaller(DRAFTING_MODEL) }, applicationId).catch(() => undefined));
+    }
     refresh();
     return { ok: result.movedToReview ? `${result.note} Nothing else is blocking it: moved to Review.` : result.note };
   } catch (err) {
@@ -32,8 +38,12 @@ export async function answerQuestionsAction(_prev: FormMessageState, formData: F
 /** Approves a queued application. */
 export async function approveAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
   const { db, owner } = await ownerContext();
+  const applicationId = text(formData, "application_id");
   try {
-    await approveApplication(db, owner.id, text(formData, "application_id"));
+    // The runner attaches a resume that matches your profile now: made first when it's missing or out of
+    // date. If it can't be (the Claude budget), the one it has is sent.
+    await ensureResume({ db, userId: owner.id, call: createClaudeCaller(DRAFTING_MODEL) }, applicationId).catch(() => null);
+    await approveApplication(db, owner.id, applicationId);
   } catch (err) {
     if (err instanceof ValidationError || err instanceof IllegalTransitionError) return { error: err.message };
     throw err;

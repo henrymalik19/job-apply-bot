@@ -149,3 +149,25 @@ export async function deleteApplication(db: Db, applicationId: string): Promise<
     if (paths.length) await db.storage.from(bucket).remove(paths).catch(() => undefined);
   }
 }
+
+/**
+ * Your applications in `statuses` whose posting is still open and that the runner isn't filling, with
+ * their resume (null when none was made yet).
+ */
+export async function listResumeCandidates(
+  db: Db,
+  userId: string,
+  statuses: readonly string[],
+): Promise<{ id: string; status: string; resume: { content: unknown; updated_at: string } | null }[]> {
+  const rows = unwrap(
+    await db
+      .from("applications")
+      .select("id, status, jobs!inner(closed_at), resumes(content, updated_at)")
+      .eq("user_id", userId)
+      .in("status", [...statuses])
+      .is("apply_step", null)
+      .is("jobs.closed_at", null),
+    "list resume candidates",
+  ) as unknown as { id: string; status: string; resumes: { content: unknown; updated_at: string }[] | { content: unknown; updated_at: string } | null }[];
+  return rows.map((r) => ({ id: r.id, status: r.status, resume: Array.isArray(r.resumes) ? (r.resumes[0] ?? null) : r.resumes }));
+}

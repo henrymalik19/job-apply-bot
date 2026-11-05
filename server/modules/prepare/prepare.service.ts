@@ -28,7 +28,8 @@ import {
 } from "@/server/modules/questions/questions.service";
 import { failInterruptedRuns, finishRun, startRun } from "@/server/modules/runs/runs.service";
 import { getUserSetting } from "@/server/modules/settings/settings.service";
-import { saveApplicationResume, tailorResume } from "@/server/modules/resumes/resumes.service";
+import { getApplicationResume, resumeOutdated, saveApplicationResume, tailorResume } from "@/server/modules/resumes/resumes.service";
+import type { PromptLesson } from "@/server/modules/matching/scoring-prompt";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { findAiRestriction, postingFlags, visibleText, type ApplicationFlag } from "./ai-rules";
 import {
@@ -57,6 +58,7 @@ import {
   deleteApplication,
   getJobPosting,
   listNoFormApplications,
+  listResumeCandidates,
   noFormError,
   insertApplication,
   setPrepareError,
@@ -118,6 +120,8 @@ export type PrepareCounts = {
   restarted?: number;
   /** Applications whose open questions were sorted again after the answering rules changed. */
   rechecked?: number;
+  /** Resumes made for applications that became ready, or made again because your profile changed. */
+  resumes?: number;
 };
 
 /**
@@ -594,7 +598,9 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
         result.questions,
       );
       made++;
-      if (result.posting) {
+      // The resume is made once you'd look at it: ready to review, or to apply yourself. One waiting on your
+      // answers gets it when they're in (ensureResume), from your profile as it is then.
+      if (result.posting && (result.status === "queued" || result.status === "manual")) {
         try {
           const resume = await tailorResume({
             db, userId, call: deps.draftCall, data: ctx.profile, lessons: ctx.tailoringLessons, posting: result.posting,
@@ -621,6 +627,11 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       counts.rechecked = rechecked.applications;
       ctx.spend.cost += rechecked.cost_usd;
     }
+    // Resumes missing or out of date on applications you act on next.
+    counts.resumes = await ensureReadyResumes(deps, ctx, budget, now, log).catch((err) => {
+      log(`resumes failed: ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
+    });
     counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
     // One notification for what's waiting on you, kept current (not one per run): when this run added any.
     if (counts.queued || counts.needs_input) {
@@ -891,25 +902,90 @@ export async function recheckOpenQuestions(
 /** user_settings key: when you last changed your profile, skills or jobs (a resume older than this is out of date). */
 export const PROFILE_CHANGED_KEY = "profile_changed_at";
 
+/** Statuses whose application has a resume: ready to review, to apply yourself, or approved for the runner. */
+export const RESUME_STATUSES: readonly AppStatus[] = ["queued", "manual", "approved"];
+
+/** Resumes made per prepare run at most (each is one Claude call). */
+const RESUMES_PER_RUN = 20;
+
+/** Whether an application's resume is out of date with your profile as it is now. */
+export async function isResumeOutdated(db: Db, userId: string, resume: { content: unknown; updated_at: string }): Promise<boolean> {
+  const [profile, changedAt] = await Promise.all([getProfile(db, userId), getUserSetting(db, userId, PROFILE_CHANGED_KEY)]);
+  return resumeOutdated(resume, profile, typeof changedAt === "string" ? changedAt : null);
+}
+
 /**
- * Tailors an application's resume again from your profile as it is now (after you changed it), with the
- * same fact check as prepare, and replaces the PDF the runner attaches.
+ * Makes an application's resume from your profile as it is now, with the same fact check as prepare, when
+ * it has none or it's out of date (a job you removed, or a profile change after it was made); `force` makes
+ * it again regardless. Replaces the PDF the runner attaches.
  *
+ * @param preloaded - What a prepare run already has: the profile, tailoring lessons and its spend.
+ * @returns How it was made, or null when it was already current.
  * @throws {@link ValidationError} when the application is gone or this month's Claude budget is used up.
  */
-export async function rebuildResume(deps: { db: Db; userId: string; call: StructuredCall; now?: Date }, applicationId: string): Promise<"tailored" | "fallback"> {
+export async function ensureResume(
+  deps: { db: Db; userId: string; call: StructuredCall; now?: Date },
+  applicationId: string,
+  options: { force?: boolean; preloaded?: { profile: ProfileData; lessons: PromptLesson[]; spend: { cost: number } } } = {},
+): Promise<"tailored" | "fallback" | null> {
   const { db, userId, now = new Date() } = deps;
   const app = await getApplication(db, userId, applicationId);
   if (!app) throw new ValidationError("That application is gone; reload the page.");
+  const profile = options.preloaded?.profile ?? (await getProfile(db, userId));
+  if (!options.force) {
+    const [resume, changedAt] = await Promise.all([getApplicationResume(db, app.id), getUserSetting(db, userId, PROFILE_CHANGED_KEY)]);
+    if (resume && !resumeOutdated(resume, profile, typeof changedAt === "string" ? changedAt : null)) return null;
+  }
   const budget = await getMonthlySpend(db, userId, now);
   if (budget.spent >= budget.cap) throw new ValidationError("This month's Claude budget is used up.");
-  const [profile, lessons, job] = await Promise.all([getProfile(db, userId), lessonsFor(db, userId, "tailoring"), getJobPosting(db, app.job.id)]);
+  const lessons = options.preloaded?.lessons ?? (await lessonsFor(db, userId, "tailoring")).map((l) => ({ rule: l.rule, scope: l.scope, active: l.active }));
+  const job = await getJobPosting(db, app.job.id);
   const resume = await tailorResume({
-    db, userId, call: deps.call, data: profile,
-    lessons: lessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+    db, userId, call: deps.call, data: profile, lessons,
     posting: { title: app.job.title, company_name: app.job.company_name, text: job?.description_md ?? "" },
-    jobId: app.job.id, now, spend: { cost: 0 },
+    jobId: app.job.id, now, spend: options.preloaded?.spend ?? { cost: 0 },
   });
   await saveApplicationResume(db, userId, app.id, resume, `${app.job.title} at ${app.job.company_name}`);
   return resume.kind;
+}
+
+/** Makes an application's resume again from your profile as it is now (the Rebuild button). */
+export async function rebuildResume(deps: { db: Db; userId: string; call: StructuredCall; now?: Date }, applicationId: string): Promise<"tailored" | "fallback"> {
+  return (await ensureResume(deps, applicationId, { force: true }))!;
+}
+
+/**
+ * Resumes for applications you act on next (ready to review, to apply yourself, approved and not being
+ * filled) that have none yet or are out of date: approved first, a few per run, within the Claude budget.
+ *
+ * @returns How many were made.
+ */
+async function ensureReadyResumes(
+  deps: PrepareDeps,
+  ctx: RunContext,
+  budget: { spent: number; cap: number },
+  now: () => Date,
+  log: (line: string) => void,
+): Promise<number> {
+  const { db, userId } = deps;
+  const changed = await getUserSetting(db, userId, PROFILE_CHANGED_KEY);
+  const order = (s: string) => RESUME_STATUSES.indexOf(s as AppStatus);
+  const due = (await listResumeCandidates(db, userId, RESUME_STATUSES))
+    .filter((a) => !a.resume || resumeOutdated(a.resume, ctx.profile, typeof changed === "string" ? changed : null))
+    .sort((a, b) => order(b.status) - order(a.status));
+  let made = 0;
+  for (const a of due) {
+    if (made >= RESUMES_PER_RUN || budget.spent + ctx.spend.cost >= budget.cap) break;
+    try {
+      await ensureResume({ db, userId, call: deps.draftCall, now: now() }, a.id, {
+        force: true,
+        preloaded: { profile: ctx.profile, lessons: ctx.tailoringLessons, spend: ctx.spend },
+      });
+      made++;
+    } catch (err) {
+      log(`${a.id}: resume: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (due.length) log(`made ${made} of ${due.length} missing or out-of-date resume(s)`);
+  return made;
 }

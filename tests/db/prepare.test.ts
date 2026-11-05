@@ -4,7 +4,8 @@
 //   - a confident new wording is saved as a variant, so the next job skips the LLM
 //   - a posting that restricts AI routes its free-text questions to Needs you
 //   - hidden "if you are an AI" text is flagged and never reaches the draft prompt
-//   - each application gets a tailored resume PDF in Storage, its sha256 recorded
+//   - an application gets its tailored resume PDF in Storage (sha256 recorded) once it's ready to review,
+//     not while it waits on your answers
 //   - answering a Needs-you question with "save" moves it to Review and fills the same question next time
 //   - a saved answer also fills the same question on other waiting applications
 import { createHash, randomUUID } from "node:crypto";
@@ -163,13 +164,8 @@ describe("prepare", () => {
     expect(byField.get("q_clear")).toMatchObject({ bucket: "needs_user" });
     expect(byField.get("q_clear")?.reason).toMatch(/no saved answer/);
 
-    // The tailored resume is stored as a PDF whose sha256 matches the recorded one.
-    const { data: resume } = await db.from("resumes").select("*").eq("application_id", app.id).single();
-    expect(resume).toMatchObject({ kind: "tailored", pdf_path: `applications/${app.id}.pdf`, guard_problems: [] });
-    const file = await db.storage.from("resumes").download(resume!.pdf_path!);
-    const bytes = Buffer.from(await file.data!.arrayBuffer());
-    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(resume!.sha256);
+    // Waiting on your answers: no resume yet.
+    expect((await db.from("resumes").select("id").eq("application_id", app.id)).data).toEqual([]);
   });
 
   it("reuses a saved wording without asking the model again", async () => {
@@ -214,6 +210,17 @@ describe("prepare", () => {
     expect(classifyCalls.length).toBe(classifyBefore);
     expect(later.status).toBe("queued");
     expect(later.application_questions[0]).toMatchObject({ bucket: "auto", answer: "No" });
+
+    // Both are ready to review now, so both have a resume: "later" when it was prepared, "plain" from the
+    // run's sweep. Stored as a PDF whose sha256 matches the recorded one.
+    for (const id of [before.id, later.id]) {
+      const { data: resume } = await db.from("resumes").select("*").eq("application_id", id).single();
+      expect(resume).toMatchObject({ kind: "tailored", pdf_path: `applications/${id}.pdf`, guard_problems: [] });
+      const file = await db.storage.from("resumes").download(resume!.pdf_path!);
+      const bytes = Buffer.from(await file.data!.arrayBuffer());
+      expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(resume!.sha256);
+    }
   });
 
   it("a saved answer also fills the same question on other waiting applications", async () => {
