@@ -49,7 +49,8 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
       </NativeSelect>
     );
   }
-  if (q.field_type === "textarea") {
+  // Several rows for writing, and for any long answer (a drafted one in a one-line form field) so it can be read whole.
+  if (q.field_type === "textarea" || q.answer_source === "drafted" || (q.answer?.length ?? 0) > 80) {
     return <Textarea name={`answer:${q.id}`} rows={Math.max(3, Math.ceil((q.answer?.length ?? 0) / 100))} defaultValue={q.answer ?? ""} aria-label={q.question} />;
   }
   return <Input name={`answer:${q.id}`} defaultValue={q.answer ?? ""} aria-label={q.question} className="max-w-xl" />;
