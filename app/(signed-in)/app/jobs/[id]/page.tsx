@@ -9,6 +9,8 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { MatchCard } from "../../../_components/match-card";
 import { findJob } from "@/server/modules/jobs/jobs.service";
 import { getJobMatch } from "@/server/modules/matching/matching.service";
+import { getCompanyLimit } from "@/server/modules/companies/apply-limits";
+import { CompanyLimitNotice } from "../../../_components/company-limit";
 import { ago, formatSalary } from "@/shared/format";
 import { DetailSkeleton } from "../../../_components/skeletons";
 
@@ -21,9 +23,9 @@ async function JobDetail({ params, searchParams }: { params: Params; searchParam
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const job = await findJob(db, id);
   if (!job) notFound();
-  const match = await getJobMatch(db, owner.id, job.id);
-
   const now = new Date();
+  const [match, limit] = await Promise.all([getJobMatch(db, owner.id, job.id), getCompanyLimit(db, owner.id, job.company_id, now)]);
+
   // Back to the same filtered page of the list.
   const back = new URLSearchParams(
     Object.entries(query).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])),
@@ -48,6 +50,7 @@ async function JobDetail({ params, searchParams }: { params: Params; searchParam
           Open posting <ExternalLink aria-hidden />
         </a>
       </div>
+      <CompanyLimitNotice company={job.company_name} limit={limit} />
       <MatchCard match={match} />
       <Card className="md:min-h-0 md:flex-1">
         <CardHeader>

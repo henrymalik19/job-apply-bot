@@ -50,12 +50,12 @@ export function jobFilterClauses(filters: JobFilters, now: Date) {
 
 /** Columns shown in job lists. */
 export const LIST_COLUMNS =
-  "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, posted_at, first_seen_at, closed_at, url, source";
+  "id, title, company_name, company_id, location, remote_type, salary_min, salary_max, salary_currency, posted_at, first_seen_at, closed_at, url, source";
 
 /** One row of the Jobs list. */
 export type JobListItem = Pick<
   Row<"jobs">,
-  | "id" | "title" | "company_name" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency"
+  | "id" | "title" | "company_name" | "company_id" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency"
   | "posted_at" | "first_seen_at" | "closed_at" | "url" | "source"
 >;
 

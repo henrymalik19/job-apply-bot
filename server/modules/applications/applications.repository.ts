@@ -233,3 +233,21 @@ export async function markNoReply(db: Db, now: Date): Promise<number> {
   }
   return moved;
 }
+
+/** Why an application was skipped: the cause and reason of its latest move to skipped, or null. */
+export async function getSkipReason(db: Db, applicationId: string): Promise<{ cause: string; reason: string | null } | null> {
+  const row = unwrap(
+    await db
+      .from("application_events")
+      .select("cause, detail")
+      .eq("application_id", applicationId)
+      .eq("to_status", "skipped")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    "read skip reason",
+  );
+  if (!row) return null;
+  const reason = (row.detail as { reason?: unknown } | null)?.reason;
+  return { cause: row.cause, reason: typeof reason === "string" ? reason : null };
+}

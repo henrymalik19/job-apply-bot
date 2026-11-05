@@ -9,6 +9,7 @@ import { ownerContext } from "@/server/auth/require-owner";
 import {
   blockingQuestions,
   getApplication,
+  getSkipReason,
   yourSteps,
   type ApplicationQuestion,
   type ApplicationWithDetails,
@@ -33,6 +34,8 @@ import { AnswersForm } from "../answers-form";
 import { EmailsCard } from "../emails-card";
 import { listApplicationEmails } from "@/server/modules/tracking/tracking.service";
 import { DetailSkeleton } from "../../../_components/skeletons";
+import { getCompanyLimit, LIMIT_CAUSE, type CompanyLimit } from "@/server/modules/companies/apply-limits";
+import { CompanyLimitNotice, limitDate } from "../../../_components/company-limit";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -68,7 +71,15 @@ function YourSteps({ steps }: { steps: ApplicationQuestion[] }) {
 }
 
 /** What to do next with this application, in one colored box at the top. */
-function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; blockers: ApplicationQuestion[]; flags: Flag[] }) {
+function NextStep({ app, blockers, flags, skip, limit }: {
+  app: ApplicationWithDetails;
+  blockers: ApplicationQuestion[];
+  flags: Flag[];
+  /** Why it was skipped, when it was. */
+  skip: { cause: string; reason: string | null } | null;
+  /** The company's limit on applications, when it has one. */
+  limit: CompanyLimit | null;
+}) {
   const info = statusInfo(app.status);
   const toCheck = app.questions.filter((q) => q.bucket === "drafted" || q.needs_check).length;
   let title: string;
@@ -157,6 +168,27 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
       </p>
     );
     if (yourSteps(app).length > 0) body = <>{body}<YourSteps steps={yourSteps(app)} /></>;
+  } else if (app.status === "skipped" && skip?.cause === LIMIT_CAUSE) {
+    title = "Skipped for the company's application limit";
+    body = (
+      <p>
+        {skip.reason ?? `${app.job.company_name} said you reached its limit on applications.`}{" "}
+        {limit?.pausedUntil
+          ? `It comes back on ${limitDate(limit.pausedUntil)} to be prepared again, if the posting is still open.`
+          : "It comes back on the next prepare run to be prepared again, if the posting is still open."}
+      </p>
+    );
+  } else if (app.status === "skipped" && skip && skip.cause !== "user:skip") {
+    title = "Skipped";
+    body = <p>{skip.reason ?? info.hint}</p>;
+  } else if (app.status === "skipped") {
+    title = info.label;
+    body = (
+      <p>
+        {info.hint}
+        {skip?.reason && <span className="mt-1 block text-muted-foreground">Your reason: {skip.reason}</span>}
+      </p>
+    );
   } else {
     title = info.label;
     body = <p>{info.hint}</p>;
@@ -332,12 +364,14 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
     await recheckOpenQuestions({ db, userId: owner.id, call: createClaudeCaller() }, { applicationIds: [app.id], onlyOutdated: true }).catch(() => null);
     app = (await getApplication(db, owner.id, id, { fresh: true })) ?? app;
   }
-  const [match, resume, runs, emails, profileChangedAt] = await Promise.all([
+  const [match, resume, runs, emails, profileChangedAt, skip, limit] = await Promise.all([
     getJobMatch(db, owner.id, app.job.id),
     getApplicationResume(db, app.id),
     countApplyRuns(db, app.id),
     listApplicationEmails(db, owner.id, app.id),
     getUserSetting(db, owner.id, PROFILE_CHANGED_KEY),
+    app.status === "skipped" ? getSkipReason(db, app.id) : null,
+    getCompanyLimit(db, owner.id, app.job.company_id, new Date()),
   ]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
   const now = new Date();
@@ -390,7 +424,9 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
         </div>
       </header>
 
-      <NextStep app={app} blockers={blockers} flags={flags} />
+      <NextStep app={app} blockers={blockers} flags={flags} skip={skip} limit={limit} />
+      {/* Not sent yet: the company may not take it until a date. */}
+      {["needs_input", "queued", "manual", "approved"].includes(app.status) && <CompanyLimitNotice company={app.job.company_name} limit={limit} />}
 
       <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">

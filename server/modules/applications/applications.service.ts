@@ -31,6 +31,7 @@ export {
   expireClosedApplications,
   markNoReply,
   getApplication,
+  getSkipReason,
   IllegalTransitionError,
   listApplications,
   listTransitions,

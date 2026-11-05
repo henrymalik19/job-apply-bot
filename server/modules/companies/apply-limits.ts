@@ -131,6 +131,25 @@ export async function listCompanyLimits(db: Db, userId: string, now: Date): Prom
   return out;
 }
 
+/** Your pause at one company and its rule, or null when it has neither: for a job's or an application's page. */
+export async function getCompanyLimit(db: Db, userId: string, companyId: string | null, now: Date): Promise<CompanyLimit | null> {
+  if (!companyId) return null;
+  const row = unwrap(
+    await db
+      .from("companies")
+      .select("apply_limit, apply_limit_days, user_companies(user_id, paused_until, pause_reason)")
+      .eq("id", companyId)
+      .eq("user_companies.user_id", userId)
+      .maybeSingle(),
+    "read company limit",
+  ) as unknown as { apply_limit: number | null; apply_limit_days: number | null; user_companies: { paused_until: string | null; pause_reason: string | null }[] } | null;
+  if (!row) return null;
+  const follow = row.user_companies[0];
+  const paused = !!follow?.paused_until && new Date(follow.paused_until) > now;
+  if (!paused && row.apply_limit == null) return null;
+  return { limit: row.apply_limit, days: row.apply_limit_days, pausedUntil: paused ? follow.paused_until : null, reason: paused ? follow.pause_reason : null };
+}
+
 /**
  * Companies where you can't apply right now, kept on your follow of each (user_companies.paused_until) so
  * Companies shows the date: one paused after a refusal, and one with a known rule where you've already

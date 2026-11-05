@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ownerContext } from "@/server/auth/require-owner";
 import { filtersToParams, parseJobFilters, type JobFilters } from "@/server/modules/jobs/jobs.service";
 import { browseJobs, type BrowsedJob } from "@/server/modules/matching/matching.service";
+import { listCompanyLimits } from "@/server/modules/companies/apply-limits";
+import { limitDate } from "../../_components/company-limit";
 import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
 import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
@@ -99,7 +101,10 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const filters = parseJobFilters(params);
   const now = new Date();
-  const { page, threshold } = await browseJobs(db, owner.id, filters, parsePage(params.page), now);
+  const [{ page, threshold }, limits] = await Promise.all([
+    browseJobs(db, owner.id, filters, parsePage(params.page), now),
+    listCompanyLimits(db, owner.id, now),
+  ]);
   const keep = filtersToParams(filters);
   const detailQuery = new URLSearchParams({ ...keep, ...(page.page > 1 ? { page: String(page.page) } : {}) }).toString();
 
@@ -141,7 +146,18 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
                       </Link>
                       {j.closed_at && <Badge variant="outline" className="ml-2">Closed</Badge>}
                     </TableCell>
-                    <TableCell>{j.company_name}</TableCell>
+                    <TableCell>
+                      {j.company_name}
+                      {/* At its limit on applications: nothing new is prepared there until then. */}
+                      {(() => {
+                        const until = j.company_id ? limits.get(j.company_id)?.pausedUntil : null;
+                        return until ? (
+                          <Badge variant="outline" className="ml-2 border-warning/40 text-warning" title={limits.get(j.company_id!)?.reason ?? undefined}>
+                            paused until {limitDate(until)}
+                          </Badge>
+                        ) : null;
+                      })()}
+                    </TableCell>
                     <TableCell className="max-w-xs whitespace-normal">
                       <span className="text-muted-foreground">{j.location ?? "—"}</span>
                       {j.remote_type && REMOTE_LABEL[j.remote_type] && (

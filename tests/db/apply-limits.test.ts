@@ -7,7 +7,8 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import { transition } from "@/server/modules/applications/applications.repository";
-import { clearLimit, companiesAtLimit, LIMIT_CAUSE, reviveAfterLimit } from "@/server/modules/companies/apply-limits";
+import { getSkipReason } from "@/server/modules/applications/applications.repository";
+import { clearLimit, companiesAtLimit, getCompanyLimit, LIMIT_CAUSE, reviveAfterLimit } from "@/server/modules/companies/apply-limits";
 import type {} from "./setup";
 import { testUser } from "./users";
 
@@ -68,6 +69,9 @@ describe("company application limits", () => {
     expect(days).toBeGreaterThan(9.9);
     expect(days).toBeLessThan(10.1);
     expect(paused.pause_reason).toMatch(/takes 2 applications per 60 days, and you've sent 2/);
+    // What the job and application pages show.
+    expect(await getCompanyLimit(db, userId, companyId, new Date())).toMatchObject({ limit: 2, days: 60, pausedUntil: paused.paused_until });
+    expect(await getSkipReason(db, ready)).toEqual({ cause: LIMIT_CAUSE, reason: paused.pause_reason });
     // Still paused: the skipped one stays.
     expect(await reviveAfterLimit(db, userId, new Set([companyId]))).toBe(0);
 
@@ -82,5 +86,6 @@ describe("company application limits", () => {
     expect(await follow()).toEqual({ paused_until: null, pause_reason: null });
     const { data: company } = await db.from("companies").select("apply_limit").eq("id", companyId).single();
     expect(company!.apply_limit).toBeNull();
+    expect(await getCompanyLimit(db, userId, companyId, new Date())).toBeNull();
   });
 });
