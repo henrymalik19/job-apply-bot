@@ -11,7 +11,7 @@ import { filtersToParams, parseJobFilters, type JobFilters } from "@/server/modu
 import { browseJobs, type BrowsedJob } from "@/server/modules/matching/matching.service";
 import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
-import { Pager, scrollingTable } from "../../_components/data-table";
+import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
 import { AutoSubmitForm } from "./auto-submit-form";
 import { TableSkeleton } from "../../_components/skeletons";
 
@@ -116,7 +116,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
           <p className="text-sm text-muted-foreground">No jobs match these filters.</p>
         ) : (
           <>
-            <Table containerClassName={scrollingTable.container}>
+            <Table className={cardsOnPhone.table} containerClassName={scrollingTable.container}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
                   <SortHead sort="score" current={filters.sort} params={keep} className="text-right">Score</SortHead>

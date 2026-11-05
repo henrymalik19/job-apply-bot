@@ -11,6 +11,7 @@ import { TONE_BADGE } from "../../_components/status";
 import { setPlatformModeAction, setPublicPageAction } from "./actions";
 import { FormSkeleton } from "../../_components/skeletons";
 import { HandleForm } from "./handle-form";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 async function PublicPageSetting() {
   const { db, owner } = await ownerContext();
@@ -65,7 +66,7 @@ async function ApplyRunnerSetting() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
+        <Table className={cardsOnPhone.table}>
           <TableHeader>
             <TableRow>
               <TableHead>Job site</TableHead>

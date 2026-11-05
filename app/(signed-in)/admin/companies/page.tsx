@@ -7,7 +7,7 @@ import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
-import { Pager, scrollingTable } from "../../_components/data-table";
+import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
 import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FindCompanyForm } from "./forms";
 import { TableSkeleton } from "../../_components/skeletons";
@@ -64,7 +64,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
             <p className="text-sm text-muted-foreground">No companies yet.</p>
           ) : (
             <>
-            <Table containerClassName={scrollingTable.container}>
+            <Table className={cardsOnPhone.table} containerClassName={scrollingTable.container}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
                   <TableHead>Board</TableHead>

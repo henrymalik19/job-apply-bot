@@ -18,6 +18,22 @@ export const scrollingTable = {
 };
 
 /**
+ * Classes that turn a table into stacked cards on a phone, instead of a table you scroll sideways: no
+ * header row, each row a card headed by its first cell, the others wrapping onto lines below (a cell with
+ * `full` takes a line of its own). Desktop keeps the table.
+ */
+export const cardsOnPhone = {
+  table:
+    "max-md:block max-md:[&_thead]:hidden max-md:[&_tbody]:block max-md:[&_tr]:flex max-md:[&_tr]:flex-wrap max-md:[&_tr]:items-center max-md:[&_tr]:gap-x-3 max-md:[&_tr]:gap-y-1.5 max-md:[&_tr]:px-3 max-md:[&_tr]:py-3 max-md:[&_td]:max-w-none max-md:[&_td]:p-0 max-md:[&_td]:text-left max-md:[&_td]:whitespace-normal max-md:[&_td:first-child]:w-full",
+  /** A cell on its own line in the card (the title, a description, a control). */
+  full: "max-md:w-full",
+  /** The cell that heads the card. */
+  first: "max-md:order-first max-md:w-full",
+  /** A cell whose label is hidden with the header row, so it reads on its own: muted, small. */
+  meta: "max-md:text-xs max-md:text-muted-foreground",
+};
+
+/**
  * "1–50 of 304" with Previous/Next links. Links keep the path and any other
  * search params (filters) and change only `?page=`, so reloads and the back
  * button work.

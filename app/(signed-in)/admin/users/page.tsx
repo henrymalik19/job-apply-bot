@@ -7,6 +7,7 @@ import { adminContext } from "@/server/auth/require-owner";
 import { listUsers } from "@/server/modules/admin/admin.service";
 import { ago } from "@/shared/format";
 import { TableSkeleton } from "../../_components/skeletons";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 const n = (counts: Record<string, number>, ...statuses: string[]) => statuses.reduce((sum, s) => sum + (counts[s] ?? 0), 0);
 
@@ -17,7 +18,7 @@ async function Users() {
   return (
     <Card>
       <CardContent>
-        <Table>
+        <Table className={cardsOnPhone.table}>
           <TableHeader>
             <TableRow>
               <TableHead>Person</TableHead>

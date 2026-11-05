@@ -8,6 +8,7 @@ import { createServiceClient } from "@/server/db/service-client";
 import { getPublicPage } from "@/server/modules/public-page/public-page.service";
 import { serverEnv } from "@/shared/env";
 import { OverviewSkeleton } from "../../(signed-in)/_components/skeletons";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 export const metadata: Metadata = {
   title: "Job search status",
@@ -78,7 +79,7 @@ async function PublicStatus({ params }: { params: Params }) {
           {page.applications.length === 0 ? (
             <p className="text-sm text-muted-foreground">No applications sent yet.</p>
           ) : (
-            <Table>
+            <Table className={cardsOnPhone.table}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Role</TableHead>

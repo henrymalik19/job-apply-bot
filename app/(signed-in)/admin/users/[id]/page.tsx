@@ -13,6 +13,7 @@ import { listApplications } from "@/server/modules/applications/applications.ser
 import { ago } from "@/shared/format";
 import { DetailSkeleton } from "../../../_components/skeletons";
 import { statusInfo, TONE_BADGE } from "../../../_components/status";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 type Params = Promise<{ id: string }>;
 
@@ -44,7 +45,7 @@ async function User({ params }: { params: Params }) {
             {apps.length === 0 ? (
               <p className="text-sm text-muted-foreground">No applications yet.</p>
             ) : (
-              <Table>
+              <Table className={cardsOnPhone.table}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Job</TableHead>

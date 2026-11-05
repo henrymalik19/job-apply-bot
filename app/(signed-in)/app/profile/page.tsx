@@ -22,7 +22,7 @@ import {
 import { cn } from "@/shared/cn";
 import { paginate, parsePage } from "@/shared/paginate";
 import { ActionForm } from "../../_components/action-form";
-import { Pager } from "../../_components/data-table";
+import { cardsOnPhone, Pager } from "../../_components/data-table";
 import {
   addCertificationAction,
   addEducationAction,
@@ -220,7 +220,7 @@ function SkillsTab({ data, params }: { data: ProfileData; params: Record<string,
             <p className="text-sm text-muted-foreground">{q ? `No skills match “${q}”.` : "No skills yet."}</p>
           ) : (
             <>
-              <Table containerClassName={scrollingTable.container}>
+              <Table className={cardsOnPhone.table} containerClassName={scrollingTable.container}>
                 <TableHeader className={scrollingTable.header}>
                   <TableRow>
                     <SortHeader label="Skill" col="name" sort={sort} dir={dir} q={q} />
@@ -349,7 +349,7 @@ async function Profile({ searchParams }: { searchParams: SearchParams }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {data.workAuthorizations.length > 0 && (
-            <Table>
+            <Table className={cardsOnPhone.table}>
               <TableHeader>
                 <TableRow><TableHead>Country</TableHead><TableHead>Can work there</TableHead><TableHead>Needs sponsorship</TableHead><TableHead>Status</TableHead><TableHead /></TableRow>
               </TableHeader>

@@ -10,7 +10,7 @@ import { matchEmail } from "@/server/modules/tracking/classify";
 import { listUnmatchedEmails, listUnsortedEmails, type UnmatchedEmail } from "@/server/modules/tracking/tracking.service";
 import { cn } from "@/shared/cn";
 import { ago, formatSalary } from "@/shared/format";
-import { scrollingTable } from "../../_components/data-table";
+import { cardsOnPhone, scrollingTable } from "../../_components/data-table";
 import { LiveRefresh } from "../../_components/live-refresh";
 import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
@@ -119,19 +119,19 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
               From an applicant system or a company you applied to, but no rule recognized the wording. Pick what it says
               and the application; it moves as if tracking had caught it.
             </p>
-            <Table>
+            <Table className={cardsOnPhone.table}>
               <TableBody>
                 {unsorted.map((e) => {
                   const guess = matchEmail({ fromAddress: e.from, fromName: e.from, subject: e.subject, text: e.snippet, receivedAt: new Date(e.receivedAt) }, tracked);
                   return (
                     <TableRow key={e.id}>
-                      <TableCell className="max-w-md whitespace-normal align-top">
+                      <TableCell className={cn("max-w-md whitespace-normal align-top", cardsOnPhone.first)}>
                         <span className="font-medium">{e.subject || "(no subject)"}</span>
                         <span className="block text-sm text-muted-foreground">{e.from}</span>
                         <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={e.snippet}>{e.snippet}</span>
                       </TableCell>
-                      <TableCell className="align-top"><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} askKind /></TableCell>
-                      <TableCell className="align-top text-muted-foreground">{ago(e.receivedAt, now)}</TableCell>
+                      <TableCell className={cn("align-top", cardsOnPhone.full)}><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} askKind /></TableCell>
+                      <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>{ago(e.receivedAt, now)}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -142,7 +142,7 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
         {emails.length === 0 ? (
           unsorted.length === 0 && <p className="text-sm text-muted-foreground">No emails waiting to be linked.</p>
         ) : (
-          <Table containerClassName={scrollingTable.container}>
+          <Table containerClassName={scrollingTable.container} className={cardsOnPhone.table}>
             <TableHeader className={scrollingTable.header}>
               <TableRow>
                 <TableHead>Email</TableHead>
@@ -156,7 +156,7 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
                 const guess = matchEmail({ fromAddress: e.from, fromName: e.from, subject: e.subject, text: e.snippet, receivedAt: new Date(e.receivedAt) }, tracked);
                 return (
                   <TableRow key={e.id}>
-                    <TableCell className="max-w-md whitespace-normal align-top">
+                    <TableCell className={cn("max-w-md whitespace-normal align-top", cardsOnPhone.first)}>
                       <span className="font-medium">{e.subject || "(no subject)"}</span>
                       <span className="block text-sm text-muted-foreground">{e.from}</span>
                       <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground" title={e.snippet}>{e.snippet}</span>
@@ -166,8 +166,8 @@ function UnmatchedEmails({ emails, unsorted, apps, now }: { emails: UnmatchedEma
                         {EMAIL_KIND_LABEL[e.kind] ?? e.kind}
                       </Badge>
                     </TableCell>
-                    <TableCell className="align-top"><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} /></TableCell>
-                    <TableCell className="align-top text-muted-foreground">{ago(e.receivedAt, now)}</TableCell>
+                    <TableCell className={cn("align-top", cardsOnPhone.full)}><LinkEmail emailId={e.id} targets={targets} suggested={guess.app?.id ?? null} /></TableCell>
+                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>{ago(e.receivedAt, now)}</TableCell>
                   </TableRow>
                 );
               })}
@@ -205,14 +205,14 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <nav className="flex w-fit flex-wrap gap-1 rounded-lg bg-muted p-1" aria-label="To do lanes">
+      <nav className="flex w-fit max-w-full shrink-0 gap-1 overflow-x-auto rounded-lg bg-muted p-1" aria-label="To do lanes">
         {TABS.map((t) => (
           <Link
             key={t.id}
             href={`/app/todo?tab=${t.id}`}
             aria-current={!showEmails && current.id === t.id ? "page" : undefined}
             className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+              "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
               !showEmails && current.id === t.id && "bg-background text-foreground shadow-sm",
             )}
           >
@@ -224,7 +224,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
           href="/app/todo?tab=emails"
           aria-current={showEmails ? "page" : undefined}
           className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+            "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
             showEmails && "bg-background text-foreground shadow-sm",
           )}
         >
@@ -243,7 +243,7 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{current.empty}</p>
           ) : (
-            <Table containerClassName={scrollingTable.container}>
+            <Table containerClassName={scrollingTable.container} className={cardsOnPhone.table}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
                   <TableHead className="text-right">Score</TableHead>
@@ -257,16 +257,18 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
                 {rows.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="text-right align-top"><Badge className="tabular-nums">{a.score ?? "—"}</Badge></TableCell>
-                    <TableCell className="max-w-xs whitespace-normal align-top">
+                    <TableCell className={cn("max-w-xs whitespace-normal align-top", cardsOnPhone.first)}>
                       <Link href={`/app/applications/${a.id}?from=todo`} className="font-medium hover:underline">{a.job.title}</Link>
                       <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
                         {a.job.company_name}{a.job.location ? ` · ${a.job.location}` : ""}
                         <SiteBadge source={a.job.source} />
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-md whitespace-normal align-top text-sm"><Needs tab={current.id} app={a} /></TableCell>
-                    <TableCell className="align-top tabular-nums">{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
-                    <TableCell className="align-top text-muted-foreground">{a.prepared_at ? ago(a.prepared_at, now) : "—"}</TableCell>
+                    <TableCell className={cn("max-w-md whitespace-normal align-top text-sm", cardsOnPhone.full)}><Needs tab={current.id} app={a} /></TableCell>
+                    <TableCell className={cn("align-top tabular-nums", cardsOnPhone.meta)}>{formatSalary(a.job.salary_min, a.job.salary_max, a.job.salary_currency) || "—"}</TableCell>
+                    <TableCell className={cn("align-top text-muted-foreground", cardsOnPhone.meta)}>
+                      <span className="md:hidden">Prepared </span>{a.prepared_at ? ago(a.prepared_at, now) : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

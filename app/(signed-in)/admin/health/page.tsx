@@ -15,6 +15,7 @@ import { ago } from "@/shared/format";
 import { LiveRefresh } from "../../_components/live-refresh";
 import { RunNow } from "./run-now";
 import { TableSkeleton } from "../../_components/skeletons";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString();
 
@@ -87,7 +88,7 @@ async function Health() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table className={cardsOnPhone.table}>
             <TableHeader>
               <TableRow>
                 <TableHead>Worker</TableHead>
@@ -152,7 +153,7 @@ function FailedFieldsCard({ fields, now }: { fields: FailedFieldSummary[]; now: 
       </CardHeader>
       {fields.length > 0 && (
         <CardContent>
-          <Table>
+          <Table className={cardsOnPhone.table}>
             <TableHeader>
               <TableRow>
                 <TableHead>Field</TableHead>

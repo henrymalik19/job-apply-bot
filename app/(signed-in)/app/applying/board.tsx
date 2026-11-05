@@ -158,7 +158,8 @@ function Lane({ col, count, state, children }: { col: BoardColumn; count: number
       ref={setNodeRef}
       aria-label={col.label}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-xl border border-t-4 bg-muted/40 transition-colors md:min-h-0",
+        // Each lane scrolls its own cards: it fills the board's height (capped on a phone), never the page.
+        "flex max-h-[75svh] w-72 shrink-0 flex-col rounded-xl border border-t-4 bg-muted/40 transition-colors md:max-h-none md:min-h-0",
         ACCENTS[col.accent].lane,
         state === "open" && (isOver ? "border-primary bg-primary/10" : "border-primary/50 bg-primary/5"),
         state === "closed" && "opacity-50",
@@ -168,7 +169,7 @@ function Lane({ col, count, state, children }: { col: BoardColumn; count: number
         {col.label}
         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium tabular-nums", ACCENTS[col.accent].count)}>{count}</span>
       </h2>
-      <div className={cn("flex flex-col gap-2 overflow-y-auto px-2 pb-2", NO_SCROLLBAR)}>
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2", NO_SCROLLBAR)}>
         {count === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{state === "open" ? "Drop here" : "None"}</p>}
         {children}
       </div>

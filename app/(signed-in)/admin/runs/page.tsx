@@ -7,7 +7,7 @@ import { adminContext } from "@/server/auth/require-owner";
 import { listRunFilters, listRunRows, type RunQuery } from "@/server/modules/apply/apply-runs";
 import { ago } from "@/shared/format";
 import type { Page } from "@/shared/paginate";
-import { Pager, scrollingTable } from "../../_components/data-table";
+import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
 import { TableSkeleton } from "../../_components/skeletons";
 import { TONE_BADGE } from "../../_components/status";
 import { RunFiltersBar } from "./run-filters";
@@ -48,7 +48,7 @@ async function Runs({ searchParams }: { searchParams: SearchParams }) {
             <p className="text-sm text-muted-foreground">No runs match. They show here once the apply runner finishes one.</p>
           ) : (
             <>
-              <Table containerClassName={scrollingTable.container}>
+              <Table className={cardsOnPhone.table} containerClassName={scrollingTable.container}>
                 <TableHeader className={scrollingTable.header}>
                   <TableRow>
                     <TableHead>When</TableHead>

@@ -12,6 +12,7 @@ import { InfoTip } from "../_components/info-tip";
 import { LiveRefresh } from "../_components/live-refresh";
 import { statusInfo, type Tone } from "../_components/status";
 import { OverviewSkeleton } from "../_components/skeletons";
+import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
 
 /** Left accent per tone, so "waiting on you" numbers stand out from the rest. */
 const TONE_ACCENT: Record<Tone, string> = {
@@ -88,7 +89,7 @@ async function Overview() {
           {o.recent.length === 0 ? (
             <p className="text-sm text-muted-foreground">No jobs yet.</p>
           ) : (
-            <Table>
+            <Table className={cardsOnPhone.table}>
               <TableHeader>
                 <TableRow>
                   <TableHead>Job</TableHead>
