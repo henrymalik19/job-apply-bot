@@ -96,3 +96,20 @@ export async function markRead(db: Db, userId: string, ids?: string[]): Promise<
 export async function pruneNotifications(db: Db, now: Date, days = 90): Promise<void> {
   check(await db.from("notifications").delete().lt("created_at", new Date(now.getTime() - days * 86_400_000).toISOString()), "prune notifications");
 }
+
+/** Dismisses some of a user's notifications (all of them without `ids`): they're gone from the list. */
+export async function dismissNotifications(db: Db, userId: string, ids?: string[]): Promise<void> {
+  let query = db.from("notifications").delete().eq("user_id", userId);
+  if (ids) query = query.in("id", ids);
+  check(await query, "dismiss notifications");
+}
+
+/**
+ * Keeps one unread notification of a kind for a user: an unread one of that kind is replaced by this one (so
+ * a running total, like what's waiting on you, doesn't pile up one per run). Never throws.
+ */
+export async function replaceUnread(db: Db, userId: string, n: NewNotification): Promise<void> {
+  const res = await db.from("notifications").delete().eq("user_id", userId).eq("kind", n.kind).is("read_at", null);
+  if (res.error) console.error(`notification not replaced: ${res.error.message}`);
+  await notify(db, userId, n);
+}

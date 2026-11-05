@@ -8,12 +8,12 @@ import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { FORM_ATS, fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
-import { getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
+import { countByStatus, getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
 import { transition, updateQuestion } from "@/server/modules/applications/applications.repository";
 import type { Row as DbRow } from "@/server/db/types";
 import { getMatchCriteria, type MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
-import { notify } from "@/server/modules/notifications/in-app";
+import { replaceUnread } from "@/server/modules/notifications/in-app";
 import { resolvePlace } from "@/server/modules/criteria/places";
 import { getProfile, profileLines, resolveSkillId, type ProfileData } from "@/server/modules/profile/profile.service";
 import {
@@ -616,12 +616,22 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       ctx.spend.cost += rechecked.cost_usd;
     }
     counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
-    // One notification per run, not one per application.
-    const ready = [
-      counts.queued ? `${counts.queued} ready to review` : "",
-      counts.needs_input ? `${counts.needs_input} ${counts.needs_input === 1 ? "needs" : "need"} your answers` : "",
-    ].filter(Boolean);
-    if (ready.length) await notify(db, userId, { kind: "prepared", title: `New applications: ${ready.join(", ")}`, href: "/app/todo" });
+    // One notification for what's waiting on you, kept current (not one per run): when this run added any.
+    if (counts.queued || counts.needs_input) {
+      const waiting = await countByStatus(db, userId);
+      const parts = [
+        waiting.queued ? `${waiting.queued} ready to review` : "",
+        waiting.needs_input ? `${waiting.needs_input} ${waiting.needs_input === 1 ? "needs" : "need"} your answers` : "",
+      ].filter(Boolean);
+      if (parts.length) {
+        await replaceUnread(db, userId, {
+          kind: "prepared",
+          title: `Waiting on you: ${parts.join(", ")}`,
+          body: `New this run: ${[counts.queued ? `${counts.queued} ready` : "", counts.needs_input ? `${counts.needs_input} needing answers` : ""].filter(Boolean).join(", ")}.`,
+          href: "/app/todo",
+        });
+      }
+    }
     await finishRun(db, runId, { ok: true, counts });
     return { runId, counts };
   } catch (err) {

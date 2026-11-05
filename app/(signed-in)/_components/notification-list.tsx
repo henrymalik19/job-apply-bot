@@ -2,10 +2,10 @@
 
 import { Bell, CalendarCheck, CircleAlert, CircleCheck, Inbox, Mail, MessageSquare, MousePointerClick, X } from "lucide-react";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { Notification, NotificationKind } from "@/server/modules/notifications/in-app";
 import { cn } from "@/shared/cn";
-import { markNotificationsReadAction } from "../app/notifications/actions";
+import { dismissNotificationsAction, markNotificationsReadAction } from "../app/notifications/actions";
 
 /** Each kind's icon and color. */
 const LOOK: Record<NotificationKind, { icon: typeof Bell; className: string }> = {
@@ -30,15 +30,23 @@ function when(iso: string): string {
 }
 
 /**
- * Notifications as a list: each with its icon, what happened and when, unread ones marked. Opening one
- * marks it read and goes where it leads.
+ * Notifications as a list: each with its icon, what happened and when, unread ones marked. Tapping one
+ * marks it read and goes where it leads; its × dismisses it (gone at once, then from the server).
  */
 export function NotificationList({ items, onOpen, compact = false }: { items: Notification[]; onOpen?: () => void; compact?: boolean }) {
   const [, startTransition] = useTransition();
-  if (items.length === 0) return <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing yet. Interview invites, replies and the runner show up here.</p>;
+  const [gone, setGone] = useState<Set<string>>(new Set());
+  const shown = items.filter((n) => !gone.has(n.id));
+  const dismiss = (ids: string[]) => {
+    setGone((g) => new Set([...g, ...ids]));
+    startTransition(() => dismissNotificationsAction(ids));
+  };
+  if (shown.length === 0) {
+    return <p className="px-2 py-8 text-center text-sm text-muted-foreground">Nothing here. Interview invites, replies and the runner show up here.</p>;
+  }
   return (
     <ul className="flex flex-col">
-      {items.map((n) => {
+      {shown.map((n) => {
         const look = LOOK[n.kind] ?? { icon: Bell, className: "text-muted-foreground" };
         const Icon = look.icon;
         const open = () => {
@@ -58,14 +66,23 @@ export function NotificationList({ items, onOpen, compact = false }: { items: No
             </span>
           </>
         );
-        const row = "flex items-start gap-2.5 rounded-md px-2 py-2 text-left hover:bg-muted";
+        const row = "flex min-w-0 flex-1 items-start gap-2.5 px-2 py-2.5 text-left";
         return (
-          <li key={n.id}>
+          <li key={n.id} className="group flex items-start rounded-md hover:bg-muted">
             {n.href ? (
               <Link href={n.href} onClick={open} className={row}>{body}</Link>
             ) : (
-              <button type="button" onClick={open} className={cn(row, "w-full")}>{body}</button>
+              <button type="button" onClick={open} className={row}>{body}</button>
             )}
+            <button
+              type="button"
+              onClick={() => dismiss([n.id])}
+              aria-label={`Dismiss: ${n.title}`}
+              title="Dismiss"
+              className="mt-1.5 mr-1 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-background hover:text-foreground md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+            >
+              <X className="size-4" />
+            </button>
           </li>
         );
       })}
