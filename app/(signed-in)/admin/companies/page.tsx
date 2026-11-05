@@ -4,12 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
-import { BoardStatus } from "../../_components/board-status";
+import { BoardStatus, RunCounts } from "../../_components/board-status";
 import { Pager, scrollingTable } from "../../_components/data-table";
 import { toggleCompanyAction } from "./actions";
 import { AddCompanyForm, FindCompanyForm } from "./forms";
 import { TableSkeleton } from "../../_components/skeletons";
+import { MovedBoard } from "../health/moved-board";
+
+/** A board fetch that failed because the board no longer exists (it may have moved to another ATS). */
+const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -18,7 +23,10 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
   const now = new Date();
   const [{ boards }, params] = await Promise.all([loadDiscoveryHealth(db, owner.id, now), searchParams]);
   const active = boards.filter((b) => b.active).length;
-  const page = paginate(boards, parsePage(params.page));
+  const failing = boards.filter((b) => b.problem).length;
+  // Failing boards first, then by name.
+  const rows = [...boards].sort((a, b) => Number(!!b.problem) - Number(!!a.problem) || a.name.localeCompare(b.name));
+  const page = paginate(rows, parsePage(params.page));
 
   return (
     <>
@@ -47,7 +55,8 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
         <CardHeader>
           <CardTitle>Boards</CardTitle>
           <CardDescription>
-            {active.toLocaleString()} active of {boards.length.toLocaleString()}.
+            {active.toLocaleString()} active of {boards.length.toLocaleString()}
+            {failing > 0 && <span className="text-destructive">, {failing.toLocaleString()} failing (listed first)</span>}.
           </CardDescription>
         </CardHeader>
         <CardContent className={scrollingTable.content}>
@@ -58,21 +67,39 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
             <Table containerClassName={scrollingTable.container}>
               <TableHeader className={scrollingTable.header}>
                 <TableRow>
-                  <TableHead>Company</TableHead>
                   <TableHead>Board</TableHead>
                   <TableHead>Last check</TableHead>
-                  <TableHead className="text-right">Listed</TableHead>
+                  <TableHead>Last success</TableHead>
+                  <TableHead>Last result</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {page.items.map((b) => (
                   <TableRow key={b.id} className={b.active ? "" : "text-muted-foreground"}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
-                    <TableCell className="font-mono text-xs">{b.ats}:{b.board_token}</TableCell>
-                    <TableCell><BoardStatus board={b} now={now} /></TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {b.status?.last_counts?.fetched?.toLocaleString() ?? "—"}
+                    <TableCell>
+                      <div className="font-medium">{b.name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">{b.ats}:{b.board_token}</div>
+                    </TableCell>
+                    <TableCell>
+                      <BoardStatus board={b} now={now} />
+                      {b.problem && <div className="mt-1 text-xs text-destructive">{b.problem}</div>}
+                    </TableCell>
+                    <TableCell>{ago(b.status?.last_success_at, now)}</TableCell>
+                    <TableCell className="whitespace-normal">
+                      {b.status?.last_ok === false ? (
+                        <>
+                          <span className="text-destructive">{b.status.last_error}</span>
+                          {/* A board that's gone may have moved to another ATS. */}
+                          {boardGone(b.status.last_error) && b.board_token && (
+                            <Suspense fallback={<span className="mt-1 block text-xs text-muted-foreground">Looking for a new board…</span>}>
+                              <MovedBoard company={{ id: b.id, name: b.name, ats: b.ats, board_token: b.board_token }} />
+                            </Suspense>
+                          )}
+                        </>
+                      ) : (
+                        <RunCounts counts={b.status?.last_counts} />
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <form action={toggleCompanyAction}>
@@ -94,7 +121,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
-/** Admin > Companies: find and add job boards, and pause or resume them. */
+/** Admin > Companies: find and add job boards, see how each one's last check went, and pause or resume them. */
 export default function CompaniesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">

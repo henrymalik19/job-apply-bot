@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,18 +10,9 @@ import { getSpendSummary, type SpendSummary } from "@/server/modules/usage/usage
 import { formatMinutes, loadDiscoveryHealth, loadWorkerHealth, type WorkerHealth } from "@/server/modules/runs/runs.service";
 import { serverEnv } from "@/shared/env";
 import { ago } from "@/shared/format";
-import { paginate, parsePage } from "@/shared/paginate";
-import { BoardStatus, RunCounts } from "../../_components/board-status";
-import { Pager, scrollingTable } from "../../_components/data-table";
 import { LiveRefresh } from "../../_components/live-refresh";
-import { MovedBoard } from "./moved-board";
 import { RunNow } from "./run-now";
 import { TableSkeleton } from "../../_components/skeletons";
-
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-/** A board fetch that failed because the board no longer exists (it may have moved to another ATS). */
-const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
 const n = (v: number | undefined) => (v ?? 0).toLocaleString();
 
@@ -51,26 +43,24 @@ function runSummary(w: WorkerHealth): string {
   }
 }
 
-async function Health({ searchParams }: { searchParams: SearchParams }) {
+async function Health() {
   const { db, owner } = await ownerContext();
   const now = new Date();
-  const [{ boards }, workers, matching, spend, params] = await Promise.all([
+  const [{ boards }, workers, matching, spend] = await Promise.all([
     loadDiscoveryHealth(db, owner.id, now),
     loadWorkerHealth(db, owner.id, now),
     loadMatchingHealth(db, owner.id, now),
     getSpendSummary(db, owner.id, now),
-    searchParams,
   ]);
   const canRun = !!serverEnv().RAILWAY_TOKEN;
-  const active = boards.filter((b) => b.active && b.board_token && b.ats !== "other");
-  const problems = [
-    ...workers.filter((w) => w.problem).map((w) => `The ${w.name} worker ${w.problem}.`),
-    ...(matching.capReached ? [`Monthly LLM spend cap (${matching.spend.cap}) reached; scoring is paused until next month.`] : []),
-    ...active.filter((b) => b.problem).map((b) => `${b.name} (${b.ats}:${b.board_token}) ${b.problem}.`),
+  const failing = boards.filter((b) => b.active && b.board_token && b.ats !== "other" && b.problem).length;
+  const problems: { key: string; text: React.ReactNode }[] = [
+    ...workers.filter((w) => w.problem).map((w) => ({ key: w.name, text: `The ${w.name} worker ${w.problem}.` })),
+    ...(matching.capReached ? [{ key: "cap", text: `Monthly LLM spend cap (${matching.spend.cap}) reached; scoring is paused until next month.` }] : []),
+    ...(failing
+      ? [{ key: "boards", text: <>{failing.toLocaleString()} {failing === 1 ? "board is" : "boards are"} failing. <Link href="/admin/companies" className="underline underline-offset-2">See Companies</Link>.</> }]
+      : []),
   ];
-  // Problem boards first, then by name.
-  const rows = [...active].sort((a, b) => Number(!!b.problem) - Number(!!a.problem) || a.name.localeCompare(b.name));
-  const page = paginate(rows, parsePage(params.page));
 
   return (
     <>
@@ -79,7 +69,7 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
           <AlertTitle>Needs attention</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-5">
-              {problems.map((p) => <li key={p}>{p}</li>)}
+              {problems.map((p) => <li key={p.key}>{p.text}</li>)}
             </ul>
           </AlertDescription>
         </Alert>
@@ -134,62 +124,6 @@ async function Health({ searchParams }: { searchParams: SearchParams }) {
       </Card>
 
       <SpendCard spend={spend} />
-
-      <Card className={scrollingTable.card}>
-        <CardHeader>
-          <CardTitle>Boards</CardTitle>
-          <CardDescription>{active.length.toLocaleString()} active boards, problems first.</CardDescription>
-        </CardHeader>
-        <CardContent className={scrollingTable.content}>
-          {active.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active boards. Add companies on the Companies page.</p>
-          ) : (
-            <>
-            <Table containerClassName={scrollingTable.container}>
-              <TableHeader className={scrollingTable.header}>
-                <TableRow>
-                  <TableHead>Board</TableHead>
-                  <TableHead>Last run</TableHead>
-                  <TableHead>Last success</TableHead>
-                  <TableHead>Last result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell>
-                      <div className="font-medium">{b.name}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{b.ats}:{b.board_token}</div>
-                    </TableCell>
-                    <TableCell>
-                      <BoardStatus board={b} now={now} />
-                      {b.problem && <div className="mt-1 text-xs text-destructive">{b.problem}</div>}
-                    </TableCell>
-                    <TableCell>{ago(b.status?.last_success_at, now)}</TableCell>
-                    <TableCell className="whitespace-normal">
-                      {b.status?.last_ok === false ? (
-                        <>
-                          <span className="text-destructive">{b.status.last_error}</span>
-                          {/* A board that's gone may have moved to another ATS. */}
-                          {boardGone(b.status.last_error) && b.board_token && (
-                            <Suspense fallback={<span className="mt-1 block text-xs text-muted-foreground">Looking for a new board…</span>}>
-                              <MovedBoard company={{ id: b.id, name: b.name, ats: b.ats, board_token: b.board_token }} />
-                            </Suspense>
-                          )}
-                        </>
-                      ) : (
-                        <RunCounts counts={b.status?.last_counts} />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pager page={page} basePath="/admin/health" />
-            </>
-          )}
-        </CardContent>
-      </Card>
     </>
   );
 }
@@ -249,14 +183,14 @@ function SpendCard({ spend }: { spend: SpendSummary & { cap: number; application
   );
 }
 
-/** Health: each worker's schedule and last run, per-board results, and a banner for anything failing. */
-export default function HealthPage({ searchParams }: { searchParams: SearchParams }) {
+/** Health: each worker's schedule and last run, Claude spend, and a banner for anything failing (boards link to Companies). */
+export default function HealthPage() {
   return (
     <main className="flex flex-col gap-6 md:h-full">
       <LiveRefresh />
       <h1 className="text-2xl font-semibold tracking-tight">Health</h1>
       <Suspense fallback={<TableSkeleton rows={6} />}>
-        <Health searchParams={searchParams} />
+        <Health />
       </Suspense>
     </main>
   );
