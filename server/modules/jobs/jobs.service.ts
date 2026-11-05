@@ -3,7 +3,7 @@
 import type { Db } from "@/server/db/types";
 import { DEFAULT_PAGE_SIZE, pageOf, type Page } from "@/shared/paginate";
 import type { JobFilters } from "./job-filters";
-import { getJob, jobCounts, recentJobs, searchJobs, type Job, type JobListItem } from "./jobs.repository";
+import { getJob, recentJobs, searchJobs, type Job, type JobListItem } from "./jobs.repository";
 
 export {
   countJobs,
@@ -39,13 +39,6 @@ export async function findJob(db: Db, id: string): Promise<Job | null> {
   return getJob(db, id);
 }
 
-/** Job numbers for the overview: total, open, and new in the last 24 hours and 7 days. */
-export async function getJobStats(db: Db, now: Date) {
-  return jobCounts(db, {
-    day: new Date(now.getTime() - 86_400_000),
-    week: new Date(now.getTime() - 7 * 86_400_000),
-  });
-}
 
 /** The latest open jobs, newest found first. */
 export async function getRecentJobs(db: Db, limit = 8): Promise<JobListItem[]> {

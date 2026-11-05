@@ -262,9 +262,9 @@ export async function getJobMatch(db: Db, userId: string, jobId: string) {
 }
 
 /** A user's match counts, for the overview and Health. */
-export async function getMatchSummary(db: Db, userId: string) {
+export async function getMatchSummary(db: Db, userId: string, now = new Date()) {
   const criteria = await getMatchCriteria(db, userId);
-  return { threshold: criteria.threshold, ...(await matchCounts(db, userId, criteria.threshold)) };
+  return { threshold: criteria.threshold, ...(await matchCounts(db, userId, criteria.threshold, now)) };
 }
 
 /** What Health shows about a user's matching: the last run, outcome counts, and this month's LLM spend. */

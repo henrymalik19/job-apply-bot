@@ -1,6 +1,6 @@
 import type { Db } from "@/server/db/types";
 import { countByStatus } from "@/server/modules/applications/applications.service";
-import { getJobStats, getRecentJobs, type JobListItem } from "@/server/modules/jobs/jobs.service";
+import { getRecentJobs, type JobListItem } from "@/server/modules/jobs/jobs.service";
 import { getMatchSummary } from "@/server/modules/matching/matching.service";
 import { latestDiscoveryRun } from "@/server/modules/runs/runs.service";
 import type { WorkerRun } from "@/server/modules/runs/runs.service";
@@ -24,25 +24,24 @@ export type Overview = {
 
 /** Loads a user's overview: job numbers, their application funnel, the last discovery run and the newest jobs. */
 export async function getOverview(db: Db, userId: string, now: Date): Promise<Overview> {
-  const [stats, byStatus, lastRun, recent, matching] = await Promise.all([
-    getJobStats(db, now),
+  const [byStatus, lastRun, recent, matching] = await Promise.all([
     countByStatus(db, userId),
     latestDiscoveryRun(db),
     getRecentJobs(db, 8),
-    getMatchSummary(db, userId),
+    getMatchSummary(db, userId, now),
   ]);
   return {
     jobs: [
-      { label: "Open jobs", value: stats.open, hint: "Open postings saved from the job boards, after the search filters.", href: "/app/jobs" },
-      { label: "New in 24h", value: stats.today, hint: "Postings discovery first saw in the last 24 hours." },
-      { label: "New in 7 days", value: stats.week, hint: "Postings discovery first saw in the last 7 days." },
+      { label: "Your open jobs", value: matching.yours, hint: "Open postings from the job boards that pass your search filters.", href: "/app/jobs" },
+      { label: "New in 24h", value: matching.today, hint: "Of your open jobs, the ones discovery first saw in the last 24 hours." },
+      { label: "New in 7 days", value: matching.week, hint: "Of your open jobs, the ones discovery first saw in the last 7 days." },
       {
         label: `Matched (${matching.threshold}+)`,
         value: matching.aboveThreshold,
-        hint: `Jobs Claude scored ${matching.threshold} or higher against your profile. Prepare turns the best of these into applications, up to your daily cap.`,
+        hint: `Open jobs Claude scored ${matching.threshold} or higher against your profile. Prepare turns the best of these into applications, up to your daily cap.`,
         href: "/app/jobs?match=matched",
       },
-      { label: "Scored", value: matching.scored, hint: "Jobs Claude has scored against your profile and criteria so far, at any score." },
+      { label: "Scored", value: matching.scored, hint: "Open jobs Claude has scored against your profile and criteria, at any score." },
     ],
     waiting: [
       { status: "needs_input", label: "Needs you", value: byStatus.needs_input, hint: "Prepared, but a required question needs your answer. Once answered it moves to Ready to review.", href: "/app/todo?tab=answers" },

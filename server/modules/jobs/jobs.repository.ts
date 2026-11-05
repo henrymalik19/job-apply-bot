@@ -98,22 +98,6 @@ export async function getJob(db: Db, id: string): Promise<Job | null> {
   return res.data;
 }
 
-/** Counts for the overview: all jobs, open ones, and those first found since each cutoff. */
-export async function jobCounts(db: Db, since: { day: Date; week: Date }) {
-  const count = async (build: (q: ReturnType<typeof base>) => ReturnType<typeof base>, what: string) => {
-    const res = await build(base());
-    if (res.error) unwrap(res, what);
-    return res.count ?? 0;
-  };
-  const base = () => db.from("jobs").select("id", { count: "exact", head: true });
-  const [total, open, today, week] = await Promise.all([
-    count((q) => q, "count jobs"),
-    count((q) => q.is("closed_at", null), "count open jobs"),
-    count((q) => q.gte("first_seen_at", since.day.toISOString()), "count new jobs today"),
-    count((q) => q.gte("first_seen_at", since.week.toISOString()), "count new jobs this week"),
-  ]);
-  return { total, open, today, week };
-}
 
 /** The most recently found open jobs. */
 export async function recentJobs(db: Db, limit: number): Promise<JobListItem[]> {

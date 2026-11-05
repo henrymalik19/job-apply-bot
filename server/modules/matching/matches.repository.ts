@@ -69,20 +69,27 @@ export async function matchesForJobs(db: Db, userId: string, jobIds: string[]): 
 }
 
 /** Counts of a user's match outcomes. */
-export async function matchCounts(db: Db, userId: string, threshold: number) {
+export async function matchCounts(db: Db, userId: string, threshold: number, now = new Date()) {
   const count = async (build: (q: ReturnType<typeof base>) => ReturnType<typeof base>, what: string) => {
     const res = await build(base());
     if (res.error) unwrap(res, what);
     return res.count ?? 0;
   };
-  const base = () => db.from("matches").select("id", { count: "exact", head: true }).eq("user_id", userId);
-  const [scored, aboveThreshold, filtered, failed] = await Promise.all([
+  // Open jobs only, like the overview's other job numbers (a closed posting drops out).
+  const base = () => db.from("matches").select("id, jobs!inner(id, first_seen_at)", { count: "exact", head: true }).eq("user_id", userId).is("jobs.closed_at", null);
+  const day = new Date(now.getTime() - 86_400_000).toISOString();
+  const week = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const [yours, today, thisWeek, scored, aboveThreshold, filtered, failed] = await Promise.all([
+    // Open jobs that passed your search filters (scored, or waiting on a retry).
+    count((q) => q.neq("status", "filtered"), "count your jobs"),
+    count((q) => q.neq("status", "filtered").gte("jobs.first_seen_at", day), "count your new jobs today"),
+    count((q) => q.neq("status", "filtered").gte("jobs.first_seen_at", week), "count your new jobs this week"),
     count((q) => q.eq("status", "scored"), "count scored"),
     count((q) => q.eq("status", "scored").gte("score", threshold), "count matched"),
     count((q) => q.eq("status", "filtered"), "count filtered"),
     count((q) => q.eq("status", "failed"), "count failed"),
   ]);
-  return { scored, aboveThreshold, filtered, failed };
+  return { yours, today, week: thisWeek, scored, aboveThreshold, filtered, failed };
 }
 
 /** A job list row with its match outcome. */
