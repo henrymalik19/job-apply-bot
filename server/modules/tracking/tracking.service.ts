@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { Db, Json } from "@/server/db/types";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { markRead, moveToFolder, readInbox, type InboxConfig, type InboxMail } from "@/server/integrations/email/inbox";
+import { markRead, mergeFolder, moveToFolder, readInbox, type InboxConfig, type InboxMail } from "@/server/integrations/email/inbox";
 import { getApplication, listApplications, listTransitions, transition, type AppStatus } from "@/server/modules/applications/applications.service";
 import { NOTIFY_HEADER } from "@/server/modules/notifications/digest";
 import { finishRun, startRun } from "@/server/modules/runs/runs.service";
@@ -32,10 +32,18 @@ const FIRST_RUN_DAYS = 14;
 export const FORGET_OTHER_DAYS = 30;
 /** Any other email not linked to an application (shown under Needs sorting for 60 days) after this many. */
 export const FORGET_UNLINKED_DAYS = 60;
+/** Kinds the rules find that Claude confirms before an application moves: getting one wrong costs the most. */
+const CONFIRM_KINDS = new Set<EmailKind>(["rejection", "interview"]);
 /** Kinds of email marked read once tied to an application: they need nothing from you. */
 const READ_KINDS = new Set<EmailKind>(["confirmation", "rejection"]);
-/** Where a matched rejection is moved (never deleted). */
-export const REJECTIONS_FOLDER = "Rejections (Autopilot)";
+/** Where a matched rejection is filed (never deleted). */
+export const REJECTIONS_FOLDER = "Jobrx/Rejected";
+/** Where a matched application receipt is filed (never deleted). */
+export const RECEIVED_FOLDER = "Jobrx/Received";
+/** Where rejections were filed before; its mail is moved into {@link REJECTIONS_FOLDER} once. */
+const OLD_REJECTIONS_FOLDER = "Rejections (Autopilot)";
+/** The folder each kind of matched email is filed in, out of the inbox; the rest stay there. */
+const FILE_IN: Partial<Record<EmailKind, string>> = { confirmation: RECEIVED_FOLDER, rejection: REJECTIONS_FOLDER };
 
 /** The kinds that move an application, and where to. */
 export const MOVES: Partial<Record<EmailKind, AppStatus>> = {
@@ -66,6 +74,8 @@ export type TrackDeps = {
   moveMail?: (config: InboxConfig, messageId: string, folder: string) => Promise<boolean>;
   /** Marks an email read in the inbox. */
   markMailRead?: (config: InboxConfig, messageId: string) => Promise<boolean>;
+  /** Moves an old folder's mail into a new one and removes the old folder. */
+  mergeMail?: (config: InboxConfig, from: string, folder: string) => Promise<number>;
   now?: () => Date;
   log?: (line: string) => void;
 };
@@ -202,7 +212,7 @@ async function retryUnsorted(db: Db, userId: string, since: Date, now: Date): Pr
  * @throws Only when the run itself can't proceed (no inbox setting, the inbox or database unreachable).
  */
 export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCounts }> {
-  const { db, userId, now = () => new Date(), log = () => {}, readMail = readInbox, moveMail = moveToFolder, markMailRead = markRead } = deps;
+  const { db, userId, now = () => new Date(), log = () => {}, readMail = readInbox, moveMail = moveToFolder, markMailRead = markRead, mergeMail = mergeFolder } = deps;
   const runId = await startRun(db, WORKER, null, userId);
   const counts: TrackCounts = { read: 0, new: 0, matched: 0, moved: 0, unmatched: 0, archived: 0, deferred: 0, cost_usd: 0 };
   try {
@@ -215,6 +225,8 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
     const inbox = inboxSchema.parse(inboxRaw);
     counts.forgotten = await forgetOldEmails(db, userId, now());
     const config: InboxConfig = { host: inbox.imap_host, port: inbox.imap_port, user: inbox.address, password: deps.password };
+    // Rejections filed in the old folder join the new one (once; after that the old folder is gone).
+    await mergeMail(config, OLD_REJECTIONS_FOLDER, REJECTIONS_FOLDER).catch((err) => log(`track_email: couldn't move the old rejections folder: ${(err as Error).message}`));
     const [mails, apps, transitions, budget] = await Promise.all([
       readSince(db, userId, now())
         .then((since) => retryUnsorted(db, userId, since, now()))
@@ -236,10 +248,14 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
       const match = matchEmail(mail, tracked);
       let kind = classifyByRules(mail);
       let reason = kind ? "rules" : "";
-      if (!kind && (match.app || fromAts(mail))) {
+      // A rejection or an interview moves an application (and a rejection leaves the inbox): Claude reads
+      // the whole email to confirm one before it does, since a receipt can word things like either.
+      const confirm = kind != null && CONFIRM_KINDS.has(kind) && match.app != null;
+      if ((!kind && (match.app || fromAts(mail))) || confirm) {
+        const ruled = kind;
         if (!deps.call) {
-          kind = "other";
-          reason = "no Claude to sort it";
+          kind ??= "other";
+          reason = ruled ? "rules (no Claude to confirm)" : "no Claude to sort it";
         } else if (spent >= budget.cap) {
           // Left unread so a later run sorts it once the month's budget allows.
           counts.deferred++;
@@ -250,8 +266,10 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
           const cost = await recordUsage(db, userId, { purpose: "track_email", model: res.model, usage: res.usage });
           spent += cost;
           counts.cost_usd += cost;
-          kind = res.output?.kind ?? "other";
-          reason = res.output ? `Claude: ${res.output.reason}` : `Claude failed: ${res.error ?? "no answer"}`;
+          kind = res.output?.kind ?? (ruled && !CONFIRM_KINDS.has(ruled) ? ruled : "other");
+          reason = [res.output ? `Claude: ${res.output.reason}` : `Claude failed: ${res.error ?? "no answer"}`, ruled && ruled !== kind ? `rules said ${ruled}` : ""]
+            .filter(Boolean)
+            .join("; ");
         }
       }
       kind ??= "other";
@@ -300,14 +318,16 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
           log(`track_email: couldn't mark the ${kind} from ${app.company} read: ${(err as Error).message}`);
         }
       }
-      if (kind === "rejection") {
+      // Filed out of the inbox (receipts and rejections), so what's left there is what needs you.
+      const folder = FILE_IN[kind];
+      if (folder) {
         try {
-          if (await moveMail(config, mail.messageId, REJECTIONS_FOLDER)) {
+          if (await moveMail(config, mail.messageId, folder)) {
             await db.from("emails").update({ archived_at: now().toISOString() }).eq("id", row.id);
             counts.archived++;
           }
         } catch (err) {
-          log(`track_email: couldn't move the rejection from ${app.company} out of the inbox: ${(err as Error).message}`);
+          log(`track_email: couldn't file the ${kind} from ${app.company} in ${folder}: ${(err as Error).message}`);
         }
       }
     }

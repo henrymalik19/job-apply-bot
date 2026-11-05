@@ -93,21 +93,59 @@ export async function markRead(config: InboxConfig, messageId: string): Promise<
 }
 
 /**
- * Moves one INBOX message (by Message-ID) to `folder`, creating the folder if needed.
+ * Moves one INBOX message (by Message-ID) to `folder`, creating the folder if needed. A nested folder is
+ * written with "/" ("Jobrx/Received") and created with the server's own separator.
  *
  * @returns Whether the message was found and moved.
  */
 export async function moveToFolder(config: InboxConfig, messageId: string, folder: string): Promise<boolean> {
   return withInbox(config, async (client) => {
-    const folders = await client.list();
-    if (!folders.some((f) => f.path === folder)) await client.mailboxCreate(folder);
+    const path = await ensureFolder(client, folder);
     const lock = await client.getMailboxLock("INBOX");
     try {
       const uids = await client.search({ header: { "message-id": messageId } }, { uid: true });
       if (!uids || uids.length === 0) return false;
-      return (await client.messageMove(uids, folder, { uid: true })) !== false;
+      return (await client.messageMove(uids, path, { uid: true })) !== false;
     } finally {
       lock.release();
     }
+  });
+}
+
+/** Creates a folder (and its parents) if it isn't there; returns its path in the server's own separator. */
+async function ensureFolder(client: ImapFlow, folder: string): Promise<string> {
+  const folders = await client.list();
+  const delimiter = folders.find((f) => f.path === "INBOX")?.delimiter || folders[0]?.delimiter || "/";
+  const parts = folder.split("/");
+  for (let i = 1; i <= parts.length; i++) {
+    const path = parts.slice(0, i).join(delimiter);
+    if (!folders.some((f) => f.path === path)) await client.mailboxCreate(path);
+  }
+  return parts.join(delimiter);
+}
+
+/**
+ * Moves everything in an old folder into `folder` (created if needed) and removes the old one; nothing
+ * happens when the old folder isn't there.
+ *
+ * @returns How many messages moved.
+ */
+export async function mergeFolder(config: InboxConfig, from: string, folder: string): Promise<number> {
+  return withInbox(config, async (client) => {
+    if (!(await client.list()).some((f) => f.path === from)) return 0;
+    const path = await ensureFolder(client, folder);
+    const lock = await client.getMailboxLock(from);
+    let moved = 0;
+    try {
+      const uids = (await client.search({ all: true }, { uid: true })) || [];
+      if (uids.length) {
+        await client.messageMove(uids, path, { uid: true });
+        moved = uids.length;
+      }
+    } finally {
+      lock.release();
+    }
+    await client.mailboxDelete(from);
+    return moved;
   });
 }

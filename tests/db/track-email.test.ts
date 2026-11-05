@@ -11,7 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import type { InboxMail } from "@/server/integrations/email/inbox";
-import { forgetOldEmails, linkEmail, listApplicationEmails, listUnsortedEmails, REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
+import { forgetOldEmails, linkEmail, listApplicationEmails, listUnsortedEmails, RECEIVED_FOLDER, REJECTIONS_FOLDER, runTrackEmail } from "@/server/modules/tracking/tracking.service";
 import type {} from "./setup";
 import { setUserSettings, testUser } from "./users";
 
@@ -57,12 +57,17 @@ const mail = (id: string, subject: string, text: string, extra: Partial<InboxMai
 
 const inbox: InboxMail[] = [];
 const moved: string[] = [];
-// Claude sorts the one email the rules can't: a recruiter's note about a call.
-const call: StructuredCall = async () => ({
-  output: { kind: "interview", reason: "asks to set a time to talk" },
-  model: "claude-haiku-5-5",
-  usage: { input_tokens: 100, output_tokens: 20 },
-}) as never;
+// Claude sorts the email the rules can't (a recruiter's note about a call) and confirms rejections.
+const calls: string[] = [];
+const call: StructuredCall = async ({ user }) => {
+  const kind = /unfortunately/i.test(user) ? "rejection" : /minutes this week/i.test(user) ? "interview" : "confirmation";
+  calls.push(kind);
+  return {
+    output: { kind, reason: kind === "interview" ? "asks to set a time to talk" : `reads as a ${kind}` },
+    model: "claude-haiku-5-5",
+    usage: { input_tokens: 100, output_tokens: 20 },
+  } as never;
+};
 const markedRead: string[] = [];
 const deps = () => ({
   db,
@@ -74,6 +79,7 @@ const deps = () => ({
     moved.push(`${messageId} -> ${folder}`);
     return true;
   },
+  mergeMail: async () => 0,
   markMailRead: async (_c: unknown, messageId: string) => {
     markedRead.push(messageId);
     return true;
@@ -120,7 +126,7 @@ afterAll(async () => {
 describe("track_email", () => {
   it("moves the applications the inbox is about", async () => {
     const { counts } = await runTrackEmail(deps());
-    expect(counts).toMatchObject({ read: 6, new: 5, matched: 4, moved: 4, unmatched: 1, archived: 1, marked_read: 3 });
+    expect(counts).toMatchObject({ read: 6, new: 5, matched: 4, moved: 4, unmatched: 1, archived: 3, marked_read: 3 });
     // Receipts and the rejection are read; the interview invite stays unread.
     expect(markedRead.sort()).toEqual([`<${tag}-a@mail.test>`, `<${tag}-c@mail.test>`, `<${tag}-r@mail.test>`].sort());
 
@@ -129,7 +135,14 @@ describe("track_email", () => {
     expect(evidence).toEqual([{ kind: "confirmation_email", email_message_id: `<${tag}-c@mail.test>` }]);
 
     expect(await status("rej")).toBe("rejected");
-    expect(moved).toEqual([`<${tag}-r@mail.test> -> ${REJECTIONS_FOLDER}`]);
+    // Claude confirmed the rejection the rules found before it moved anything.
+    expect(calls).toContain("rejection");
+    const { data: rejReason } = await db.from("emails").select("reason").eq("message_id", `<${tag}-r@mail.test>`).single();
+    expect(rejReason!.reason).toMatch(/^Claude: reads as a rejection/);
+    // Receipts and the rejection are filed out of the inbox; the interview invite stays.
+    expect(moved.sort()).toEqual(
+      [`<${tag}-r@mail.test> -> ${REJECTIONS_FOLDER}`, `<${tag}-c@mail.test> -> ${RECEIVED_FOLDER}`, `<${tag}-a@mail.test> -> ${RECEIVED_FOLDER}`].sort(),
+    );
     const { data: rejection } = await db.from("emails").select("archived_at, application_id").eq("message_id", `<${tag}-r@mail.test>`).single();
     expect(rejection).toMatchObject({ application_id: apps.rej, archived_at: expect.any(String) });
 
