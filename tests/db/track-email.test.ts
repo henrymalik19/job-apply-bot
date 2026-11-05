@@ -216,3 +216,33 @@ describe("forgetting old emails", () => {
     expect(left!.map((r) => r.subject).sort()).toEqual(["linked-old", "other-recent", "rejection-unlinked-45"]);
   });
 });
+
+describe("rechecking recent emails", () => {
+  it("corrects a receipt the rules took for a rejection, and ties one it couldn't match", async () => {
+    // A receipt saved as a rejection by the old rules: its application went to Rejected.
+    await addApp("misread", `Misreadco ${tag}`, "Platform Engineer", "submitted");
+    await db.rpc("transition_application", { p_application_id: apps.misread, p_to: "rejected", p_cause: "email:rejection" });
+    await db.from("emails").insert({
+      user_id: userId, message_id: `<${tag}-misread@mail.test>`, received_at: ago(90).toISOString(), from_addr: "no-reply@ashbyhq.com",
+      subject: `Thanks for applying to Misreadco ${tag}!`,
+      snippet: `Thanks for applying to our Platform Engineer role! If you're not selected to move forward, please know this doesn't reflect your experience.`,
+      classification: "rejection", application_id: apps.misread, reason: "rules",
+    });
+    // A receipt naming "X & Y Labs" that couldn't be tied to the application saved as "X and Y Labs".
+    await addApp("amp", `Ampco and Partners ${tag}`, "Backend Engineer", "submitted");
+    await db.from("emails").insert({
+      user_id: userId, message_id: `<${tag}-amp@mail.test>`, received_at: ago(60).toISOString(), from_addr: "noreply@talent.ampco.test",
+      subject: `Thanks for your interest in Ampco & Partners ${tag}, Malik!`,
+      snippet: `Thank you for taking the time to apply to Ampco & Partners ${tag}! We will reach out if your experience is a strong match.`,
+      classification: "confirmation", application_id: null, reason: "Claude: a receipt",
+    });
+
+    const { counts } = await runTrackEmail({ ...deps(), readMail: async () => [] });
+    expect(counts.rechecked).toBeGreaterThanOrEqual(2);
+    expect(await status("misread")).toBe("confirmed");
+    expect(await status("amp")).toBe("confirmed");
+    const { data: fixed } = await db.from("emails").select("classification, application_id").eq("message_id", `<${tag}-amp@mail.test>`).single();
+    expect(fixed).toEqual({ classification: "confirmation", application_id: apps.amp });
+    expect(moved).toEqual(expect.arrayContaining([`<${tag}-misread@mail.test> -> ${RECEIVED_FOLDER}`, `<${tag}-amp@mail.test> -> ${RECEIVED_FOLDER}`]));
+  });
+});

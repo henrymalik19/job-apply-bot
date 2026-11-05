@@ -32,7 +32,7 @@ const INTERVIEW =
   /\b(schedule|book|set up|arrange)\b.{0,60}\b(interview|call|chat|conversation|phone screen|meeting)\b|\binterview\b.{0,60}\b(invit|availability|schedul)|\bcalendly\.com\b|\bgoodtime\.io\b|\byour availability\b/i;
 // Checked after rejections and interviews, so "thank you for your interest" here is the plain receipt.
 const CONFIRMATION =
-  /\bthank(s| you) for (applying|your application|submitting)\b|\bthank(s| you) for your interest in (joining|working|applying|the)\b|\bthe time you took to apply\b|\bapplication (has been |was )?(received|submitted)\b|\bwe('ve| have) received your application\b|\byour application (to|for) .{0,80} (is in|has been received)/i;
+  /\bthank(s| you) for (applying|your application|submitting)\b|\bthank(s| you) for your interest in\b|\bthank(s| you) for taking the time to apply\b|\bthe time you took to apply\b|\bapplication (has been |was )?(received|submitted)\b|\bwe('ve| have) received your application\b|\byour application (to|for) .{0,80} (is in|has been received)/i;
 // Job boards mail from subdomains too (match.indeed.com, e.linkedin.com), and their "apply now" pitches
 // can read like interview invites, so anything from one is an alert, never about an application here.
 const JOB_ALERT_SENDER =
@@ -90,7 +90,8 @@ export type EmailMatch = { app: TrackedApp | null; confidence: number; reason: s
 export const MATCH_THRESHOLD = 0.8;
 
 const SUFFIX = /\b(inc|llc|ltd|corp|corporation|co|company|technologies|technology|labs|group|holdings|plc|gmbh)\b\.?/g;
-const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// "&" and "and" are the same in a company name ("Hims & Hers", "Hims and Hers"), so "and" is dropped.
+const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\band\b/g, " ").replace(/\s+/g, " ").trim();
 /** A company name as it appears in text: lower-case words without "Inc." and the like. */
 export const companyKey = (name: string) => words(words(name).replace(SUFFIX, " "));
 

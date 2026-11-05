@@ -101,6 +101,8 @@ export type TrackCounts = {
   forgotten?: number;
   /** Confirmations and rejections tied to an application, marked read (they need nothing from you). */
   marked_read?: number;
+  /** Recent emails the rules once read wrongly or couldn't place, corrected. */
+  rechecked?: number;
 };
 
 /**
@@ -246,6 +248,37 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
     const seen = await seenIds(db, userId, mails.map((m) => m.messageId));
     const tracked: TrackedApp[] = apps.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at }));
     const byId = new Map(tracked.map((a) => [a.id, a]));
+
+    /**
+     * Marks a receipt or a rejection read and files it out of the inbox, so what's left there is what needs
+     * you (an interview, a recruiter, one it couldn't place stay unread). Returns whether it was filed.
+     */
+    const fileMail = async (messageId: string, kind: EmailKind, company: string): Promise<boolean> => {
+      if (READ_KINDS.has(kind)) {
+        try {
+          if (await markMailRead(config, messageId)) counts.marked_read = (counts.marked_read ?? 0) + 1;
+        } catch (err) {
+          log(`track_email: couldn't mark the ${kind} from ${company} read: ${(err as Error).message}`);
+        }
+      }
+      const folder = FILE_IN[kind];
+      if (!folder) return false;
+      try {
+        if (await moveMail(config, messageId, folder)) {
+          counts.archived++;
+          return true;
+        }
+      } catch (err) {
+        log(`track_email: couldn't file the ${kind} from ${company} in ${folder}: ${(err as Error).message}`);
+      }
+      return false;
+    };
+
+    // Recent emails the rules once read wrongly or couldn't tie to an application, corrected.
+    counts.rechecked = await reconsiderRecent(db, userId, tracked, transitions, now(), fileMail, log).catch((err) => {
+      log(`track_email: recheck failed: ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
+    });
     let spent = budget.spent;
 
     for (const mail of mails) {
@@ -332,25 +365,7 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
       }
       // A receipt or a no, tied to its application, needs nothing from you: read. Anything that might
       // (an interview, a recruiter, one it couldn't place) stays unread so it stands out.
-      if (READ_KINDS.has(kind)) {
-        try {
-          if (await markMailRead(config, mail.messageId)) counts.marked_read = (counts.marked_read ?? 0) + 1;
-        } catch (err) {
-          log(`track_email: couldn't mark the ${kind} from ${app.company} read: ${(err as Error).message}`);
-        }
-      }
-      // Filed out of the inbox (receipts and rejections), so what's left there is what needs you.
-      const folder = FILE_IN[kind];
-      if (folder) {
-        try {
-          if (await moveMail(config, mail.messageId, folder)) {
-            await db.from("emails").update({ archived_at: now().toISOString() }).eq("id", row.id);
-            counts.archived++;
-          }
-        } catch (err) {
-          log(`track_email: couldn't file the ${kind} from ${app.company} in ${folder}: ${(err as Error).message}`);
-        }
-      }
+      if (await fileMail(mail.messageId, kind, app.company)) await db.from("emails").update({ archived_at: now().toISOString() }).eq("id", row.id);
     }
     counts.cost_usd = Math.round(counts.cost_usd * 10000) / 10000;
     await finishRun(db, runId, { ok: true, counts });
@@ -484,4 +499,74 @@ export async function dismissEmail(db: Db, userId: string, emailId: string): Pro
     await db.from("emails").update({ classification: "other", reason: DISMISSED }).eq("user_id", userId).eq("id", emailId),
     "dismiss email",
   );
+}
+
+/**
+ * Looks again at the last {@link FIRST_RUN_DAYS} days of saved emails with today's rules and matching (no
+ * Claude): one the rules once read wrongly (a receipt taken for a rejection) or couldn't tie to an
+ * application ("Hims and Hers" against "Hims & Hers") is corrected, its application moved and the email
+ * filed. Emails Claude sorted, ones you dismissed, and rejections or interviews (which only Claude may
+ * confirm) are left alone.
+ *
+ * @returns How many were corrected.
+ */
+async function reconsiderRecent(
+  db: Db,
+  userId: string,
+  tracked: TrackedApp[],
+  transitions: Record<string, string[]>,
+  now: Date,
+  file: (messageId: string, kind: EmailKind, company: string) => Promise<boolean>,
+  log: (line: string) => void,
+): Promise<number> {
+  const rows = unwrap(
+    await db
+      .from("emails")
+      .select("id, message_id, from_addr, subject, snippet, classification, application_id, reason, received_at")
+      .eq("user_id", userId)
+      .gte("received_at", new Date(now.getTime() - FIRST_RUN_DAYS * 86_400_000).toISOString()),
+    "list recent emails",
+  );
+  const linkedIds = [...new Set(rows.map((r) => r.application_id).filter((id): id is string => !!id))];
+  // A linked application may have moved somewhere tracking doesn't follow (Rejected, by a misread).
+  const linked = linkedIds.length
+    ? unwrap(await db.from("applications").select("id, status, jobs!inner(title, company_name)").in("id", linkedIds), "read linked applications")
+    : [];
+  const linkedApps = new Map(
+    (linked as unknown as { id: string; status: string; jobs: { title: string; company_name: string } }[]).map((a) => [a.id, { id: a.id, status: a.status, company: a.jobs.company_name }]),
+  );
+
+  let corrected = 0;
+  for (const r of rows) {
+    if (r.reason === DISMISSED) continue;
+    const fromAddress = /<([^>]+)>/.exec(r.from_addr ?? "")?.[1] ?? r.from_addr ?? "";
+    const mail = { fromAddress, fromName: "", subject: r.subject ?? "", text: r.snippet ?? "", receivedAt: new Date(r.received_at) };
+    const kind = classifyByRules(mail);
+    // Only what the rules settle alone; a rejection or an interview is Claude's to confirm.
+    if (!kind || !(kind in MOVES) || CONFIRM_KINDS.has(kind)) continue;
+    let app: { id: string; status: string; company: string } | undefined;
+    if (r.application_id) {
+      // Linked already: corrected only when the rules read it differently now, and it was the rules' call.
+      if (kind === r.classification || !(r.reason ?? "").startsWith("rules")) continue;
+      app = linkedApps.get(r.application_id);
+    } else {
+      if (r.classification !== "other" && !(r.classification && r.classification in MOVES)) continue;
+      const match = matchEmail(mail, tracked);
+      if (!match.app || match.confidence < MATCH_THRESHOLD) continue;
+      app = match.app;
+    }
+    if (!app) continue;
+    check(
+      await db.from("emails").update({ classification: kind, application_id: app.id, reason: `rules (rechecked; was ${r.classification ?? "unsorted"})` }).eq("id", r.id),
+      "correct email",
+    );
+    const moved = await moveForEmail(db, app, kind, { email_id: r.id, subject: (r.subject ?? "").slice(0, 200), rechecked: true }, transitions);
+    if (moved) {
+      app.status = moved;
+      log(`track_email: rechecked "${r.subject}": ${app.company} -> ${moved}`);
+    }
+    if (await file(r.message_id, kind, app.company)) check(await db.from("emails").update({ archived_at: now.toISOString() }).eq("id", r.id), "file email");
+    corrected++;
+  }
+  return corrected;
 }
