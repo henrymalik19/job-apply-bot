@@ -76,13 +76,23 @@ export async function recordLimitReached(
     "pause company",
   );
 
-  // The rest there waits on nothing it can get: skipped, with the reason.
+  return { until, skipped: await skipWaitingAt(db, userId, job.company_id, reason) };
+}
+
+/**
+ * Your applications at a company not sent yet (and not being filled by the runner right now), skipped
+ * because you're at its limit: they wait on nothing they can get. They come back when it's over
+ * ({@link reviveAfterLimit}).
+ *
+ * @returns How many were skipped.
+ */
+async function skipWaitingAt(db: Db, userId: string, companyId: string, reason: string): Promise<number> {
   const waiting = unwrap(
     await db
       .from("applications")
       .select("id, jobs!inner(company_id)")
       .eq("user_id", userId)
-      .eq("jobs.company_id", job.company_id)
+      .eq("jobs.company_id", companyId)
       .in("status", WAITING)
       .is("apply_step", null),
     "read waiting applications there",
@@ -96,7 +106,7 @@ export async function recordLimitReached(
       if (!(err instanceof IllegalTransitionError)) throw err;
     }
   }
-  return { until, skipped };
+  return skipped;
 }
 
 /** A company's limit on applications and, when you reached it, until when: for showing on its row. */
@@ -152,9 +162,11 @@ export async function companiesAtLimit(db: Db, userId: string, now: Date): Promi
     check(await db.from("user_companies").update({ paused_until: until.toISOString(), pause_reason: reason }).eq("user_id", userId).eq("company_id", c.id), "pause company");
   }
   const paused = unwrap(
-    await db.from("user_companies").select("company_id").eq("user_id", userId).gt("paused_until", now.toISOString()),
+    await db.from("user_companies").select("company_id, pause_reason").eq("user_id", userId).gt("paused_until", now.toISOString()),
     "read paused companies",
   );
+  // Applications there not sent yet can't go out until then: skipped, to come back after.
+  for (const p of paused) await skipWaitingAt(db, userId, p.company_id, p.pause_reason ?? "You've reached this company's limit on applications.");
   return new Set(paused.map((p) => p.company_id));
 }
 

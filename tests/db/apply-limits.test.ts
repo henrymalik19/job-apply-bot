@@ -56,8 +56,12 @@ describe("company application limits", () => {
     await addApp("ancient", "submitted", 90); // outside the window
     const waiting = await addApp("waiting", "queued");
     await transition(db, waiting, "skipped", LIMIT_CAUSE, { reason: "limit" });
+    const ready = await addApp("ready", "queued");
 
     expect((await companiesAtLimit(db, userId, new Date())).has(companyId)).toBe(true);
+    // One still waiting there is skipped too, to come back with the rest.
+    const { data: readyNow } = await db.from("applications").select("status").eq("id", ready).single();
+    expect(readyNow!.status).toBe("skipped");
     const paused = await follow();
     // The older of the two in the window leaves it in 10 days.
     const days = (new Date(paused.paused_until!).getTime() - Date.now()) / DAY;
@@ -71,7 +75,7 @@ describe("company application limits", () => {
     const later = new Date(Date.now() + 11 * DAY);
     const atLimit = await companiesAtLimit(db, userId, later);
     expect(atLimit.has(companyId)).toBe(false);
-    expect(await reviveAfterLimit(db, userId, atLimit)).toBe(1);
+    expect(await reviveAfterLimit(db, userId, atLimit)).toBe(2);
     expect((await db.from("applications").select("id").eq("id", waiting)).data).toEqual([]);
 
     await clearLimit(db, userId, companyId);
