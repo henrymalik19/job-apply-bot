@@ -239,10 +239,19 @@ export async function answerQuestions(
   let saved = 0;
   let remembered = 0;
   let confirmed = 0;
+  let cleared = 0;
   const confirmedWordings = new Map<string, string>();
   for (const { questionId, answer: raw } of input.answers) {
     const q = app.questions.find((x) => x.id === questionId);
-    if (!q || !raw.trim()) continue;
+    if (!q) continue;
+    if (!raw.trim()) {
+      // Blank: never answered (left as it is), or an answer you cleared (an optional one is sent empty).
+      if (q.answer == null) continue;
+      if (q.required) throw new ValidationError(`"${q.question.slice(0, 80)}" is required, so it can't be left empty.`);
+      await updateQuestion(db, q.id, { answer: null, answer_value: null, bucket: "auto", answer_source: "user", user_approved: true, needs_check: false, reason: "left empty by you" });
+      cleared++;
+      continue;
+    }
     const { answer, value } = parseAnswer(q, raw);
     const changed = answer !== q.answer;
     if (!changed && !(input.confirmUnchanged && q.needs_check) && q.bucket !== "needs_user") continue;
@@ -270,6 +279,7 @@ export async function answerQuestions(
   if (movedToReview && fresh?.status === "needs_input") await transition(db, app.id, "queued", "user:answer");
   const parts = [
     saved ? `Saved ${saved} ${saved === 1 ? "answer" : "answers"}${remembered ? ` (${remembered} remembered for other applications)` : ""}.` : "",
+    cleared ? `Cleared ${cleared} ${cleared === 1 ? "answer" : "answers"}; ${cleared === 1 ? "it's" : "they're"} sent empty.` : "",
     confirmed ? `Marked ${confirmed} as checked.` : "",
     alsoCleared ? `Also checked on ${alsoCleared} other ${alsoCleared === 1 ? "application" : "applications"}.` : "",
   ].filter(Boolean);

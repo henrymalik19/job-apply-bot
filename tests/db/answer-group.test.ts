@@ -86,4 +86,20 @@ describe("one Save for a group of answers", () => {
     const { data: app } = await db.from("applications").select("status").eq("id", appId).single();
     expect(app!.status).toBe("queued");
   });
+
+  it("saves an optional answer you cleared as empty, and refuses to empty a required one", async () => {
+    const drafted = { field_type: "textarea", bucket: "drafted", answer: "AI text", answer_value: "AI text", answer_source: "drafted", needs_check: true };
+    const { data } = await db
+      .from("application_questions")
+      .insert([question("followup", { ...drafted, required: false }, 5), question("mustsay", drafted, 6)] as never)
+      .select("id, field_name");
+    const id = Object.fromEntries(data!.map((r) => [r.field_name, r.id]));
+
+    const result = await answerQuestions(db, userId, { applicationId: appId, answers: [{ questionId: id.followup, answer: "  " }, { questionId: rows.blank, answer: "" }] });
+    expect(result.note).toBe("Cleared 1 answer; it's sent empty.");
+    const { data: row } = await db.from("application_questions").select("answer, bucket, answer_source, needs_check").eq("id", id.followup).single();
+    expect(row).toMatchObject({ answer: null, bucket: "auto", answer_source: "user", needs_check: false });
+
+    await expect(answerQuestions(db, userId, { applicationId: appId, answers: [{ questionId: id.mustsay, answer: "" }] })).rejects.toThrow(/required/);
+  });
 });
