@@ -83,7 +83,9 @@ export function buildClassifyPrompt(input: {
 For each question, pick one kind:
 - "catalog": a fact or preference about the candidate that has one answer for every employer: work authorization,
   sponsorship, salary expectation, location, notice period, start date, relocation, links, contact details,
-  how they heard about the role, years of experience with one named skill. Set question_key to the key in
+  how they heard about the role, years of experience with one named skill, and standing consents asked the same
+  way everywhere: willingness to undergo a background check or drug screen, acknowledging a privacy policy or
+  data processing notice, certifying that the application is true and complete. Set question_key to the key in
   <catalog> that asks the same thing; only if none does, set new_question with a short snake_case key, a
   plain-English label, a category and answer_type. For years of experience with one skill, use
   "years_with_skill" and put the skill's name in skill. Set polarity to "inverted" only when the wording asks
@@ -95,11 +97,13 @@ For each question, pick one kind:
   "unknown". Never guess.
 - "open_ended": free text about motivation, experience or fit that should be written for this employer ("Why do
   you want to work here?", "Describe a project you're proud of", cover letter text).
-- "attestation": any certification, consent, agreement or legal statement ("I certify that...", "I agree to the
-  privacy policy", background check consent). These always go to the candidate.
+- "attestation": a legal statement specific to this employer that isn't a standing consent: a signature, a typed
+  name and date, an arbitration, non-compete or employer-specific agreement. These always go to the candidate.
 - "cannot_automate": assessments, coding tests, video or audio recordings, or anything that needs an account
   or a live action. A question about the candidate themselves (their habits, preferences or opinions, such as
-  "How do you use AI tools today?") is never cannot_automate, even when the profile doesn't answer it.
+  "How do you use AI tools today?") is never cannot_automate, even when the profile doesn't answer it, and
+  neither is a consent or willingness question (agreeing to a background check is a saved answer, not a live
+  action).
 
 confidence is 0 to 1: how sure you are of the kind and catalog question. reason is one short line.
 
