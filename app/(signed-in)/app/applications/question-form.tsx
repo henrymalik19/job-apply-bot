@@ -16,7 +16,7 @@ const BUCKET_LABEL: Record<string, { label: string; variant: "default" | "second
 function sourceLabel(q: ApplicationQuestion): string | null {
   switch (q.answer_source) {
     // Claude picked the form's option from your profile answer (the reason says which and why).
-    case "profile": return q.reason?.startsWith("picked by AI") ? q.reason : "from your profile";
+    case "profile": return q.reason?.startsWith("picked by AI") ? "picked by AI" : "from your profile";
     case "criteria": return "from your search criteria";
     case "skill_years": return "from your job dates";
     case "answer": return "saved answer";
@@ -61,9 +61,10 @@ function AnswerInput({ q }: { q: ApplicationQuestion }) {
  *
  * @param showBucket - Show the filled/drafted/needs-you badge (off where questions are already grouped by it).
  * @param aiAllowed - False when the employer restricts AI use: drafting stays available, with a heads-up.
+ * @param showCheck - Show "please check" (off in the Double-check group, which says it already).
  */
-export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boolean; aiAllowed?: boolean }) {
-  const { q, showBucket = true, aiAllowed = false } = props;
+export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boolean; aiAllowed?: boolean; showCheck?: boolean }) {
+  const { q, showBucket = true, aiAllowed = false, showCheck = true } = props;
   const freeText = q.field_type === "textarea" || q.answer_source === "drafted";
   const bucket = BUCKET_LABEL[q.bucket] ?? { label: q.bucket, variant: "outline" as const };
   const source = sourceLabel(q);
@@ -74,10 +75,15 @@ export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boole
         <span className="font-medium">{q.question}</span>
         {q.required && <Badge className="bg-destructive/15 text-destructive">required</Badge>}
         {showBucket && <Badge variant={bucket.variant}>{bucket.label}</Badge>}
-        {q.needs_check && <Badge variant="outline">please check</Badge>}
-        {source && <span className="text-xs text-muted-foreground">{source}</span>}
+        {showCheck && q.needs_check && <Badge variant="outline">please check</Badge>}
+        {source && (
+          // Where the answer came from, as a quiet tag on the right.
+          <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {source}
+          </span>
+        )}
       </div>
-      {q.reason && q.bucket !== "auto" && q.bucket !== "drafted" && <p className="text-sm text-muted-foreground">{q.reason}</p>}
+      {q.reason && ((q.bucket !== "auto" && q.bucket !== "drafted") || source === "picked by AI") && <p className="text-sm text-muted-foreground">{q.reason}</p>}
       {!editable ? (
         <p className="text-sm">{q.answer ?? <span className="text-muted-foreground">Nothing to fill in here.</span>}</p>
       ) : (

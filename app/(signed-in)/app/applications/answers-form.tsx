@@ -61,9 +61,11 @@ export function DraftControls({ questionId, hasAnswer }: { questionId: string; h
         ref={button}
         type="submit"
         variant="outline"
-        name="draft_question"
-        value={questionId}
-        formAction={ctx.draft}
+        // Says which question to draft (a button's own name/value is taken over by React for its action).
+        formAction={(formData) => {
+          formData.set("draft_question", questionId);
+          ctx.draft(formData);
+        }}
         disabled={ctx.busy}
         onClick={() => ctx.start(questionId)}
       >

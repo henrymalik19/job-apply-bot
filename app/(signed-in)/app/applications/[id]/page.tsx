@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, ExternalLink, FileText, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -25,6 +25,7 @@ import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
 import { QuestionForm } from "../question-form";
+import { PdfViewer } from "../pdf-viewer";
 import { AnswersForm } from "../answers-form";
 import { EmailsCard } from "../emails-card";
 import { listApplicationEmails } from "@/server/modules/tracking/tracking.service";
@@ -204,11 +205,7 @@ function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        {url && (
-          <a href={url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
-            <FileText /> Open PDF
-          </a>
-        )}
+        {url && <PdfViewer url={url} title={resume.label ?? "Resume"} />}
         {doc.summary && <p className="text-muted-foreground">{doc.summary}</p>}
         <details>
           <summary className="cursor-pointer font-medium">Experience and skills</summary>
@@ -263,15 +260,17 @@ function QuestionGroup(props: {
   defaultOpen?: boolean;
   /** The group's one Save button. */
   saveLabel?: string;
+  /** Show each question's "please check" (off where the group itself says so). */
+  showCheck?: boolean;
 }) {
-  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false, saveLabel = "Save answers" } = props;
+  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false, saveLabel = "Save answers", showCheck = true } = props;
   if (questions.length === 0) return null;
   const list = (
     <div className="divide-y">
       {questions.map((q) =>
         editable ? (
           <div key={q.id} id={`q-${q.id}`} className="scroll-mt-40">
-            <QuestionForm q={q} showBucket={false} aiAllowed={aiAllowed(q)} />
+            <QuestionForm q={q} showBucket={false} aiAllowed={aiAllowed(q)} showCheck={showCheck} />
           </div>
         ) : (
           <div key={q.id} className="py-3 text-sm"><span className="font-medium">{q.question}</span>: {q.answer ?? "—"}</div>
@@ -418,6 +417,7 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
             app={app}
             editable={editable}
             saveLabel="Save and mark checked"
+            showCheck={false}
             aiAllowed={aiAllowed}
             tone="info"
             collapsible
