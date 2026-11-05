@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, ExternalLink, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, RefreshCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -25,7 +25,8 @@ import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
 import { DecideActions, MarkAppliedButton, RebuildResumeButton, RetryApplyButton } from "../decide-actions";
 import { getUserSetting } from "@/server/modules/settings/settings.service";
-import { PROFILE_CHANGED_KEY } from "@/server/modules/prepare/prepare.service";
+import { PROFILE_CHANGED_KEY, recheckOpenQuestions, RULES_VERSION } from "@/server/modules/prepare/prepare.service";
+import { createClaudeCaller } from "@/server/integrations/anthropic/claude";
 import { QuestionForm } from "../question-form";
 import { PdfViewer } from "../pdf-viewer";
 import { AnswersForm } from "../answers-form";
@@ -324,8 +325,13 @@ function QuestionGroup(props: {
 async function ApplicationDetail({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const app = await getApplication(db, owner.id, id);
+  let app = await getApplication(db, owner.id, id);
   if (!app) notFound();
+  // Prepared under older answering rules: its open questions are sorted again now (once), before you read them.
+  if (app.rules_version < RULES_VERSION && ["needs_input", "queued", "manual", "approved"].includes(app.status) && !app.apply_step) {
+    await recheckOpenQuestions({ db, userId: owner.id, call: createClaudeCaller() }, { applicationIds: [app.id], onlyOutdated: true }).catch(() => null);
+    app = (await getApplication(db, owner.id, id, { fresh: true })) ?? app;
+  }
   const [match, resume, runs, emails, profileChangedAt] = await Promise.all([
     getJobMatch(db, owner.id, app.job.id),
     getApplicationResume(db, app.id),
@@ -390,6 +396,16 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
         <div className="flex flex-col gap-6 lg:col-span-2">
           {app.questions.length === 0 && (
             <Card><CardContent><p className="text-sm text-muted-foreground">No form questions were found.</p></CardContent></Card>
+          )}
+          {app.recheck_note && app.rechecked_at && (
+            // What sorting its questions again with updated answering rules changed.
+            <p className="flex items-center gap-2 rounded-md border border-info/30 bg-info/10 px-3 py-2 text-sm">
+              <RefreshCw className="size-4 shrink-0 text-info" />
+              <span>
+                Updated for the latest answering rules on{" "}
+                {new Date(app.rechecked_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}: {app.recheck_note}.
+              </span>
+            </p>
           )}
           <QuestionGroup
             title="Needs your answer"

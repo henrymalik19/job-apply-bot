@@ -7,7 +7,7 @@
 import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { FORM_ATS, fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
-import { unwrap, ValidationError } from "@/server/core/errors";
+import { check, unwrap, ValidationError } from "@/server/core/errors";
 import { getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
 import { transition, updateQuestion } from "@/server/modules/applications/applications.repository";
 import type { Row as DbRow } from "@/server/db/types";
@@ -65,6 +65,15 @@ import {
 
 const WORKER = "prepare";
 const INTERRUPTED_AFTER_MS = 60 * 60 * 1000;
+/**
+ * The version of the answering rules (how questions are sorted: the classify prompt, the catalog questions
+ * and how they're answered). Bump it when they change: applications sorted with an older version have their
+ * open questions sorted again, once (see {@link recheckOpenQuestions}).
+ *
+ * 1: consents and "worked here before" as saved answers, the clearance field, follow-up questions.
+ */
+export const RULES_VERSION = 1;
+
 /** A classifier pick below this confidence isn't saved as an alias and goes to the owner. */
 export const ALIAS_CONFIDENCE = 0.8;
 
@@ -103,6 +112,8 @@ export type PrepareCounts = {
   cost_usd: number;
   /** "Can't be filled" applications started over because their form can be read now. */
   restarted?: number;
+  /** Applications whose open questions were sorted again after the answering rules changed. */
+  rechecked?: number;
 };
 
 /**
@@ -571,6 +582,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
           apply_method: "self",
           prepared_at: now().toISOString(),
           prepare_error: result.error?.slice(0, 500) ?? null,
+          rules_version: RULES_VERSION,
         },
         result.questions,
       );
@@ -592,6 +604,15 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       }
       counts[result.status === "queued" || result.status === "needs_input" || result.status === "manual" ? result.status : "failed"]++;
       if (result.error) log(`${candidate.job.id}: ${result.error}`);
+    }
+    // Applications prepared under older answering rules: their open questions sorted again, once.
+    const rechecked = await recheckOpenQuestions({ db, userId, call: deps.call, now, log }, { onlyOutdated: true }).catch((err) => {
+      log(`recheck failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    });
+    if (rechecked) {
+      counts.rechecked = rechecked.applications;
+      ctx.spend.cost += rechecked.cost_usd;
     }
     counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
     await finishRun(db, runId, { ok: true, counts });
@@ -667,6 +688,16 @@ export type RecheckCounts = {
   cost_usd: number;
 };
 
+/** What a recheck changed on one application, in a few words; null when nothing did. */
+function recheckNote(did: { answered: number; answerable: number; moved: boolean }): string | null {
+  const parts = [
+    did.answered ? `${did.answered} ${did.answered === 1 ? "answer" : "answers"} filled` : "",
+    did.answerable ? `${did.answerable} ${did.answerable === 1 ? "step" : "steps"} you can now answer here` : "",
+    did.moved ? "moved to Ready to review" : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
+}
+
 /** A question still waiting on you: unanswered, and something you could type or pick (not a file). */
 const isOpen = (q: { answer: string | null; bucket: string; field_type: string | null }) =>
   q.answer == null && (q.bucket === "needs_user" || q.bucket === "cannot_automate") && q.field_type !== "file" && q.field_type !== "hidden";
@@ -690,7 +721,7 @@ const isFromYou = (q: { answer: string | null; answer_source: string | null; que
  */
 export async function recheckOpenQuestions(
   deps: Pick<PrepareDeps, "db" | "userId" | "now" | "log"> & { call?: StructuredCall },
-  opts: { applicationIds?: string[]; concurrency?: number } = {},
+  opts: { applicationIds?: string[]; concurrency?: number; onlyOutdated?: boolean } = {},
 ): Promise<RecheckCounts> {
   const { db, userId, now = () => new Date(), log = () => {} } = deps;
   const counts: RecheckCounts = { applications: 0, answered: 0, answerable: 0, movedToReview: 0, refreshed: 0, cost_usd: 0 };
@@ -701,17 +732,22 @@ export async function recheckOpenQuestions(
     .eq("user_id", userId)
     .in("status", ["needs_input", "queued", "approved"]);
   if (opts.applicationIds) query = query.in("id", opts.applicationIds);
+  if (opts.onlyOutdated) query = query.lt("rules_version", RULES_VERSION);
   const { data, error } = await query;
   if (error) throw new Error(`list applications to recheck: ${error.message}`);
   type ApplicationQuestionRow = DbRow<"application_questions">;
   type Row = { id: string; status: AppStatus; apply_step: string | null; job_id: string; jobs: { title: string; company_name: string; location: string | null; description_md: string | null }; application_questions: ApplicationQuestionRow[] };
   // An approved one the runner is filling right now is left alone.
-  const apps = ((data ?? []) as unknown as Row[]).filter(
-    (a) => !(a.status === "approved" && a.apply_step) && a.application_questions.some((q) => isOpen(q) || isFromYou(q)),
-  );
+  const all = ((data ?? []) as unknown as Row[]).filter((a) => !(a.status === "approved" && a.apply_step));
+  const apps = all.filter((a) => a.application_questions.some((q) => isOpen(q) || isFromYou(q)));
   counts.applications = apps.length;
+  // Sorting with Claude brings an application up to the current rules; one with nothing to sort already is.
+  const current = { rules_version: RULES_VERSION, rechecked_at: now().toISOString() };
+  const settled = all.filter((a) => !apps.includes(a)).map((a) => a.id);
+  if (deps.call && settled.length) check(await db.from("applications").update(current).in("id", settled), "mark applications current");
 
   const recheck = async (app: Row) => {
+    const did = { answered: 0, answerable: 0, refreshed: 0, moved: false, sorted: true };
     const countries = resolvePlace(app.jobs.location ?? "").countries;
     const actx: RunContext = { ...ctx, country: countries.size === 1 ? [...countries][0] : "US", company: app.jobs.company_name };
     const asForm = (r: ApplicationQuestionRow): FormQuestion => ({
@@ -738,7 +774,7 @@ export async function recheckOpenQuestions(
       });
       if (fresh === "draft" || fresh.bucket !== "auto" || fresh.answer == null || fresh.answer === r.answer) continue;
       await updateQuestion(db, r.id, { answer: fresh.answer, answer_value: fresh.answer_value ?? null, reason: fresh.reason ?? r.reason });
-      counts.refreshed++;
+      did.refreshed++;
     }
 
     const open = app.application_questions.filter(isOpen);
@@ -755,7 +791,8 @@ export async function recheckOpenQuestions(
         unknown.push({ row, q, id: r.id });
       }
     }
-    // Without Claude (after a profile save), only known wordings are answered.
+    // Without Claude (after a profile save, or past the monthly cap), only known wordings are answered.
+    if (unknown.length > 0 && !(deps.call && budget.spent + ctx.spend.cost < budget.cap)) did.sorted = false;
     if (unknown.length > 0 && deps.call && budget.spent + ctx.spend.cost < budget.cap) {
       const prompt = buildClassifyPrompt({
         catalog: [...ctx.questions.values()].map((t) => ({ key: t.key, label: t.label, answer_type: t.answer_type })),
@@ -764,6 +801,7 @@ export async function recheckOpenQuestions(
         questions: unknown.map(({ row, q }) => ({ index: row._index, label: q.label, description: q.description, fieldType: q.fieldType, options: q.options.map((o) => o.label), required: q.required })),
       });
       const output = await callWithRetry(deps, deps.call!, "classify", app.job_id, { ...prompt, schema: classifyOutputSchema, maxTokens: 6000 }, ctx.spend);
+      if (!output) did.sorted = false;
       const byIndex = new Map((output?.questions ?? []).map((c) => [c.index, c]));
       for (const item of unknown) {
         const c = byIndex.get(item.row._index);
@@ -779,10 +817,10 @@ export async function recheckOpenQuestions(
           answer: result.answer, answer_value: result.answer_value ?? null, bucket: "auto", answer_source: result.answer_source ?? null,
           needs_check: result.needs_check ?? false, reason: result.reason ?? null, question_id: result.question_id ?? r.question_id,
         });
-        counts.answered++;
+        did.answered++;
       } else if (result.bucket === "needs_user" && r.bucket === "cannot_automate") {
         await updateQuestion(db, r.id, { bucket: "needs_user", reason: result.reason ?? null, question_id: result.question_id ?? r.question_id });
-        counts.answerable++;
+        did.answerable++;
       } else if (result.question_id && result.question_id !== r.question_id) {
         // Linked to its catalog question now, so answering it saves for every form that asks.
         await updateQuestion(db, r.id, { question_id: result.question_id, reason: result.reason ?? r.reason });
@@ -792,7 +830,17 @@ export async function recheckOpenQuestions(
     const after = unwrap(await db.from("application_questions").select("required, bucket").eq("application_id", app.id), "read rechecked questions");
     if (app.status === "needs_input" && !after.some((q) => q.required && q.bucket === "needs_user")) {
       await transition(db, app.id, "queued", "worker:recheck");
-      counts.movedToReview++;
+      did.moved = true;
+    }
+
+    counts.answered += did.answered;
+    counts.answerable += did.answerable;
+    counts.refreshed += did.refreshed;
+    if (did.moved) counts.movedToReview++;
+    // Brought up to the current rules once its open questions were sorted with them, with a note of what changed.
+    if (deps.call && did.sorted) {
+      const note = recheckNote(did);
+      check(await db.from("applications").update({ ...current, ...(note ? { recheck_note: note } : {}) }).eq("id", app.id), "mark application rechecked");
     }
   };
 

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
-import { recheckOpenQuestions } from "@/server/modules/prepare/prepare.service";
+import { recheckOpenQuestions, RULES_VERSION } from "@/server/modules/prepare/prepare.service";
 import type {} from "./setup";
 import { setUserSettings, testUser } from "./users";
 
@@ -99,5 +99,14 @@ describe("recheck open questions", () => {
     expect(await status(apps.known)).toBe("queued");
     const { data: stale } = await db.from("application_questions").select("answer, answer_value").eq("application_id", apps.stale).single();
     expect(stale).toEqual({ answer: "No", answer_value: "0" });
+
+    // Each is now on the current rules, with a note of what changed, and isn't sorted again.
+    const { data: marked } = await db.from("applications").select("id, rules_version, recheck_note").in("id", Object.values(apps));
+    const by = new Map(marked!.map((m) => [m.id, m]));
+    expect(by.get(apps.both)).toMatchObject({ rules_version: RULES_VERSION, recheck_note: "1 answer filled, 1 step you can now answer here" });
+    expect(by.get(apps.known)).toMatchObject({ rules_version: RULES_VERSION, recheck_note: "1 answer filled, moved to Ready to review" });
+    const again = await recheckOpenQuestions({ db, userId, call }, { applicationIds: Object.values(apps), onlyOutdated: true });
+    expect(again.applications).toBe(0);
+    expect(asked).toHaveLength(1);
   });
 });

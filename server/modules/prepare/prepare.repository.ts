@@ -71,7 +71,7 @@ export async function countApplicationsSince(db: Db, userId: string, since: Date
  */
 export async function insertApplication(
   db: Db,
-  application: Pick<Insert<"applications">, "user_id" | "job_id" | "match_id" | "status" | "flags" | "apply_method" | "prepared_at" | "prepare_error">,
+  application: Pick<Insert<"applications">, "user_id" | "job_id" | "match_id" | "status" | "flags" | "apply_method" | "prepared_at" | "prepare_error" | "rules_version">,
   questions: NewQuestion[],
 ): Promise<string> {
   const { id } = unwrap(await db.from("applications").insert(application).select("id").single(), "insert application");

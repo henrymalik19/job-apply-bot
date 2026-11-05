@@ -116,14 +116,21 @@ export async function listApplications(db: Db, userId: string, statuses: readonl
   return (rows as unknown as Joined[]).map(toDetails).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
-/** One of a user's applications with its job, score and questions, or null. */
-export async function getApplication(db: Db, userId: string, id: string): Promise<ApplicationWithDetails | null> {
-  const res = await db
+/**
+ * One of a user's applications with its job, score and questions, or null.
+ *
+ * @param fresh - Read it again even within the same page render (Next.js otherwise hands back the
+ *   first identical read): after the render itself changed it.
+ */
+export async function getApplication(db: Db, userId: string, id: string, opts: { fresh?: boolean } = {}): Promise<ApplicationWithDetails | null> {
+  let query = db
     .from("applications")
     .select(`*, jobs!inner(${JOB_COLUMNS}), matches(score), application_questions(*)`)
     .eq("user_id", userId)
-    .eq("id", id)
-    .maybeSingle();
+    .eq("id", id);
+  // A read with its own abort signal isn't shared with an earlier identical one.
+  if (opts.fresh) query = query.abortSignal(new AbortController().signal);
+  const res = await query.maybeSingle();
   if (res.error) unwrap(res, "get application");
   return res.data ? toDetails(res.data as unknown as Joined) : null;
 }

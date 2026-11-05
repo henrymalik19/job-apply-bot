@@ -125,14 +125,14 @@ isOneToOne: false
                   ]
                 },"applications": {
                   Row: {
-                    "apply_method": string | null,"apply_note": string | null,"apply_step": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"notified_status": string | null,"prepare_error": string | null,"prepared_at": string | null,"status": string,"submitted_at": string | null,"updated_at": string,"user_id": string
+                    "apply_method": string | null,"apply_note": string | null,"apply_step": string | null,"approved_at": string | null,"confirmed_at": string | null,"cover_letter": string | null,"created_at": string,"flags": NonNullable<Json>,"id": string,"job_id": string,"last_status_at": string,"match_id": string | null,"notified_status": string | null,"prepare_error": string | null,"prepared_at": string | null,"recheck_note": string | null,"rechecked_at": string | null,"rules_version": number,"status": string,"submitted_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id": string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"recheck_note"?: string | null,"rechecked_at"?: string | null,"rules_version"?: number,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "apply_method"?: string | null,"apply_note"?: string | null,"apply_step"?: string | null,"approved_at"?: string | null,"confirmed_at"?: string | null,"cover_letter"?: string | null,"created_at"?: string,"flags"?: NonNullable<Json>,"id"?: string,"job_id"?: string,"last_status_at"?: string,"match_id"?: string | null,"notified_status"?: string | null,"prepare_error"?: string | null,"prepared_at"?: string | null,"recheck_note"?: string | null,"rechecked_at"?: string | null,"rules_version"?: number,"status"?: string,"submitted_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -826,6 +826,9 @@ isOneToOne: false
 "notified_status": string | null,
 "prepare_error": string | null,
 "prepared_at": string | null,
+"recheck_note": string | null,
+"rechecked_at": string | null,
+"rules_version": number,
 "status": string,
 "submitted_at": string | null,
 "updated_at": string,

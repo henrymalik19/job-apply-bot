@@ -33,7 +33,7 @@ function runSummary(w: WorkerHealth): string {
       return c.candidates ? `${n(c.scored)} scored · ${n(c.filtered)} ruled out · ${n(c.failed)} failed${c.deferred ? ` · ${n(c.deferred)} deferred` : ""}` : "nothing new to score";
     case "prepare":
       return c.candidates
-        ? `${n(c.queued)} ready · ${n(c.needs_input)} need you · ${n(c.manual)} can't fill${c.deferred ? ` · ${n(c.deferred)} over the daily cap` : ""}${c.restarted ? ` · ${n(c.restarted)} started over` : ""}`
+        ? `${n(c.queued)} ready · ${n(c.needs_input)} need you · ${n(c.manual)} can't fill${c.deferred ? ` · ${n(c.deferred)} over the daily cap` : ""}${c.restarted ? ` · ${n(c.restarted)} started over` : ""}${c.rechecked ? ` · ${n(c.rechecked)} rechecked` : ""}`
         : "nothing to prepare";
     case "notify":
       if (c.sent) return `emailed ${n(c.applications)} applications`;
