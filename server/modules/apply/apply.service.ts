@@ -100,6 +100,8 @@ export type ApplyDeps = {
   /** How often to look at the page while waiting (default 2 seconds). */
   pollMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** How long to wait before submitting again after the site refused a submission (default 2 minutes). */
+  resubmitWaitMs?: number;
 };
 
 /** How one run ended. */
@@ -156,6 +158,8 @@ async function enterCodeFromInbox(deps: ApplyDeps, app: ApplyJob): Promise<boole
 
 /** How long a form with a step only you can do (an assessment) stays open for you; the runner waits meanwhile. */
 const YOUR_STEPS_WAIT_MS = 60 * 60_000;
+/** How long to wait before submitting again after the site refused a submission (it suggests a few minutes). */
+const RESUBMIT_WAIT_MS = 2 * 60_000;
 
 /**
  * Waits for the confirmation page, keeping the last field values seen so
@@ -174,7 +178,7 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
     const text = await driver.confirmation();
     if (text != null) return { text, last };
     const refused = await driver.refused?.().catch(() => null);
-    if (refused) return { refused };
+    if (refused) return { refused, last };
     if (platform.mode === "auto" && !askedForCheck && (await driver.challenge())) {
       // A check after an automatic submit is the user's to complete, never the runner's.
       askedForCheck = true;
@@ -400,10 +404,32 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   }
 
   const extraSteps = [...extra.learned, ...extra.ai].map((e) => e.step);
-  const waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, yours || left.length ? YOUR_STEPS_WAIT_MS : undefined);
+  const waitMs = yours || left.length ? YOUR_STEPS_WAIT_MS : undefined;
+  let waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, waitMs);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
   if ("refused" in waited) {
-    return fail(`The site didn't take the submission: "${waited.refused}" Submit it from your own browser (the answers are below), then click I applied.`);
+    // The site's own advice when it refuses one by mistake (Ashby's spam check): wait a few minutes and
+    // submit again. Done once, with the same answers; a second refusal hands it back.
+    const first = waited.refused;
+    log(`${app.id}: the site refused the submission ("${first}"); filling it again to submit once more`);
+    await setApplyStep(db, app.id, "submitting", `The site refused the submission ("${first}"). Submitting once more in a couple of minutes, as it suggests.`);
+    await (deps.sleep ?? defaultSleep)(deps.resubmitWaitMs ?? RESUBMIT_WAIT_MS);
+    if ((await driver.open(url)) === "no_form") return fail("After refusing the submission, the posting has no application form any more.");
+    // The same answers again, with any text you changed in the form before submitting.
+    const shown = waited.last ?? {};
+    for (const step of [...steps.filter((x) => !other.has(x.fieldName)), ...extraSteps]) {
+      const typed = step.kind === "text" && shown[step.fieldName] ? { ...step, value: shown[step.fieldName] } : step;
+      if (!(await driver.fill(typed, resumePath)) && step.required) log(`${app.id}: couldn't fill "${step.label}" again`);
+    }
+    if (yours || left.length) {
+      await setApplyStep(db, app.id, "waiting_for_you", `The site refused the first submission, so the form is filled again.${yours}${leftForYou} Do that in the Chrome window, then click Submit.`);
+      await driver.focus();
+    } else {
+      await driver.submit();
+    }
+    waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, waitMs);
+    if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
+    if ("refused" in waited) return fail(`The site refused the submission twice, the second time a few minutes later: "${waited.refused}"`);
   }
   if ("timedOut" in waited) return { ...(await fail(`Nobody submitted the form within ${yours ? "an hour" : "30 minutes"}.`)), closeTab: true };
 

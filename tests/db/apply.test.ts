@@ -63,10 +63,13 @@ async function addApproved(key: string, opts: { requiredUnanswered?: boolean; yo
  * A browser that fills everything and confirms on the second look, optionally with the user's
  * edits, a CAPTCHA, fields it can't fill, or nobody ever submitting.
  */
-function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[]; rejects?: Record<string, string>; refused?: string } = {}) {
+function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean; unfillable?: string[]; neverSubmitted?: boolean; open?: OpenField[]; rejects?: Record<string, string>; refused?: string; refusals?: number } = {}) {
   const filled: Record<string, string> = {};
   const submits: number[] = [];
   let looks = 0;
+  // The site refuses the first `refusals` submissions (all of them with just `refused`).
+  let refusalsLeft = opts.refusals ?? (opts.refused ? Infinity : 0);
+  let refusing = refusalsLeft > 0;
   const driver: FormDriver = {
     open: async () => "ok",
     fill: async (step: FillStep) => {
@@ -82,10 +85,11 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
     challenge: async () => opts.challenge ?? false,
     emailCode: async () => false,
     enterEmailCode: async () => true,
-    confirmation: async () => (!opts.neverSubmitted && !opts.refused && ++looks > 1 ? "Thank you for applying." : null),
-    refused: async () => opts.refused ?? null,
+    confirmation: async () => (!opts.neverSubmitted && !refusing && ++looks > 1 ? "Thank you for applying." : null),
+    refused: async () => (refusing ? (opts.refused ?? "flagged as possible spam") : null),
     submit: async () => {
       submits.push(Date.now());
+      refusing = --refusalsLeft > 0;
     },
     screenshot: async () => PNG,
     focus: async () => {},
@@ -197,14 +201,25 @@ describe("apply runner", () => {
     expect(evidence?.detail).toMatchObject({ left_for_you: ["First Name"] });
   });
 
-  it("hands back, without trying again, when the site refuses the submission", async () => {
-    const id = await addApproved("refused");
+  it("submits once more when the site refuses a submission, as it asks, and is then received", async () => {
+    const id = await addApproved("refused-once");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const { driver, submits, filled } = fakeDriver({ refused: "Your application submission was flagged as possible spam.", refusals: 1 });
+    const outcome = await applyOne(deps(driver), job);
+    expect(outcome).toMatchObject({ result: "submitted" });
+    expect(submits).toHaveLength(1); // the runner's own second submit
+    expect(filled).toHaveProperty("first_name", "Ada");
+    expect((await app(id)).status).toBe("submitted");
+  });
+
+  it("hands back when the site refuses the second submission too", async () => {
+    const id = await addApproved("refused-twice");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
     const { driver, submits } = fakeDriver({ refused: "Your application submission was flagged as possible spam." });
     const outcome = await applyOne(deps(driver), job);
-    expect(outcome).toMatchObject({ result: "handed_back", reason: expect.stringContaining("flagged as possible spam") });
-    expect(submits).toEqual([]);
-    expect(await app(id)).toMatchObject({ status: "manual", apply_note: expect.stringContaining("Submit it from your own browser") });
+    expect(outcome).toMatchObject({ result: "handed_back", reason: expect.stringContaining("refused the submission twice") });
+    expect(submits).toHaveLength(1);
+    expect((await app(id)).status).toBe("manual");
   });
 
   it("hands back and closes the tab when nobody submits in time", async () => {
