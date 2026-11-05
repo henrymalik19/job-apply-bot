@@ -471,6 +471,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"notifications": {
+                  Row: {
+                    "application_id": string | null,"body": string | null,"created_at": string,"dedupe_key": string | null,"href": string | null,"id": string,"kind": string,"read_at": string | null,"title": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "application_id"?: string | null,"body"?: string | null,"created_at"?: string,"dedupe_key"?: string | null,"href"?: string | null,"id"?: string,"kind": string,"read_at"?: string | null,"title": string,"user_id"?: string
+                  }
+                  Update: {
+                    "application_id"?: string | null,"body"?: string | null,"created_at"?: string,"dedupe_key"?: string | null,"href"?: string | null,"id"?: string,"kind"?: string,"read_at"?: string | null,"title"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notifications_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notifications_application_id_fkey"
+      columns: ["application_id"]
+isOneToOne: false
+      referencedRelation: "public_applications"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notifications_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"platforms": {
                   Row: {
                     "ats": string,"clean_streak": number,"created_at": string,"mode": string,"required_streak": number,"updated_at": string,"user_id": string

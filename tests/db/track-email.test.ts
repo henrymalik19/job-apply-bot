@@ -114,6 +114,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.from("notifications").delete().eq("user_id", userId).like("dedupe_key", `email:<${tag}-%`);
   await db.from("emails").delete().eq("user_id", userId);
   await db.from("applications").delete().in("job_id", jobIds);
   await db.from("jobs").delete().in("id", jobIds);
@@ -147,6 +148,9 @@ describe("track_email", () => {
     expect(rejection).toMatchObject({ application_id: apps.rej, archived_at: expect.any(String) });
 
     expect(await status("int")).toBe("interviewing");
+    // You hear about the interview invite, the rejection and the email it couldn't place; receipts aren't news.
+    const { data: told } = await db.from("notifications").select("kind").eq("user_id", userId).like("dedupe_key", `email:<${tag}-%`);
+    expect(told!.map((n) => n.kind).sort()).toEqual(["email_to_sort", "interview", "rejection"]);
     expect(await status("appr")).toBe("confirmed");
     expect([await status("twin1"), await status("twin2")]).toEqual(["submitted", "submitted"]);
     const { data: twin } = await db.from("emails").select("application_id, match_confidence, classification").eq("message_id", `<${tag}-t@mail.test>`).single();

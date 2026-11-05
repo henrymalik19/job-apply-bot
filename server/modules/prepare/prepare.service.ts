@@ -13,6 +13,7 @@ import { transition, updateQuestion } from "@/server/modules/applications/applic
 import type { Row as DbRow } from "@/server/db/types";
 import { getMatchCriteria, type MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
+import { notify } from "@/server/modules/notifications/in-app";
 import { resolvePlace } from "@/server/modules/criteria/places";
 import { getProfile, profileLines, resolveSkillId, type ProfileData } from "@/server/modules/profile/profile.service";
 import {
@@ -615,6 +616,12 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       ctx.spend.cost += rechecked.cost_usd;
     }
     counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
+    // One notification per run, not one per application.
+    const ready = [
+      counts.queued ? `${counts.queued} ready to review` : "",
+      counts.needs_input ? `${counts.needs_input} ${counts.needs_input === 1 ? "needs" : "need"} your answers` : "",
+    ].filter(Boolean);
+    if (ready.length) await notify(db, userId, { kind: "prepared", title: `New applications: ${ready.join(", ")}`, href: "/app/todo" });
     await finishRun(db, runId, { ok: true, counts });
     return { runId, counts };
   } catch (err) {

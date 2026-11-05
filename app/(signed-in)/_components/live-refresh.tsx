@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Keeps a page's server data current while you look at it: re-fetches every
- * `everyMs` while the tab is visible, and right away when you come back to it,
- * so status changes (the apply runner, the workers) show without reloading.
+ * A fallback for keeping a page's server data current: live updates (LiveUpdates, over Supabase Realtime)
+ * refresh it as soon as something changes; this also re-fetches every `everyMs` while the tab is visible,
+ * and right away when you come back to it, in case the live connection dropped.
  * Scroll position and anything open on the page stay as they are.
  */
-export function LiveRefresh({ everyMs = 10_000 }: { everyMs?: number }) {
+export function LiveRefresh({ everyMs = 60_000 }: { everyMs?: number }) {
   const router = useRouter();
   useEffect(() => {
     const refresh = () => {

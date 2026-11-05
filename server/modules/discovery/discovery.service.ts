@@ -5,6 +5,7 @@
 // from the Railway worker.
 import type { Db } from "@/server/db/types";
 import { expireClosedApplications, markNoReply } from "@/server/modules/applications/applications.service";
+import { pruneNotifications } from "@/server/modules/notifications/in-app";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
 import {
   getJobFilter,
@@ -218,6 +219,8 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
     if (totals.expired) log(`expired ${totals.expired} application(s) whose posting closed`);
     totals.no_reply = await markNoReply(db, new Date());
     if (totals.no_reply) log(`moved ${totals.no_reply} application(s) that heard nothing to No reply`);
+    // Notifications are kept 90 days.
+    await pruneNotifications(db, new Date()).catch((err) => log(`prune notifications: ${err instanceof Error ? err.message : String(err)}`));
     await finishRun(db, runId, { ok: true, counts: totals });
     return { runId, counts: totals };
   } catch (err) {

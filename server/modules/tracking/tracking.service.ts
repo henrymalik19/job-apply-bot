@@ -9,6 +9,7 @@ import type { Db, Json } from "@/server/db/types";
 import { check, unwrap, ValidationError } from "@/server/core/errors";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { markRead, mergeFolder, moveToFolder, readInbox, type InboxConfig, type InboxMail } from "@/server/integrations/email/inbox";
+import { applicationHref, notify, type NotificationKind } from "@/server/modules/notifications/in-app";
 import { getApplication, listApplications, listTransitions, transition, type AppStatus } from "@/server/modules/applications/applications.service";
 import { NOTIFY_HEADER } from "@/server/modules/notifications/digest";
 import { finishRun, startRun } from "@/server/modules/runs/runs.service";
@@ -32,6 +33,12 @@ const FIRST_RUN_DAYS = 14;
 export const FORGET_OTHER_DAYS = 30;
 /** Any other email not linked to an application (shown under Needs sorting for 60 days) after this many. */
 export const FORGET_UNLINKED_DAYS = 60;
+/** Emails about an application you're told about in the app (a receipt isn't news). */
+const TELL: Partial<Record<EmailKind, { kind: NotificationKind; title: (app: TrackedApp) => string }>> = {
+  interview: { kind: "interview", title: (a) => `Interview invite: ${a.title} at ${a.company}` },
+  recruiter: { kind: "reply", title: (a) => `${a.company} replied about ${a.title}` },
+  rejection: { kind: "rejection", title: (a) => `${a.company} passed on ${a.title}` },
+};
 /** Kinds the rules find that Claude confirms before an application moves: getting one wrong costs the most. */
 const CONFIRM_KINDS = new Set<EmailKind>(["rejection", "interview"]);
 /** Kinds of email marked read once tied to an application: they need nothing from you. */
@@ -297,6 +304,13 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
       if (!relevant) continue;
       if (!confident) {
         counts.unmatched++;
+        await notify(db, userId, {
+          kind: "email_to_sort",
+          title: match.app ? `An email that may be about ${match.app.company}` : "An email about an application to sort",
+          body: `"${mail.subject}": tracking couldn't tie it to an application for sure. Link it on To do.`,
+          href: "/app/todo?tab=emails",
+          dedupeKey: `email:${mail.messageId}`,
+        });
         continue;
       }
 
@@ -308,6 +322,13 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
         counts.moved++;
         app.status = moved;
         log(`track_email: ${app.company} -> ${moved} (${kind}: "${mail.subject}")`);
+      }
+      const told = TELL[kind];
+      if (told) {
+        await notify(db, userId, {
+          kind: told.kind, title: told.title(app), body: mail.subject, href: applicationHref(app.id), applicationId: app.id,
+          dedupeKey: `email:${mail.messageId}`,
+        });
       }
       // A receipt or a no, tied to its application, needs nothing from you: read. Anything that might
       // (an interview, a recruiter, one it couldn't place) stays unread so it stands out.

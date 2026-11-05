@@ -18,6 +18,7 @@ import {
 } from "./apply.repository";
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
+import { applicationHref, notify } from "@/server/modules/notifications/in-app";
 
 /** ATSs the runner can fill (by field name). */
 export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
@@ -133,7 +134,20 @@ async function handBack(deps: ApplyDeps, app: ApplyJob, reason: string): Promise
   deps.log(`${app.id}: handed back: ${reason}`);
   await setApplyStep(deps.db, app.id, null, reason);
   await transition(deps.db, app.id, "manual", "worker:handback", { reason });
+  await notify(deps.db, deps.userId, {
+    kind: "runner_stuck", title: `Runner stuck: ${app.job.title} at ${app.job.company_name}`, body: reason,
+    href: applicationHref(app.id), applicationId: app.id,
+  });
   return { result: "handed_back", reason };
+}
+
+/** The runner waits for you in the Chrome window: the application says why, and a notification tells you. */
+async function waitForYou(deps: ApplyDeps, app: ApplyJob, note: string): Promise<void> {
+  await setApplyStep(deps.db, app.id, "waiting_for_you", note);
+  await notify(deps.db, deps.userId, {
+    kind: "runner_waiting", title: `Waiting for you in Chrome: ${app.job.title} at ${app.job.company_name}`, body: note,
+    href: applicationHref(app.id), applicationId: app.id,
+  });
 }
 
 /**
@@ -182,13 +196,13 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
     if (platform.mode === "auto" && !askedForCheck && (await driver.challenge())) {
       // A check after an automatic submit is the user's to complete, never the runner's.
       askedForCheck = true;
-      await setApplyStep(deps.db, app.id, "waiting_for_you", "Complete the verification check in the Chrome window.");
+      await waitForYou(deps, app, "Complete the verification check in the Chrome window.");
       await driver.focus();
     }
     if (!askedForCode && (await driver.emailCode())) {
       askedForCode = true;
       if (!(await enterCodeFromInbox(deps, app))) {
-        await setApplyStep(deps.db, app.id, "waiting_for_you", "The form emailed you a code. Enter it in the Chrome window to finish submitting.");
+        await waitForYou(deps, app, "The form emailed you a code. Enter it in the Chrome window to finish submitting.");
         await driver.focus();
       }
     }
@@ -399,7 +413,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     await setApplyStep(db, app.id, "submitting", `Submitting the form for ${where}.`);
     await driver.submit();
   } else {
-    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${byAi}${leftForYou}${except} ${yours || left.length ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
+    await waitForYou(deps, app, `Filled.${yours}${byAi}${leftForYou}${except} ${yours || left.length ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
     await driver.focus();
   }
 
@@ -422,7 +436,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
       if (!(await driver.fill(typed, resumePath)) && step.required) log(`${app.id}: couldn't fill "${step.label}" again`);
     }
     if (yours || left.length) {
-      await setApplyStep(db, app.id, "waiting_for_you", `The site refused the first submission, so the form is filled again.${yours}${leftForYou} Do that in the Chrome window, then click Submit.`);
+      await waitForYou(deps, app, `The site refused the first submission, so the form is filled again.${yours}${leftForYou} Do that in the Chrome window, then click Submit.`);
       await driver.focus();
     } else {
       await driver.submit();
@@ -458,6 +472,10 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     ? { clean_streak: 0, mode: "supervised" }
     : { clean_streak: platform.clean_streak + 1 });
   log(`${app.id}: submitted${changed.length ? ` (changed: ${changed.join(", ")})` : ""}`);
+  await notify(db, userId, {
+    kind: "submitted", title: `Submitted: ${app.job.title} at ${app.job.company_name}`,
+    body: changed.length ? `You changed ${changed.join(", ")}.` : null, href: applicationHref(app.id), applicationId: app.id,
+  });
   return { result: "submitted", changed };
 }
 
