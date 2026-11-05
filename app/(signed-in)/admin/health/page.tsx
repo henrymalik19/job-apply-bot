@@ -28,7 +28,7 @@ function runSummary(w: WorkerHealth): string {
   if (!w.lastRun.ok) return w.lastRun.error ?? "unknown error";
   switch (w.name) {
     case "discover":
-      return `${n(c.ok)} boards OK · ${n(c.failed)} failed · ${n(c.skipped)} backing off · ${n(c.inserted)} new jobs`;
+      return `${n(c.ok)} boards OK · ${n(c.failed)} failed · ${n(c.skipped)} backing off · ${n(c.inserted)} new jobs${c.no_reply ? ` · ${n(c.no_reply)} to No reply` : ""}`;
     case "match":
       return c.candidates ? `${n(c.scored)} scored · ${n(c.filtered)} ruled out · ${n(c.failed)} failed${c.deferred ? ` · ${n(c.deferred)} deferred` : ""}` : "nothing new to score";
     case "prepare":

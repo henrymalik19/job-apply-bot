@@ -4,7 +4,7 @@
 // plus one for the whole run. Runs with the service-role client (RLS bypass)
 // from the Railway worker.
 import type { Db } from "@/server/db/types";
-import { expireClosedApplications } from "@/server/modules/applications/applications.service";
+import { expireClosedApplications, markNoReply } from "@/server/modules/applications/applications.service";
 import { listActiveBoards, type BoardCompany } from "@/server/modules/companies/companies.service";
 import {
   getJobFilter,
@@ -71,8 +71,8 @@ export type BoardCounts = {
 /** Totals for a whole run, plus the id of its worker-level `runs` row. */
 export type DiscoverSummary = {
   runId: string;
-  /** `expired`: applications not yet submitted whose posting closed. */
-  counts: { boards: number; ok: number; failed: number; skipped: number; expired: number } & BoardCounts;
+  /** `expired`: applications not yet submitted whose posting closed. `no_reply`: submitted ones that heard nothing. */
+  counts: { boards: number; ok: number; failed: number; skipped: number; expired: number; no_reply?: number } & BoardCounts;
 };
 
 // `locations` is only for filtering; the jobs table stores the primary location.
@@ -216,6 +216,8 @@ export async function runDiscover(deps: DiscoverDeps): Promise<DiscoverSummary> 
     // Includes postings closed on earlier runs, so nothing waits on a job that's gone.
     totals.expired = await expireClosedApplications(db);
     if (totals.expired) log(`expired ${totals.expired} application(s) whose posting closed`);
+    totals.no_reply = await markNoReply(db, new Date());
+    if (totals.no_reply) log(`moved ${totals.no_reply} application(s) that heard nothing to No reply`);
     await finishRun(db, runId, { ok: true, counts: totals });
     return { runId, counts: totals };
   } catch (err) {

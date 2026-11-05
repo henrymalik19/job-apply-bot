@@ -79,6 +79,7 @@ const TARGET_LABEL: Record<string, string> = {
   interviewing: "Interviewing",
   offer: "Offer",
   rejected: "Rejected",
+  no_reply: "No reply",
   expired: "Closed (posting gone)",
 };
 

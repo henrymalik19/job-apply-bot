@@ -26,6 +26,11 @@ export const STATUS: Record<string, StatusInfo> = {
   responded: { label: "Responded", hint: "The employer replied (not yet an interview).", tone: "success" },
   interviewing: { label: "Interviewing", hint: "You have an interview in progress.", tone: "success" },
   offer: { label: "Offer", hint: "You received an offer.", tone: "success" },
+  no_reply: {
+    label: "No reply",
+    hint: "Submitted, and nothing heard for a while (30 days, or 14 once the posting closed). A reply that comes later still moves it on.",
+    tone: "muted",
+  },
   skipped: { label: "Skipped", hint: "You skipped this job.", tone: "muted" },
   expired: { label: "Expired", hint: "The posting closed before it was submitted.", tone: "muted" },
   rejected: { label: "Rejected", hint: "The employer declined.", tone: "muted" },

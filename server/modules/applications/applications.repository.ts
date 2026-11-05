@@ -1,5 +1,5 @@
 import type { Db, Json, Row, Update } from "@/server/db/types";
-import { APP_STATUSES, CAUSE_PATTERN, type AppStatus } from "@/server/modules/applications/application-status";
+import { APP_STATUSES, CAUSE_PATTERN, NO_REPLY_DAYS, NO_REPLY_DAYS_CLOSED, type AppStatus } from "@/server/modules/applications/application-status";
 import { check, unwrap } from "@/server/core/errors";
 
 /** A row of `applications`. */
@@ -167,4 +167,38 @@ export async function listTransitions(db: Db): Promise<Record<string, string[]>>
   const out: Record<string, string[]> = {};
   for (const r of rows) (out[r.from_status] ??= []).push(r.to_status);
   return out;
+}
+
+/**
+ * Moves submitted applications that heard nothing to No reply: no status change for
+ * `user_settings.no_reply_days` (default {@link NO_REPLY_DAYS}), or {@link NO_REPLY_DAYS_CLOSED} once the
+ * posting closed. Every user's (service role); a reply that comes later still moves them on.
+ *
+ * @returns How many were moved.
+ */
+export async function markNoReply(db: Db, now: Date): Promise<number> {
+  const before = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+  const rows = unwrap(
+    await db
+      .from("applications")
+      .select("id, user_id, last_status_at, jobs!inner(closed_at)")
+      .in("status", ["submitted", "confirmed"])
+      .lt("last_status_at", before(Math.min(NO_REPLY_DAYS, NO_REPLY_DAYS_CLOSED))),
+    "list quiet applications",
+  ) as unknown as { id: string; user_id: string; last_status_at: string; jobs: { closed_at: string | null } }[];
+  if (rows.length === 0) return 0;
+  const settings = unwrap(
+    await db.from("user_settings").select("user_id, value").eq("key", "no_reply_days").in("user_id", [...new Set(rows.map((r) => r.user_id))]),
+    "read no-reply days",
+  );
+  const daysFor = new Map(settings.map((s) => [s.user_id, Number(s.value)]));
+  let moved = 0;
+  for (const r of rows) {
+    const set = daysFor.get(r.user_id);
+    const days = r.jobs.closed_at ? NO_REPLY_DAYS_CLOSED : Number.isFinite(set) && set! > 0 ? set! : NO_REPLY_DAYS;
+    if (r.last_status_at >= before(days)) continue;
+    await transition(db, r.id, "no_reply", "system:no_reply", { days });
+    moved++;
+  }
+  return moved;
 }

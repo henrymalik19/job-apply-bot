@@ -27,6 +27,7 @@ import { USER_MOVE_TARGETS, type AppStatus } from "./application-status";
 export {
   countByStatus,
   expireClosedApplications,
+  markNoReply,
   getApplication,
   IllegalTransitionError,
   listApplications,

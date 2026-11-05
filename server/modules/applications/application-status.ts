@@ -4,7 +4,7 @@
  */
 export const APP_STATUSES = [
   "queued", "needs_input", "manual", "approved", "submitted", "confirmed",
-  "responded", "interviewing", "offer", "rejected", "skipped", "expired", "failed",
+  "responded", "interviewing", "offer", "rejected", "skipped", "expired", "failed", "no_reply",
 ] as const;
 
 /** One application status. */
@@ -29,11 +29,16 @@ export const CAUSE_PATTERN = /^(user|email|worker|system):[a-z_]+$/;
 
 /** Statuses after approval, shown on the Applying board (confirmed shares the Submitted column; manual is Runner stuck). */
 export const BOARD_STATUSES: readonly AppStatus[] = [
-  "approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer", "rejected", "expired", "failed",
+  "approved", "manual", "submitted", "confirmed", "responded", "interviewing", "offer", "no_reply", "rejected", "expired", "failed",
 ];
 
 /**
  * Statuses you can move an application to by hand: you applied, they replied, an interview, an
- * offer, a no, or the posting is gone (expired, before submitting).
+ * offer, a no, no reply, or the posting is gone (expired, before submitting).
  */
-export const USER_MOVE_TARGETS: readonly AppStatus[] = ["submitted", "responded", "interviewing", "offer", "rejected", "expired"];
+export const USER_MOVE_TARGETS: readonly AppStatus[] = ["submitted", "responded", "interviewing", "offer", "rejected", "no_reply", "expired"];
+
+/** Days a submitted application can go without a reply before it moves to No reply (user_settings.no_reply_days). */
+export const NO_REPLY_DAYS = 30;
+/** The same once its posting has closed (the role is likely filled). */
+export const NO_REPLY_DAYS_CLOSED = 14;

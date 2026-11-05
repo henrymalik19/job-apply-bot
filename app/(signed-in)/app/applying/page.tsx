@@ -20,6 +20,7 @@ const COLUMNS: BoardColumn[] = [
   { key: "responded", label: "Heard back", statuses: ["responded"], target: "responded", accent: "violet" },
   { key: "interviewing", label: "Interviewing", statuses: ["interviewing"], target: "interviewing", accent: "teal" },
   { key: "offer", label: "Offer", statuses: ["offer"], target: "offer", accent: "emerald" },
+  { key: "no_reply", label: "No reply", statuses: ["no_reply"], target: "no_reply", accent: "zinc", muted: true },
   { key: "closed", label: "Closed", statuses: ["rejected", "expired", "failed"], target: ["rejected", "expired"], accent: "zinc", muted: true },
 ];
 
