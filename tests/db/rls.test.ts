@@ -21,7 +21,7 @@ const TABLES = [
   "applications", "certifications", "companies", "educations", "emails", "employment_responsibilities",
   "employment_skills", "employments", "jobs", "lessons", "llm_calls", "match_criteria", "matches", 
   "profile_skills", "profiles", "public_applications", "question_aliases", "question_answers", "questions",
-  "resumes", "settings", "skill_aliases", "skills", "user_companies", "user_settings", "users", "work_authorizations",
+  "resumes", "app_settings", "skill_aliases", "skills", "user_companies", "user_settings", "users", "work_authorizations",
   "worker_runs", "worker_source_statuses",
 ];
 
@@ -145,7 +145,7 @@ describe("authenticated non-owner", () => {
 
 describe("owner", () => {
   it("can read global settings", async () => {
-    const { data, error } = await owner.from("settings").select("key, value").eq("key", "app_url").single();
+    const { data, error } = await owner.from("app_settings").select("key, value").eq("key", "app_url").single();
     expect(error).toBeNull();
     expect(typeof data?.value).toBe("string");
   });

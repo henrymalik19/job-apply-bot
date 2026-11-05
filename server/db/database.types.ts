@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "application_events": {
+            "app_settings": {
+                  Row: {
+                    "created_at": string,"key": string,"updated_at": string,"value": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"key": string,"updated_at"?: string,"value": NonNullable<Json>
+                  }
+                  Update: {
+                    "created_at"?: string,"key"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"application_events": {
                   Row: {
                     "application_id": string | null,"cause": string,"created_at": string,"detail": Json | null,"from_status": string | null,"id": number,"job_id": string | null,"to_status": string | null,"updated_at": string
                   }
@@ -479,14 +493,14 @@ isOneToOne: false
                   ]
                 },"profile_skills": {
                   Row: {
-                    "created_at": string,"last_used_year": number | null,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"user_id": string,"years_override": number | null
+                    "created_at": string,"proficiency": string | null,"skill_id": string,"sort_order": number,"updated_at": string,"user_id": string,"years_override": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id": string,"sort_order"?: number,"updated_at"?: string,"user_id"?: string,"years_override"?: number | null
+                    "created_at"?: string,"proficiency"?: string | null,"skill_id": string,"sort_order"?: number,"updated_at"?: string,"user_id"?: string,"years_override"?: number | null
                   }
                   Update: {
-                    "created_at"?: string,"last_used_year"?: number | null,"proficiency"?: string | null,"skill_id"?: string,"sort_order"?: number,"updated_at"?: string,"user_id"?: string,"years_override"?: number | null
+                    "created_at"?: string,"proficiency"?: string | null,"skill_id"?: string,"sort_order"?: number,"updated_at"?: string,"user_id"?: string,"years_override"?: number | null
                   }
                   Relationships: [
                     {
@@ -620,20 +634,6 @@ isOneToOne: false
       referencedRelation: "users"
       referencedColumns: ["id"]
     }
-                  ]
-                },"settings": {
-                  Row: {
-                    "created_at": string,"key": string,"updated_at": string,"value": NonNullable<Json>
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"key": string,"updated_at"?: string,"value": NonNullable<Json>
-                  }
-                  Update: {
-                    "created_at"?: string,"key"?: string,"updated_at"?: string,"value"?: NonNullable<Json>
-                  }
-                  Relationships: [
-                    
                   ]
                 },"skill_aliases": {
                   Row: {

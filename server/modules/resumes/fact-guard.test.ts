@@ -21,7 +21,7 @@ const data: ProfileData = {
     job("kin", "Kingsmen Software", "2020-03-01", "2021-02-01", ["Built a Node.js billing service handling $2M a month"], ["Node.js"]),
   ],
   education: [],
-  skills: [{ skill_id: "s1", user_id: "u", name: "Postgres", normalized: "postgres", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" }],
+  skills: [{ skill_id: "s1", user_id: "u", name: "Postgres", normalized: "postgres", category: null, years_override: null, proficiency: null, sort_order: 0, created_at: "", updated_at: "" }],
   certifications: [],
 };
 

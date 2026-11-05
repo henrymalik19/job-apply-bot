@@ -19,9 +19,9 @@ const data: ProfileData = {
   employment: [job("A", "2019-01-01", "2022-01-01", ["AWS"]), job("B", "2021-01-01", null, ["AWS", "TypeScript"], true)],
   education: [],
   skills: [
-    { skill_id: "s-aws", user_id: "u", name: "AWS", normalized: "aws", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 0, created_at: "", updated_at: "" },
-    { skill_id: "s-ts", user_id: "u", name: "TypeScript", normalized: "typescript", category: null, years_override: null, proficiency: null, last_used_year: null, sort_order: 1, created_at: "", updated_at: "" },
-    { skill_id: "s-k8s", user_id: "u", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, last_used_year: null, sort_order: 2, created_at: "", updated_at: "" },
+    { skill_id: "s-aws", user_id: "u", name: "AWS", normalized: "aws", category: null, years_override: null, proficiency: null, sort_order: 0, created_at: "", updated_at: "" },
+    { skill_id: "s-ts", user_id: "u", name: "TypeScript", normalized: "typescript", category: null, years_override: null, proficiency: null, sort_order: 1, created_at: "", updated_at: "" },
+    { skill_id: "s-k8s", user_id: "u", name: "Kubernetes", normalized: "kubernetes", category: null, years_override: 3, proficiency: null, sort_order: 2, created_at: "", updated_at: "" },
   ],
   certifications: [],
 };

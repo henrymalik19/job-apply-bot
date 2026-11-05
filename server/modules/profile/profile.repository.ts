@@ -202,7 +202,6 @@ export async function mergeUserSkill(db: Db, userId: string, keepId: string, mer
           skill_id: keepId,
           years_override: into?.years_override ?? from.years_override,
           proficiency: into?.proficiency ?? from.proficiency,
-          last_used_year: Math.max(into?.last_used_year ?? 0, from.last_used_year ?? 0) || null,
           sort_order: into?.sort_order ?? from.sort_order,
         },
         { onConflict: "user_id,skill_id" },
