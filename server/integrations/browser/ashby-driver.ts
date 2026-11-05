@@ -11,6 +11,7 @@ import { DECLINE } from "@/server/integrations/ats/forms";
 import { sameText, type FillStep } from "@/server/modules/apply/fill-plan";
 import { HUMAN, pause, typeInto, typeSearch, type Pace } from "./human";
 import { scanOpenFields } from "./open-fields";
+import { countryName, resolvePlace } from "@/server/modules/criteria/places";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const CONFIRMED = /thank(s| you) for (applying|your (application|interest))|application (has been |was )?(successfully )?(received|submitted)/i;
@@ -62,6 +63,14 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
    * (or, failing that, the only one). Only the part before the first comma is typed for a place.
    */
   async function pick(container: Locator, value: string): Promise<boolean> {
+    if (await pickOne(container, value)) return true;
+    // Some forms ask for the country here (their search finds only countries): "Atlanta, GA" is the United States.
+    const countries = [...resolvePlace(value).countries];
+    const country = countries.length === 1 ? countryName(countries[0]) : null;
+    return !!country && norm(country) !== norm(value) && pickOne(container, country);
+  }
+
+  async function pickOne(container: Locator, value: string): Promise<boolean> {
     const input = container.locator("[role=combobox]").first();
     // The search runs on keystrokes; pasting the whole value at once finds nothing.
     await typeSearch(input, value.split(",")[0].trim(), pace);

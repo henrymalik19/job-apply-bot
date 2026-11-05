@@ -112,6 +112,12 @@ const NON_US_REGIONS = ["emea", "europe", "eu", "latam", "apac", "asia", "africa
 
 const COUNTRY_BY_NAME = new Map(COUNTRIES.flatMap(([code, names]) => names.map((n) => [n, code] as const)));
 
+/** A country's name from its code ("US" -> "United States"), or null. */
+export function countryName(code: string): string | null {
+  const name = COUNTRIES.find(([c]) => c === code)?.[1][0];
+  return name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : null;
+}
+
 /** A US state's name from its two-letter code ("GA" -> "Georgia"), or null. */
 export function usStateName(code: string | null | undefined): string | null {
   const name = code ? US_STATES[code.toUpperCase()]?.name : undefined;

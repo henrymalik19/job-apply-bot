@@ -299,16 +299,16 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const except = skipped.length ? ` It couldn't fill ${skipped.map((m) => `"${m}"`).join(", ")}.` : "";
   // Steps only you can do (an assessment, a file to attach): everything else is filled, then it waits for you.
   const yours = plan.yours.length ? ` ${plan.yours.map((m) => `"${m}"`).join(", ")} ${plan.yours.length === 1 ? "is" : "are"} yours to do.` : "";
-  if (missed.length) {
-    return fail(`Couldn't fill ${missed.map((m) => `"${m}"`).join(", ")}. Finish it in the open Chrome window, or from the job page.`);
-  }
   // Required fields still empty (a section it didn't prepare for): learned, filled by AI, or left to you.
   const extra = await fillOpenFields(deps, app, steps, resumePath);
   const list = (labels: string[]) => labels.map((m) => `"${m}"`).join(", ");
   const byAi = extra.ai.length ? ` Filled by AI from your profile, check them: ${list(extra.ai.map((e) => e.label))}.` : "";
-  const leftForYou = extra.left.length ? ` Left for you: ${list(extra.left)}.` : "";
+  // Required fields it tried and couldn't fill (a box that wouldn't take the value) are left to you too,
+  // with the rest of the form filled, rather than handing the whole application back.
+  const left = [...missed.filter((m) => !extra.left.includes(m)), ...extra.left];
+  const leftForYou = left.length ? ` Left for you: ${list(left)}.` : "";
   // New AI answers and fields left to you always wait for you, even in auto mode; learned ones don't.
-  const hold = extra.ai.length > 0 || extra.left.length > 0;
+  const hold = extra.ai.length > 0 || left.length > 0;
   if (await driver.challenge()) return fail("The form shows a verification check. Finish it in the open Chrome window.");
 
   const answers = [...steps, ...extra.learned.map((e) => e.step), ...extra.ai.map((e) => e.step)].map((s) => ({ field: s.fieldName, label: s.label, value: s.kind === "resume" ? "resume" : s.kind === "decline" ? "declined" : s.value }));
@@ -317,19 +317,19 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     applicationId: app.id,
     kind: "screenshot",
     png: await driver.screenshot(),
-    detail: { answers, skipped, ai_filled: extra.ai.map((e) => ({ label: e.label, value: e.value })), left_for_you: extra.left, resume_sha256: app.resume.sha256 } as Json,
+    detail: { answers, skipped, ai_filled: extra.ai.map((e) => ({ label: e.label, value: e.value })), left_for_you: left, resume_sha256: app.resume.sha256 } as Json,
   });
 
   if (platform.mode === "auto" && !yours && !hold) {
     await setApplyStep(db, app.id, "submitting", `Submitting the form for ${where}.`);
     await driver.submit();
   } else {
-    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${byAi}${leftForYou}${except} ${yours || extra.left.length ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
+    await setApplyStep(db, app.id, "waiting_for_you", `Filled.${yours}${byAi}${leftForYou}${except} ${yours || left.length ? "Do that in the Chrome window, then click Submit." : "Check the Chrome window and click Submit."}`);
     await driver.focus();
   }
 
   const extraSteps = [...extra.learned, ...extra.ai].map((e) => e.step);
-  const waited = await waitForConfirmation(deps, [...plan.steps, ...extraSteps], app, platform, yours || extra.left.length ? YOUR_STEPS_WAIT_MS : undefined);
+  const waited = await waitForConfirmation(deps, [...plan.steps, ...extraSteps], app, platform, yours || left.length ? YOUR_STEPS_WAIT_MS : undefined);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
   if ("timedOut" in waited) return { ...(await fail(`Nobody submitted the form within ${yours ? "an hour" : "30 minutes"}.`)), closeTab: true };
 

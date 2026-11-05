@@ -178,6 +178,22 @@ describe("apply runner", () => {
     expect(evidence?.detail).toMatchObject({ skipped: ["Sponsorship?"] });
   });
 
+  it("fills the rest around a required field that wouldn't take its value and waits for you, even in auto mode", async () => {
+    const id = await addApproved("wouldnt-take");
+    const before = await streak();
+    await db.from("platforms").upsert({ user_id: userId, ats: "greenhouse", mode: "auto", clean_streak: 3 }, { onConflict: "user_id,ats" });
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const { driver, filled, submits } = fakeDriver({ unfillable: ["first_name"] });
+    const outcome = await applyOne(deps(driver), job);
+    await db.from("platforms").update({ mode: "supervised", clean_streak: before?.clean_streak ?? 0 }).eq("user_id", userId).eq("ats", "greenhouse");
+    // Not handed back: the rest is filled, and it waited for you instead of submitting.
+    expect(outcome).toMatchObject({ result: "submitted" });
+    expect(submits).toEqual([]);
+    expect(filled).toHaveProperty("question_9", "No");
+    const { data: evidence } = await db.from("application_evidence_items").select("detail").eq("application_id", id).eq("kind", "screenshot").single();
+    expect(evidence?.detail).toMatchObject({ left_for_you: ["First Name"] });
+  });
+
   it("hands back and closes the tab when nobody submits in time", async () => {
     const id = await addApproved("timeout");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
