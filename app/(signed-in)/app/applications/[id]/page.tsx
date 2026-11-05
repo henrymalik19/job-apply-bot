@@ -258,12 +258,12 @@ function QuestionGroup(props: {
   tone?: Tone;
   collapsible?: boolean;
   defaultOpen?: boolean;
-  /** The group's one Save button. */
-  saveLabel?: string;
+  /** A button marking unchanged answers checked (Double-check these). */
+  confirmLabel?: string;
   /** Show each question's "please check" (off where the group itself says so). */
   showCheck?: boolean;
 }) {
-  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false, saveLabel = "Save answers", showCheck = true } = props;
+  const { title, hint, questions, app, editable, aiAllowed, tone, collapsible = false, defaultOpen = false, confirmLabel, showCheck = true } = props;
   if (questions.length === 0) return null;
   const list = (
     <div className="divide-y">
@@ -278,7 +278,7 @@ function QuestionGroup(props: {
       )}
     </div>
   );
-  const body = editable ? <AnswersForm applicationId={app.id} saveLabel={saveLabel}>{list}</AnswersForm> : list;
+  const body = editable ? <AnswersForm applicationId={app.id} confirmLabel={confirmLabel}>{list}</AnswersForm> : list;
   const heading = (
     <span className="flex items-center gap-2">
       <span className="font-semibold">{title}</span>
@@ -416,7 +416,7 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
             questions={toCheck}
             app={app}
             editable={editable}
-            saveLabel="Save and mark checked"
+            confirmLabel="Looks good, mark checked"
             showCheck={false}
             aiAllowed={aiAllowed}
             tone="info"

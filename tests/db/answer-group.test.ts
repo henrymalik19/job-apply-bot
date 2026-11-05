@@ -70,6 +70,7 @@ describe("one Save for a group of answers", () => {
         { questionId: rows.untouched, answer: "Atlanta" },
         { questionId: rows.blank, answer: "" },
       ],
+      confirmUnchanged: true,
     });
     expect(result.movedToReview).toBe(true);
     expect(result.note).toMatch(/Saved 2 answers \(1 remembered for other applications\)\. Marked 1 as checked\./);

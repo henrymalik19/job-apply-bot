@@ -10,27 +10,70 @@ import { answerQuestionsAction, redraftAction } from "./actions";
 type Drafting = { draft: (formData: FormData) => void; busy: boolean; drafting: string | null; start: (questionId: string) => void };
 const DraftingContext = createContext<Drafting | null>(null);
 
+/** A question's answer field (named answer:<id>), as opposed to a guidance box or the hidden fields. */
+const isAnswer = (el: EventTarget | null): el is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
+  el instanceof HTMLElement && (el.getAttribute("name") ?? "").startsWith("answer:");
+
 /**
- * One group of questions as a single form: each question's input (children, named answer:<id>) and
- * one Save at the bottom that saves what changed. Free-text questions keep their own Draft with AI.
+ * One group of questions as a single form that saves as you go: a pick saves at once, a typed answer
+ * when you leave it (or press Enter on a one-line box). Free-text questions keep their own Draft with
+ * AI. With `confirmLabel` (Double-check these), a button marks the answers you left as they are as checked.
  */
-export function AnswersForm(props: { applicationId: string; saveLabel: string; children: ReactNode }) {
-  const { applicationId, saveLabel, children } = props;
+export function AnswersForm(props: { applicationId: string; confirmLabel?: string; children: ReactNode }) {
+  const { applicationId, confirmLabel, children } = props;
+  const form = useRef<HTMLFormElement>(null);
   const [saveState, save, saving] = useActionState<FormMessageState, FormData>(answerQuestionsAction, {});
   const [draftState, draft, draftPending] = useActionState<FormMessageState, FormData>(redraftAction, {});
   const [last, setLast] = useState<"save" | "draft">("save");
   const [drafting, setDrafting] = useState<string | null>(null);
   const busy = saving || draftPending;
+  const autosave = () => {
+    setLast("save");
+    form.current?.requestSubmit();
+  };
   return (
     <DraftingContext.Provider
       value={{ draft, busy, drafting: draftPending ? drafting : null, start: (id) => { setDrafting(id); setLast("draft"); } }}
     >
-      <form action={save} className="flex flex-col">
+      <form
+        ref={form}
+        action={save}
+        className="flex flex-col"
+        onChange={(e) => {
+          if (e.target instanceof HTMLSelectElement && isAnswer(e.target)) autosave();
+        }}
+        onBlur={(e) => {
+          const el = e.target;
+          if (isAnswer(el) && !(el instanceof HTMLSelectElement) && el.value !== el.defaultValue) autosave();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.target instanceof HTMLInputElement && isAnswer(e.target)) {
+            e.preventDefault();
+            autosave();
+          }
+        }}
+      >
         <input type="hidden" name="application_id" value={applicationId} />
         {children}
-        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-          <Button type="submit" disabled={busy} onClick={() => setLast("save")}>{saving ? "Saving…" : saveLabel}</Button>
-          <FormMessage state={last === "draft" ? draftState : saveState} />
+        <div className="flex min-h-6 flex-wrap items-center gap-3 border-t pt-3">
+          {confirmLabel && (
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={busy}
+              formAction={(formData) => {
+                formData.set("confirm", "1");
+                setLast("save");
+                save(formData);
+              }}
+            >
+              {confirmLabel}
+            </Button>
+          )}
+          {saving ? <span className="text-sm text-muted-foreground">Saving…</span> : <FormMessage state={last === "draft" ? draftState : saveState} />}
+          {!confirmLabel && !saving && !saveState.ok && !saveState.error && last === "save" && (
+            <span className="text-xs text-muted-foreground">Changes save as you make them.</span>
+          )}
         </div>
       </form>
     </DraftingContext.Provider>

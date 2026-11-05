@@ -218,9 +218,10 @@ export async function answerQuestion(
 const isFreeText = (q: ApplicationQuestion) => q.field_type === "textarea" || q.answer_source === "drafted";
 
 /**
- * Saves a group of an application's answers in one go (the one Save under each group of questions).
- * Only what changed is saved, plus answers you're confirming (they were marked to double-check);
- * blank ones are left as they were. Short answers are remembered for other applications.
+ * Saves an application's answers as you change them (or a group at once). Only what changed is saved,
+ * blank ones are left as they were, and short answers are remembered for other applications. With
+ * `confirmUnchanged` ("Looks good" under Double-check these), answers marked to double-check that you
+ * left as they were are marked checked too.
  *
  * @returns A short note, and whether the application moved to review.
  * @throws {@link ValidationError} for an option that isn't offered (nothing after it is saved).
@@ -228,7 +229,7 @@ const isFreeText = (q: ApplicationQuestion) => q.field_type === "textarea" || q.
 export async function answerQuestions(
   db: Db,
   userId: string,
-  input: { applicationId: string; answers: { questionId: string; answer: string }[] },
+  input: { applicationId: string; answers: { questionId: string; answer: string }[]; confirmUnchanged?: boolean },
 ): Promise<{ note: string; movedToReview: boolean }> {
   const app = await getApplication(db, userId, z.string().uuid().parse(input.applicationId));
   if (!app) throw new ValidationError("That application is gone; reload the page.");
@@ -240,8 +241,9 @@ export async function answerQuestions(
     if (!q || !raw.trim()) continue;
     const { answer, value } = parseAnswer(q, raw);
     const changed = answer !== q.answer;
-    if (!changed && !q.needs_check && q.bucket !== "needs_user") continue;
+    if (!changed && !(input.confirmUnchanged && q.needs_check) && q.bucket !== "needs_user") continue;
     if (!changed && q.answer != null) {
+      if (!input.confirmUnchanged || !q.needs_check) continue;
       // The same answer, looked at: it's checked.
       await updateQuestion(db, q.id, { user_approved: true, needs_check: false });
       if (q.question_id && q.answer_source !== "drafted") await confirmAlias(db, normalize(q.question));

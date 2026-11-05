@@ -20,7 +20,7 @@ export async function answerQuestionsAction(_prev: FormMessageState, formData: F
     .filter(([key]) => key.startsWith("answer:"))
     .map(([key, value]) => ({ questionId: key.slice("answer:".length), answer: String(value) }));
   try {
-    const result = await answerQuestions(db, owner.id, { applicationId: text(formData, "application_id"), answers });
+    const result = await answerQuestions(db, owner.id, { applicationId: text(formData, "application_id"), answers, confirmUnchanged: formData.get("confirm") === "1" });
     refresh();
     return { ok: result.movedToReview ? `${result.note} Nothing else is blocking it: moved to Review.` : result.note };
   } catch (err) {
