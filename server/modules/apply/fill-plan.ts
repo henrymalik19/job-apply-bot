@@ -2,6 +2,7 @@
 // the form's own field name. Pure, so the mapping is tested without a browser.
 import type { Json } from "@/server/db/types";
 import { DECLINE } from "@/server/integrations/ats/forms";
+import { resolvePlace } from "@/server/modules/criteria/places";
 
 /** The prepared question fields the plan reads. */
 export type PlanQuestion = {
@@ -102,6 +103,19 @@ export function sameText(shown: string, typed: string): boolean {
   return /^[\d\s()+.-]+$/.test(typed) && shown.replace(/\D/g, "") === typed.replace(/\D/g, "");
 }
 
+/**
+ * Whether a place box shows the place that was typed, or a broader one it's in: a search box picks
+ * "Atlanta, Georgia, United States" for "Atlanta, GA", and one that only finds countries "United States".
+ * "Denver, CO" for "Atlanta, GA" is a different place.
+ */
+export function samePlace(shown: string, typed: string): boolean {
+  const want = resolvePlace(typed);
+  const got = resolvePlace(shown);
+  if (want.countries.size === 0 || got.countries.size === 0) return false;
+  const within = <T,>(a: Set<T>, b: Set<T>) => [...a].every((x) => b.has(x));
+  return within(got.countries, want.countries) && within(got.states, want.states) && within(got.cities, want.cities);
+}
+
 /** Greenhouse's self-identification fields, in form order. */
 const EEOC_FIELDS = [
   ["gender", "Gender"],
@@ -200,7 +214,7 @@ export function greenhouseExtras(home: HomePlace, school: Schooling | null = nul
 export function changedFields(steps: FillStep[], final: Record<string, string>): string[] {
   const norm = (s: string) => s.replace(/\s+/g, " ").trim();
   const same = (s: FillStep, shown: string) => {
-    if (s.kind === "text") return sameText(shown, s.value);
+    if (s.kind === "text") return sameText(shown, s.value) || samePlace(shown, s.value);
     if (s.kind === "resume" || s.kind === "check" || s.kind === "decline") return true;
     // A picked option can read longer than what was asked for ("United States" -> "United States +1").
     if (s.kind === "closest") return true;

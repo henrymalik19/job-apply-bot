@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFillPlan, changedFields, educationSteps, employmentSteps, greenhouseDegree, greenhouseExtras, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
+import { buildFillPlan, changedFields, educationSteps, employmentSteps, greenhouseDegree, greenhouseExtras, samePlace, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
 
 const q = (over: Partial<PlanQuestion>): PlanQuestion => ({
   question: "Q",
@@ -101,6 +101,21 @@ describe("changedFields", () => {
 
   it("names fields whose value changed", () => {
     expect(changedFields(plan.steps, { a: "Ada", b: "Yes", resume: "x.pdf" })).toEqual(["Name", "Pick"]);
+  });
+});
+
+describe("samePlace", () => {
+  const where = buildFillPlan([q({ question: "Location", field_name: "loc", answer: "Atlanta, GA" })]);
+
+  it("counts the place a search box picked, or the country it's in, as the same answer", () => {
+    expect(changedFields(where.steps, { loc: "Atlanta, Georgia, United States" })).toEqual([]);
+    expect(changedFields(where.steps, { loc: "United States" })).toEqual([]);
+    expect(samePlace("Georgia", "Atlanta, GA")).toBe(true);
+  });
+
+  it("still names a different place as changed", () => {
+    expect(changedFields(where.steps, { loc: "Denver, CO" })).toEqual(["Location"]);
+    expect(changedFields(where.steps, { loc: "Canada" })).toEqual(["Location"]);
   });
 });
 
