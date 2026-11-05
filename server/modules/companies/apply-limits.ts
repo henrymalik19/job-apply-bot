@@ -4,6 +4,7 @@
 import type { Db } from "@/server/db/types";
 import { check, unwrap } from "@/server/core/errors";
 import { IllegalTransitionError, transition } from "@/server/modules/applications/applications.repository";
+import { deleteApplication } from "@/server/modules/prepare/prepare.repository";
 
 /** Days a company is paused for when its message doesn't say how long the limit lasts. */
 export const DEFAULT_LIMIT_DAYS = 60;
@@ -193,8 +194,7 @@ export async function reviveAfterLimit(db: Db, userId: string, atLimit: Readonly
     const last = [...a.application_events].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];
     if (last?.cause !== LIMIT_CAUSE || !a.jobs.company_id || atLimit.has(a.jobs.company_id)) continue;
     // An email linked to it keeps it (that link has no cascade).
-    const { error } = await db.from("applications").delete().eq("id", a.id);
-    if (!error) revived++;
+    if (await deleteApplication(db, a.id).then(() => true, () => false)) revived++;
   }
   return revived;
 }

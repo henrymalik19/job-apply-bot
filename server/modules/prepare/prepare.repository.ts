@@ -1,5 +1,8 @@
 import type { Db, Insert, Json } from "@/server/db/types";
 import { check, unwrap } from "@/server/core/errors";
+import { EVIDENCE_BUCKET } from "@/server/modules/apply/apply.repository";
+import { APPLY_RUNS_BUCKET } from "@/server/modules/apply/apply-runs";
+import { RESUME_BUCKET } from "@/server/modules/resumes/resumes.repository";
 
 /** A new `application_questions` row (application id added on insert). */
 export type NewQuestion = Omit<Insert<"application_questions">, "application_id">;
@@ -122,7 +125,27 @@ export async function listNoFormApplications(
     .map((r) => ({ id: r.id, job: { id: r.jobs.id, source: r.jobs.source, external_id: r.jobs.external_id, board_token: r.jobs.companies.board_token } }));
 }
 
-/** Removes an application (its questions, resume and events go with it) so prepare starts it over. */
+/**
+ * Removes an application so prepare starts it over: its rows go with it (questions, resume, events, runner
+ * records), and so do its files in storage (the resume PDF, screenshots, the runner's recordings), which
+ * nothing else would remove.
+ *
+ * @throws When it can't be removed (an email linked to it keeps it); its files are left as they were.
+ */
 export async function deleteApplication(db: Db, applicationId: string): Promise<void> {
+  const [resumes, evidence, runs] = await Promise.all([
+    db.from("resumes").select("pdf_path").eq("application_id", applicationId),
+    db.from("application_evidence_items").select("storage_path").eq("application_id", applicationId),
+    db.from("apply_runs").select("folder, files").eq("application_id", applicationId),
+  ]);
+  const files: [string, string[]][] = [
+    [RESUME_BUCKET, (unwrap(resumes, "read resume files") ?? []).map((r) => r.pdf_path).filter((p): p is string => !!p)],
+    [EVIDENCE_BUCKET, (unwrap(evidence, "read evidence files") ?? []).map((e) => e.storage_path).filter((p): p is string => !!p)],
+    [APPLY_RUNS_BUCKET, (unwrap(runs, "read runner files") ?? []).flatMap((r) => r.files.map((f) => `${r.folder}/${f}`))],
+  ];
   check(await db.from("applications").delete().eq("id", applicationId), "delete application");
+  for (const [bucket, paths] of files) {
+    // Left behind if storage won't remove them: the application is gone either way.
+    if (paths.length) await db.storage.from(bucket).remove(paths).catch(() => undefined);
+  }
 }
