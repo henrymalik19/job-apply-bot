@@ -16,6 +16,7 @@ import { SiteBadge } from "../../_components/site-badge";
 import { TONE_BADGE } from "../../_components/status";
 import { LinkEmail, type LinkTarget } from "./link-email";
 import { TableSkeleton } from "../../_components/skeletons";
+import { RecheckButton } from "./recheck-button";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -279,12 +280,18 @@ async function Todo({ searchParams }: { searchParams: SearchParams }) {
   );
 }
 
+// A recheck of every waiting application can take a minute or two.
+export const maxDuration = 300;
+
 /** To do: applications waiting on you before approval, one row per application, in two lanes. Stuck ones are on the board. */
 export default function TodoPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="flex flex-col gap-6 md:h-full">
       <LiveRefresh />
-      <h1 className="text-2xl font-semibold tracking-tight">To do</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">To do</h1>
+        <RecheckButton />
+      </div>
       <Suspense fallback={<TableSkeleton tabs={3} />}>
         <Todo searchParams={searchParams} />
       </Suspense>

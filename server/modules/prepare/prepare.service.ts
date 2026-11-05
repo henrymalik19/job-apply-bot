@@ -7,8 +7,10 @@
 import type { Db, Json } from "@/server/db/types";
 import type { StructuredCall } from "@/server/integrations/anthropic/claude";
 import { FORM_ATS, fetchApplicationForm, type ApplicationForm, type FormQuestion } from "@/server/integrations/ats/forms";
-import { ValidationError } from "@/server/core/errors";
+import { unwrap, ValidationError } from "@/server/core/errors";
 import { getApplication, setDraftedAnswer, type AppStatus } from "@/server/modules/applications/applications.service";
+import { transition, updateQuestion } from "@/server/modules/applications/applications.repository";
+import type { Row as DbRow } from "@/server/db/types";
 import { getMatchCriteria, type MatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { lessonsFor } from "@/server/modules/lessons/lessons.service";
 import { resolvePlace } from "@/server/modules/criteria/places";
@@ -480,6 +482,33 @@ async function applyClassification(
   }
 }
 
+/** Everything answering a user's questions needs: the catalog, wordings, saved answers, profile, criteria, lessons. */
+async function loadRunContext(db: Db, userId: string, now: Date): Promise<RunContext> {
+  const [criteria, profile, answerLessons, tailoringLessons, questions, aliases, answers] = await Promise.all([
+    getMatchCriteria(db, userId),
+    getProfile(db, userId),
+    lessonsFor(db, userId, "answers"),
+    lessonsFor(db, userId, "tailoring"),
+    listQuestions(db),
+    listAliases(db),
+    listAnswers(db, userId),
+  ]);
+  return {
+    questions: new Map(questions.map((q) => [q.key, q])),
+    questionsById: new Map(questions.map((q) => [q.id, q])),
+    aliases,
+    answers,
+    profile,
+    criteria,
+    facts: profileLines(profile, now),
+    country: "US",
+    now,
+    answerLessons: answerLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+    tailoringLessons: tailoringLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+    spend: { cost: 0 },
+  };
+}
+
 function utcDayStart(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
@@ -497,14 +526,8 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
   const counts: PrepareCounts = { candidates: 0, queued: 0, needs_input: 0, manual: 0, failed: 0, deferred: 0, tailored: 0, untailored: 0, cost_usd: 0 };
 
   try {
-    const [criteria, profile, answerLessons, tailoringLessons, questions, aliases, answers, budget, cap, today] = await Promise.all([
-      getMatchCriteria(db, userId),
-      getProfile(db, userId),
-      lessonsFor(db, userId, "answers"),
-      lessonsFor(db, userId, "tailoring"),
-      listQuestions(db),
-      listAliases(db),
-      listAnswers(db, userId),
+    const [ctx, budget, cap, today] = await Promise.all([
+      loadRunContext(db, userId, now()),
       getMonthlySpend(db, userId, now()),
       getUserSetting(db, userId, "daily_cap"),
       countApplicationsSince(db, userId, utcDayStart(now())),
@@ -513,27 +536,12 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
     counts.restarted = await restartNoFormApplications(deps, fetchForm);
     if (counts.restarted) log(`started over ${counts.restarted} application(s) whose form can be read now`);
     const room = Math.min(deps.limit ?? Infinity, Math.max(0, Number(cap ?? 20) - today));
-    let candidates = await listPrepareCandidates(db, userId, criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
+    let candidates = await listPrepareCandidates(db, userId, ctx.criteria.threshold, deps.onlyJobIds ? 500 : room + 50);
     if (deps.onlyJobIds) {
       const only = new Set(deps.onlyJobIds);
       candidates = candidates.filter((c) => only.has(c.job.id));
     }
     counts.candidates = candidates.length;
-
-    const ctx: RunContext = {
-      questions: new Map(questions.map((q) => [q.key, q])),
-      questionsById: new Map(questions.map((q) => [q.id, q])),
-      aliases,
-      answers,
-      profile,
-      criteria,
-      facts: profileLines(profile, now()),
-      country: "US",
-      now: now(),
-      answerLessons: answerLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
-      tailoringLessons: tailoringLessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
-      spend: { cost: 0 },
-    };
 
     let made = 0;
     for (const candidate of candidates) {
@@ -565,7 +573,7 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       if (result.posting) {
         try {
           const resume = await tailorResume({
-            db, userId, call: deps.draftCall, data: profile, lessons: ctx.tailoringLessons, posting: result.posting,
+            db, userId, call: deps.draftCall, data: ctx.profile, lessons: ctx.tailoringLessons, posting: result.posting,
             jobId: candidate.job.id, now: now(), spend: ctx.spend,
           });
           await saveApplicationResume(db, userId, applicationId, resume, `${candidate.job.title} at ${candidate.job.company_name}`);
@@ -632,4 +640,129 @@ export async function redraftAnswer(deps: {
   if (!answer) throw new ValidationError("Drafting failed; try again or write it yourself.");
   await setDraftedAnswer(db, userId, app.id, q.id, answer);
   return answer;
+}
+
+/** What a recheck of open questions did. */
+export type RecheckCounts = {
+  /** Applications with open questions looked at. */
+  applications: number;
+  /** Questions now answered (from your profile, saved answers or search criteria). */
+  answered: number;
+  /** Steps that were "only you can do" and are now questions you can answer in the app. */
+  answerable: number;
+  /** Applications with nothing required left, moved to Ready to review. */
+  movedToReview: number;
+  cost_usd: number;
+};
+
+/** A question still waiting on you: unanswered, and something you could type or pick (not a file). */
+const isOpen = (q: { answer: string | null; bucket: string; field_type: string | null }) =>
+  q.answer == null && (q.bucket === "needs_user" || q.bucket === "cannot_automate") && q.field_type !== "file" && q.field_type !== "hidden";
+
+/**
+ * Sorts the open questions of your waiting applications (Needs you and Ready to review) again with
+ * today's rules, catalog, saved answers and profile: what was prepared before a change (a consent
+ * becoming a saved answer, "worked here before" from your jobs) gets answered, or becomes a question
+ * you can answer in the app. Wordings already known cost nothing; the rest is one Claude call per
+ * application. Nothing already answered is touched, and nothing is drafted.
+ */
+export async function recheckOpenQuestions(
+  deps: Pick<PrepareDeps, "db" | "userId" | "call" | "now" | "log">,
+  opts: { applicationIds?: string[]; concurrency?: number } = {},
+): Promise<RecheckCounts> {
+  const { db, userId, now = () => new Date(), log = () => {} } = deps;
+  const counts: RecheckCounts = { applications: 0, answered: 0, answerable: 0, movedToReview: 0, cost_usd: 0 };
+  const [ctx, budget] = await Promise.all([loadRunContext(db, userId, now()), getMonthlySpend(db, userId, now())]);
+  let query = db
+    .from("applications")
+    .select("id, status, job_id, jobs!inner(title, company_name, location, description_md), application_questions(*)")
+    .eq("user_id", userId)
+    .in("status", ["needs_input", "queued"]);
+  if (opts.applicationIds) query = query.in("id", opts.applicationIds);
+  const { data, error } = await query;
+  if (error) throw new Error(`list applications to recheck: ${error.message}`);
+  type ApplicationQuestionRow = DbRow<"application_questions">;
+  type Row = { id: string; status: AppStatus; job_id: string; jobs: { title: string; company_name: string; location: string | null; description_md: string | null }; application_questions: ApplicationQuestionRow[] };
+  const apps = ((data ?? []) as unknown as Row[]).filter((a) => a.application_questions.some(isOpen));
+  counts.applications = apps.length;
+
+  const recheck = async (app: Row) => {
+    const countries = resolvePlace(app.jobs.location ?? "").countries;
+    const actx: RunContext = { ...ctx, country: countries.size === 1 ? [...countries][0] : "US", company: app.jobs.company_name };
+    const open = app.application_questions.filter(isOpen);
+    const results = new Map<string, Partial<Draft> | "draft">();
+    const unknown: { row: Draft; q: FormQuestion; id: string }[] = [];
+    for (const r of open) {
+      const q: FormQuestion = {
+        fieldName: r.field_name ?? r.id,
+        label: r.question,
+        description: r.description,
+        required: r.required,
+        fieldType: (r.field_type ?? "text") as FormQuestion["fieldType"],
+        options: ((r.options as FormQuestion["options"] | null) ?? []),
+        group: "application",
+      };
+      const row = { ...baseRow(q, r.sort_order), _index: r.sort_order };
+      const alias = ctx.aliases.get(normalizeQuestion(q.label));
+      const question = alias ? ctx.questionsById.get(alias.question_id) : undefined;
+      if (question) {
+        results.set(r.id, answerFromQuestion(row, q, question, actx, { inverted: alias!.polarity === "inverted", confirmed: Boolean(alias!.confirmed), skillId: alias!.skill_id ?? null }));
+      } else {
+        unknown.push({ row, q, id: r.id });
+      }
+    }
+    if (unknown.length > 0 && budget.spent + ctx.spend.cost < budget.cap) {
+      const prompt = buildClassifyPrompt({
+        catalog: [...ctx.questions.values()].map((t) => ({ key: t.key, label: t.label, answer_type: t.answer_type })),
+        facts: ctx.facts,
+        posting: { title: app.jobs.title, company_name: app.jobs.company_name, text: app.jobs.description_md ?? "" },
+        questions: unknown.map(({ row, q }) => ({ index: row._index, label: q.label, description: q.description, fieldType: q.fieldType, options: q.options.map((o) => o.label), required: q.required })),
+      });
+      const output = await callWithRetry(deps, deps.call, "classify", app.job_id, { ...prompt, schema: classifyOutputSchema, maxTokens: 6000 }, ctx.spend);
+      const byIndex = new Map((output?.questions ?? []).map((c) => [c.index, c]));
+      for (const item of unknown) {
+        const c = byIndex.get(item.row._index);
+        if (c) results.set(item.id, await applyClassification(db, item, c, actx));
+      }
+    }
+
+    for (const r of open) {
+      const result = results.get(r.id);
+      if (!result || result === "draft") continue;
+      if (result.bucket === "auto" && result.answer != null) {
+        await updateQuestion(db, r.id, {
+          answer: result.answer, answer_value: result.answer_value ?? null, bucket: "auto", answer_source: result.answer_source ?? null,
+          needs_check: result.needs_check ?? false, reason: result.reason ?? null, question_id: result.question_id ?? r.question_id,
+        });
+        counts.answered++;
+      } else if (result.bucket === "needs_user" && r.bucket === "cannot_automate") {
+        await updateQuestion(db, r.id, { bucket: "needs_user", reason: result.reason ?? null, question_id: result.question_id ?? r.question_id });
+        counts.answerable++;
+      } else if (result.question_id && result.question_id !== r.question_id) {
+        // Linked to its catalog question now, so answering it saves for every form that asks.
+        await updateQuestion(db, r.id, { question_id: result.question_id, reason: result.reason ?? r.reason });
+      }
+    }
+
+    const after = unwrap(await db.from("application_questions").select("required, bucket").eq("application_id", app.id), "read rechecked questions");
+    if (app.status === "needs_input" && !after.some((q) => q.required && q.bucket === "needs_user")) {
+      await transition(db, app.id, "queued", "worker:recheck");
+      counts.movedToReview++;
+    }
+  };
+
+  // A few at a time: each is at most one Claude call.
+  const queue = [...apps];
+  const workers = Array.from({ length: Math.max(1, opts.concurrency ?? 6) }, async () => {
+    for (let app = queue.shift(); app; app = queue.shift()) {
+      try {
+        await recheck(app);
+      } catch (err) {
+        log(`${app.id}: recheck failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  });
+  await Promise.all(workers);
+  counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
+  return counts;
 }
