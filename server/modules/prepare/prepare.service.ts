@@ -372,9 +372,14 @@ export async function prepareJob(
       facts: ctx.facts,
       lessons: ctx.answerLessons,
       posting,
-      questions: toDraft.map(({ row, q }) => ({
-        index: row._index, label: q.label, description: q.description, fieldType: q.fieldType, options: [], required: q.required,
-      })),
+      questions: toDraft.map(({ row, q }) => {
+        // The question before it on the form, for a follow-up ("If yes, please explain").
+        const before = rows[rows.indexOf(row) - 1];
+        return {
+          index: row._index, label: q.label, description: q.description, fieldType: q.fieldType, options: [], required: q.required,
+          ...(before ? { follows: { label: before.question, answer: before.answer ?? null } } : {}),
+        };
+      }),
     });
     const drafts = await callWithRetry(deps, deps.draftCall, "draft", job.id, { ...draftPrompt, schema: draftOutputSchema, maxTokens: 8000, effort: "medium" }, ctx.spend);
     const byDraft = new Map((drafts?.answers ?? []).map((a) => [a.index, a.answer.trim()]));
@@ -625,6 +630,8 @@ export async function redraftAnswer(deps: {
 
   const [profile, lessons, job] = await Promise.all([getProfile(db, userId), lessonsFor(db, userId, "answers"), getJobPosting(db, app.job.id)]);
   const guidance = deps.guidance?.trim().slice(0, 300);
+  // The question before it on the form, for a follow-up ("If yes, please explain").
+  const before = [...app.questions].filter((x) => x.sort_order < q.sort_order).sort((a, b) => b.sort_order - a.sort_order)[0];
   const prompt = buildDraftPrompt({
     facts: profileLines(profile, now),
     lessons: [
@@ -632,7 +639,10 @@ export async function redraftAnswer(deps: {
       ...(guidance ? [{ rule: `For this answer: ${guidance}`, scope: "answers", active: true }] : []),
     ],
     posting: { title: app.job.title, company_name: app.job.company_name, text: job?.description_md ?? "" },
-    questions: [{ index: 1, label: q.question, description: q.description, fieldType: q.field_type ?? "textarea", options: [], required: q.required }],
+    questions: [{
+      index: 1, label: q.question, description: q.description, fieldType: q.field_type ?? "textarea", options: [], required: q.required,
+      ...(before ? { follows: { label: before.question, answer: before.answer } } : {}),
+    }],
   });
   const spend = { cost: 0 };
   const output = await callWithRetry({ db, userId }, deps.call, "redraft", app.job.id, { ...prompt, schema: draftOutputSchema, maxTokens: 2000, effort: "medium" }, spend);
@@ -652,6 +662,8 @@ export type RecheckCounts = {
   answerable: number;
   /** Applications with nothing required left, moved to Ready to review. */
   movedToReview: number;
+  /** Answers from your profile, criteria or saved answers that changed since, brought up to date. */
+  refreshed: number;
   cost_usd: number;
 };
 
@@ -659,49 +671,81 @@ export type RecheckCounts = {
 const isOpen = (q: { answer: string | null; bucket: string; field_type: string | null }) =>
   q.answer == null && (q.bucket === "needs_user" || q.bucket === "cannot_automate") && q.field_type !== "file" && q.field_type !== "hidden";
 
+/** Where an answer came from, when it follows your profile, criteria or saved answers (not one you typed). */
+const FOLLOWS_YOU = new Set(["profile", "criteria", "skill_years", "answer"]);
+
+/** An answer taken from your profile, criteria or saved answers, which a change there should update. */
+const isFromYou = (q: { answer: string | null; answer_source: string | null; question_id: string | null }) =>
+  q.answer != null && q.question_id != null && FOLLOWS_YOU.has(q.answer_source ?? "");
+
 /**
  * Sorts the open questions of your waiting applications (Needs you and Ready to review) again with
  * today's rules, catalog, saved answers and profile: what was prepared before a change (a consent
  * becoming a saved answer, "worked here before" from your jobs) gets answered, or becomes a question
- * you can answer in the app. Wordings already known cost nothing; the rest is one Claude call per
- * application. Nothing already answered is touched, and nothing is drafted.
+ * you can answer in the app. Answers taken from your profile, search criteria or saved answers are
+ * brought up to date with them (one you typed yourself is left alone). Wordings already known cost
+ * nothing; the rest is one Claude call per application. Nothing is drafted. Approved applications the
+ * runner hasn't started are included, since it fills from these answers. Without `call` (after a
+ * profile save), it only does what needs no Claude.
  */
 export async function recheckOpenQuestions(
-  deps: Pick<PrepareDeps, "db" | "userId" | "call" | "now" | "log">,
+  deps: Pick<PrepareDeps, "db" | "userId" | "now" | "log"> & { call?: StructuredCall },
   opts: { applicationIds?: string[]; concurrency?: number } = {},
 ): Promise<RecheckCounts> {
   const { db, userId, now = () => new Date(), log = () => {} } = deps;
-  const counts: RecheckCounts = { applications: 0, answered: 0, answerable: 0, movedToReview: 0, cost_usd: 0 };
+  const counts: RecheckCounts = { applications: 0, answered: 0, answerable: 0, movedToReview: 0, refreshed: 0, cost_usd: 0 };
   const [ctx, budget] = await Promise.all([loadRunContext(db, userId, now()), getMonthlySpend(db, userId, now())]);
   let query = db
     .from("applications")
-    .select("id, status, job_id, jobs!inner(title, company_name, location, description_md), application_questions(*)")
+    .select("id, status, apply_step, job_id, jobs!inner(title, company_name, location, description_md), application_questions(*)")
     .eq("user_id", userId)
-    .in("status", ["needs_input", "queued"]);
+    .in("status", ["needs_input", "queued", "approved"]);
   if (opts.applicationIds) query = query.in("id", opts.applicationIds);
   const { data, error } = await query;
   if (error) throw new Error(`list applications to recheck: ${error.message}`);
   type ApplicationQuestionRow = DbRow<"application_questions">;
-  type Row = { id: string; status: AppStatus; job_id: string; jobs: { title: string; company_name: string; location: string | null; description_md: string | null }; application_questions: ApplicationQuestionRow[] };
-  const apps = ((data ?? []) as unknown as Row[]).filter((a) => a.application_questions.some(isOpen));
+  type Row = { id: string; status: AppStatus; apply_step: string | null; job_id: string; jobs: { title: string; company_name: string; location: string | null; description_md: string | null }; application_questions: ApplicationQuestionRow[] };
+  // An approved one the runner is filling right now is left alone.
+  const apps = ((data ?? []) as unknown as Row[]).filter(
+    (a) => !(a.status === "approved" && a.apply_step) && a.application_questions.some((q) => isOpen(q) || isFromYou(q)),
+  );
   counts.applications = apps.length;
 
   const recheck = async (app: Row) => {
     const countries = resolvePlace(app.jobs.location ?? "").countries;
     const actx: RunContext = { ...ctx, country: countries.size === 1 ? [...countries][0] : "US", company: app.jobs.company_name };
+    const asForm = (r: ApplicationQuestionRow): FormQuestion => ({
+      fieldName: r.field_name ?? r.id,
+      label: r.question,
+      description: r.description,
+      required: r.required,
+      fieldType: (r.field_type ?? "text") as FormQuestion["fieldType"],
+      options: (r.options as FormQuestion["options"] | null) ?? [],
+      group: "application",
+    });
+
+    // Answers from your profile, criteria or saved answers: brought up to date when those changed.
+    for (const r of app.application_questions.filter(isFromYou)) {
+      const question = ctx.questionsById.get(r.question_id!);
+      if (!question) continue;
+      const q = asForm(r);
+      const alias = ctx.aliases.get(normalizeQuestion(q.label));
+      const mapped = alias?.question_id === question.id ? alias : undefined;
+      const fresh = answerFromQuestion({ ...baseRow(q, r.sort_order), _index: r.sort_order }, q, question, actx, {
+        inverted: mapped?.polarity === "inverted",
+        confirmed: true,
+        skillId: mapped?.skill_id ?? null,
+      });
+      if (fresh === "draft" || fresh.bucket !== "auto" || fresh.answer == null || fresh.answer === r.answer) continue;
+      await updateQuestion(db, r.id, { answer: fresh.answer, answer_value: fresh.answer_value ?? null, reason: fresh.reason ?? r.reason });
+      counts.refreshed++;
+    }
+
     const open = app.application_questions.filter(isOpen);
     const results = new Map<string, Partial<Draft> | "draft">();
     const unknown: { row: Draft; q: FormQuestion; id: string }[] = [];
     for (const r of open) {
-      const q: FormQuestion = {
-        fieldName: r.field_name ?? r.id,
-        label: r.question,
-        description: r.description,
-        required: r.required,
-        fieldType: (r.field_type ?? "text") as FormQuestion["fieldType"],
-        options: ((r.options as FormQuestion["options"] | null) ?? []),
-        group: "application",
-      };
+      const q = asForm(r);
       const row = { ...baseRow(q, r.sort_order), _index: r.sort_order };
       const alias = ctx.aliases.get(normalizeQuestion(q.label));
       const question = alias ? ctx.questionsById.get(alias.question_id) : undefined;
@@ -711,14 +755,15 @@ export async function recheckOpenQuestions(
         unknown.push({ row, q, id: r.id });
       }
     }
-    if (unknown.length > 0 && budget.spent + ctx.spend.cost < budget.cap) {
+    // Without Claude (after a profile save), only known wordings are answered.
+    if (unknown.length > 0 && deps.call && budget.spent + ctx.spend.cost < budget.cap) {
       const prompt = buildClassifyPrompt({
         catalog: [...ctx.questions.values()].map((t) => ({ key: t.key, label: t.label, answer_type: t.answer_type })),
         facts: ctx.facts,
         posting: { title: app.jobs.title, company_name: app.jobs.company_name, text: app.jobs.description_md ?? "" },
         questions: unknown.map(({ row, q }) => ({ index: row._index, label: q.label, description: q.description, fieldType: q.fieldType, options: q.options.map((o) => o.label), required: q.required })),
       });
-      const output = await callWithRetry(deps, deps.call, "classify", app.job_id, { ...prompt, schema: classifyOutputSchema, maxTokens: 6000 }, ctx.spend);
+      const output = await callWithRetry(deps, deps.call!, "classify", app.job_id, { ...prompt, schema: classifyOutputSchema, maxTokens: 6000 }, ctx.spend);
       const byIndex = new Map((output?.questions ?? []).map((c) => [c.index, c]));
       for (const item of unknown) {
         const c = byIndex.get(item.row._index);
@@ -765,4 +810,30 @@ export async function recheckOpenQuestions(
   await Promise.all(workers);
   counts.cost_usd = Math.round(ctx.spend.cost * 1e6) / 1e6;
   return counts;
+}
+
+/** user_settings key: when you last changed your profile, skills or jobs (a resume older than this is out of date). */
+export const PROFILE_CHANGED_KEY = "profile_changed_at";
+
+/**
+ * Tailors an application's resume again from your profile as it is now (after you changed it), with the
+ * same fact check as prepare, and replaces the PDF the runner attaches.
+ *
+ * @throws {@link ValidationError} when the application is gone or this month's Claude budget is used up.
+ */
+export async function rebuildResume(deps: { db: Db; userId: string; call: StructuredCall; now?: Date }, applicationId: string): Promise<"tailored" | "fallback"> {
+  const { db, userId, now = new Date() } = deps;
+  const app = await getApplication(db, userId, applicationId);
+  if (!app) throw new ValidationError("That application is gone; reload the page.");
+  const budget = await getMonthlySpend(db, userId, now);
+  if (budget.spent >= budget.cap) throw new ValidationError("This month's Claude budget is used up.");
+  const [profile, lessons, job] = await Promise.all([getProfile(db, userId), lessonsFor(db, userId, "tailoring"), getJobPosting(db, app.job.id)]);
+  const resume = await tailorResume({
+    db, userId, call: deps.call, data: profile,
+    lessons: lessons.map((l) => ({ rule: l.rule, scope: l.scope, active: l.active })),
+    posting: { title: app.job.title, company_name: app.job.company_name, text: job?.description_md ?? "" },
+    jobId: app.job.id, now, spend: { cost: 0 },
+  });
+  await saveApplicationResume(db, userId, app.id, resume, `${app.job.title} at ${app.job.company_name}`);
+  return resume.kind;
 }

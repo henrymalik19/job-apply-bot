@@ -23,7 +23,9 @@ import { MatchCard } from "../../../_components/match-card";
 import { runnerFills, SiteBadge } from "../../../_components/site-badge";
 import { LiveRefresh } from "../../../_components/live-refresh";
 import { APPLY_STEP_TITLE, backLink, statusInfo, todoHref, TONE_BADGE, type Tone } from "../../../_components/status";
-import { DecideActions, MarkAppliedButton, RetryApplyButton } from "../decide-actions";
+import { DecideActions, MarkAppliedButton, RebuildResumeButton, RetryApplyButton } from "../decide-actions";
+import { getUserSetting } from "@/server/modules/settings/settings.service";
+import { PROFILE_CHANGED_KEY } from "@/server/modules/prepare/prepare.service";
 import { QuestionForm } from "../question-form";
 import { PdfViewer } from "../pdf-viewer";
 import { AnswersForm } from "../answers-form";
@@ -187,7 +189,7 @@ function NextStep({ app, blockers, flags }: { app: ApplicationWithDetails; block
   );
 }
 
-function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null }) {
+function ResumeCard({ resume, url, stale, applicationId }: { resume: Resume | null; url: string | null; stale: boolean; applicationId: string }) {
   if (!resume) return <p className="text-sm text-muted-foreground">No resume was prepared for this application.</p>;
   const doc = resume.content as unknown as ResumeDoc;
   const problems = (resume.guard_problems as string[]) ?? [];
@@ -205,6 +207,12 @@ function ResumeCard({ resume, url }: { resume: Resume | null; url: string | null
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
+        {stale && (
+          <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning/10 p-3">
+            <p>Your profile changed after this resume was made. Rebuild it so the runner attaches one that matches.</p>
+            <RebuildResumeButton applicationId={applicationId} />
+          </div>
+        )}
         {url && <PdfViewer url={url} title={resume.label ?? "Resume"} />}
         {doc.summary && <p className="text-muted-foreground">{doc.summary}</p>}
         <details>
@@ -318,11 +326,12 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const app = await getApplication(db, owner.id, id);
   if (!app) notFound();
-  const [match, resume, runs, emails] = await Promise.all([
+  const [match, resume, runs, emails, profileChangedAt] = await Promise.all([
     getJobMatch(db, owner.id, app.job.id),
     getApplicationResume(db, app.id),
     countApplyRuns(db, app.id),
     listApplicationEmails(db, owner.id, app.id),
+    getUserSetting(db, owner.id, PROFILE_CHANGED_KEY),
   ]);
   const url = resume?.pdf_path ? await signedPdfUrl(db, resume.pdf_path).catch(() => null) : null;
   const now = new Date();
@@ -438,7 +447,16 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
         <aside className="flex flex-col gap-6 lg:sticky lg:top-32">
           {editable && <Decide app={app} />}
           <MatchCard match={match} stacked showThreshold={false} />
-          <ResumeCard resume={resume} url={url} />
+          <ResumeCard
+            resume={resume}
+            url={url}
+            applicationId={app.id}
+            // Only while it can still be sent: before submitting, and not while the runner is filling it.
+            stale={
+              !!resume && typeof profileChangedAt === "string" && profileChangedAt > resume.updated_at &&
+              (["needs_input", "queued", "manual"].includes(app.status) || (app.status === "approved" && !app.apply_step))
+            }
+          />
           {runs > 0 && (
             <Link href={`/admin/runs?application=${app.id}`} className="self-start text-xs text-muted-foreground hover:text-foreground hover:underline">
               Runner log ({runs} {runs === 1 ? "attempt" : "attempts"})

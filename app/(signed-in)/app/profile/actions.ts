@@ -21,11 +21,16 @@ import {
   type SkillMergeSuggestion,
 } from "@/server/modules/profile/profile.service";
 import { deleteSavedAnswer, updateSavedAnswer } from "@/server/modules/questions/saved-answers";
+import { PROFILE_CHANGED_KEY, recheckOpenQuestions } from "@/server/modules/prepare/prepare.service";
+import { putUserSetting } from "@/server/modules/settings/settings.service";
 import type { FormMessageState } from "../../_components/form-message";
 
 const values = (formData: FormData) => Object.fromEntries([...formData.entries()].map(([k, v]) => [k, String(v)]));
 
-/** Runs a save as the owner, turning validation errors into a form message. */
+/**
+ * Runs a save as the owner, turning validation errors into a form message. Then your waiting
+ * applications' answers that come from your profile and saved answers are brought up to date (no Claude).
+ */
 async function run(ok: string, save: (db: Db, userId: string) => Promise<unknown>): Promise<FormMessageState> {
   const { db, owner } = await ownerContext();
   try {
@@ -34,8 +39,12 @@ async function run(ok: string, save: (db: Db, userId: string) => Promise<unknown
     if (err instanceof ValidationError) return { error: err.message };
     throw err;
   }
+  // Resumes made before now are out of date (the application page offers to rebuild them).
+  await putUserSetting(db, owner.id, PROFILE_CHANGED_KEY, new Date().toISOString()).catch(() => undefined);
+  const { refreshed, answered } = await recheckOpenQuestions({ db, userId: owner.id }).catch(() => ({ refreshed: 0, answered: 0 }));
   refresh();
-  return { ok };
+  const updated = refreshed + answered;
+  return { ok: updated ? `${ok} Updated ${updated} ${updated === 1 ? "answer" : "answers"} on your waiting applications.` : ok };
 }
 
 /** Saves contact details and summary. */
@@ -83,6 +92,7 @@ export async function removeItemAction(formData: FormData) {
   if (!(REMOVABLE as readonly string[]).includes(kind)) throw new Error(`cannot remove ${kind}`);
   const { db, owner } = await ownerContext();
   await removeProfileItem(db, owner.id, kind as (typeof REMOVABLE)[number], String(formData.get("id")));
+  await putUserSetting(db, owner.id, PROFILE_CHANGED_KEY, new Date().toISOString()).catch(() => undefined);
   refresh();
 }
 
@@ -90,6 +100,7 @@ export async function removeItemAction(formData: FormData) {
 export async function removeSkillAction(formData: FormData) {
   const { db, owner } = await ownerContext();
   await removeSkill(db, owner.id, String(formData.get("skill_id")), { fromJobs: formData.get("from_jobs") === "on" });
+  await putUserSetting(db, owner.id, PROFILE_CHANGED_KEY, new Date().toISOString()).catch(() => undefined);
   refresh();
 }
 

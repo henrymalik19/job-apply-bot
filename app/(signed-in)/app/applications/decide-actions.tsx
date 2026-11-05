@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { cn } from "@/shared/cn";
 import { FormMessage, type FormMessageState } from "../../_components/form-message";
-import { approveAction, moveApplicationAction, retryApplyAction, skipAction } from "./actions";
+import { approveAction, moveApplicationAction, retryApplyAction, skipAction, rebuildResumeAction } from "./actions";
 
 /**
  * Approve and Skip as two equal buttons. Skip asks for an optional reason,
@@ -104,5 +104,19 @@ export function MarkAppliedButton({ applicationId, className }: { applicationId:
       </Button>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </span>
+  );
+}
+
+/** "Rebuild resume": tailors this application's resume again from your profile as it is now. */
+export function RebuildResumeButton({ applicationId }: { applicationId: string }) {
+  const [state, rebuild, rebuilding] = useActionState<FormMessageState, FormData>(rebuildResumeAction, {});
+  return (
+    <form action={rebuild} className="flex flex-col gap-1">
+      <input type="hidden" name="application_id" value={applicationId} />
+      <Button type="submit" size="sm" variant="outline" disabled={rebuilding} className="w-fit">
+        <RotateCw className={rebuilding ? "animate-spin" : undefined} /> {rebuilding ? "Rebuilding…" : "Rebuild resume"}
+      </Button>
+      <FormMessage state={state} />
+    </form>
   );
 }

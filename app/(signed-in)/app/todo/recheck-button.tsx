@@ -19,9 +19,9 @@ export function RecheckButton() {
         type="submit"
         variant="outline"
         disabled={pending}
-        title="Answers open questions again with your current profile and saved answers: one quick Claude call per application."
+        title="Updates answers from your current profile and saved answers, and answers open questions again: one quick Claude call per application with new questions."
       >
-        <RefreshCw className={pending ? "animate-spin" : undefined} /> {pending ? "Rechecking…" : "Recheck open questions"}
+        <RefreshCw className={pending ? "animate-spin" : undefined} /> {pending ? "Rechecking…" : "Recheck answers"}
       </Button>
     </form>
   );

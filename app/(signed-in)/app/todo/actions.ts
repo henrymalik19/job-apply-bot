@@ -31,15 +31,16 @@ export async function dismissEmailAction(emailId: string): Promise<void> {
 }
 
 /**
- * Sorts the open questions of your waiting applications again with today's rules, saved answers and
- * profile, filling what can be filled now.
+ * Brings your waiting applications' answers up to date with your profile and saved answers, and sorts
+ * their open questions again with today's rules, filling what can be filled now.
  */
 export async function recheckOpenQuestionsAction(): Promise<{ ok?: string; error?: string }> {
   const { db, owner } = await ownerContext();
   const counts = await recheckOpenQuestions({ db, userId: owner.id, call: createClaudeCaller() });
   refresh();
-  if (counts.applications === 0) return { ok: "No open questions to recheck." };
+  if (counts.applications === 0) return { ok: "Nothing to recheck." };
   const parts = [
+    `${counts.refreshed} ${counts.refreshed === 1 ? "answer" : "answers"} updated from your profile`,
     `${counts.answered} ${counts.answered === 1 ? "answer" : "answers"} filled`,
     `${counts.answerable} ${counts.answerable === 1 ? "step" : "steps"} you can now answer here`,
     `${counts.movedToReview} moved to Ready to review`,

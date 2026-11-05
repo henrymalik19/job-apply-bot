@@ -8,7 +8,7 @@ import { ValidationError } from "@/server/core/errors";
 import { answerQuestions, approveApplication, IllegalTransitionError, moveApplication, skipApplication } from "@/server/modules/applications/applications.service";
 import { retryApply } from "@/server/modules/apply/apply.service";
 import { excludeCompany } from "@/server/modules/criteria/criteria.service";
-import { redraftAnswer } from "@/server/modules/prepare/prepare.service";
+import { rebuildResume, redraftAnswer } from "@/server/modules/prepare/prepare.service";
 import type { FormMessageState } from "../../_components/form-message";
 
 const text = (formData: FormData, name: string) => String(formData.get(name) ?? "");
@@ -107,4 +107,17 @@ export async function redraftAction(_prev: FormMessageState, formData: FormData)
   }
   refresh();
   return { ok: "New draft below. Check it, then save." };
+}
+
+/** Tailors an application's resume again from your profile as it is now. */
+export async function rebuildResumeAction(_prev: FormMessageState, formData: FormData): Promise<FormMessageState> {
+  const { db, owner } = await ownerContext();
+  try {
+    const kind = await rebuildResume({ db, userId: owner.id, call: createClaudeCaller(DRAFTING_MODEL) }, text(formData, "application_id"));
+    refresh();
+    return { ok: kind === "tailored" ? "Rebuilt from your profile." : "Rebuilt, untailored: tailoring didn't pass the fact check." };
+  } catch (err) {
+    if (err instanceof ValidationError) return { error: err.message };
+    throw err;
+  }
 }
