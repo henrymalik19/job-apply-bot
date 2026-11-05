@@ -393,10 +393,10 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
           />
           <QuestionGroup
             title="For you in Chrome"
-            hint="Steps only you can do, like an assessment or a file to attach. The apply runner fills everything else, then leaves these to you in the Chrome window before you click Submit."
+            hint="Steps the runner leaves to you in the Chrome window before you click Submit, like an assessment or a file to attach. One that's a plain question can be answered here instead, and the runner fills it."
             questions={yours.filter((q) => q.required && q.bucket === "cannot_automate")}
             app={app}
-            editable={false}
+            editable={answerable}
             aiAllowed={aiAllowed}
             tone="info"
           />

@@ -68,7 +68,9 @@ export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boole
   const freeText = q.field_type === "textarea" || q.answer_source === "drafted";
   const bucket = BUCKET_LABEL[q.bucket] ?? { label: q.bucket, variant: "outline" as const };
   const source = sourceLabel(q);
-  const editable = q.field_type !== "file" && q.field_type !== "hidden" && q.bucket !== "cannot_automate";
+  // A step left for you in Chrome can still be answered here when it's a plain field (a Yes/No, a pick,
+  // text): that takes it off your list, and a short answer is remembered for the next form.
+  const editable = q.field_type !== "file" && q.field_type !== "hidden";
   return (
     <div className="flex flex-col gap-2 py-4">
       <div className="flex flex-wrap items-baseline gap-2">
