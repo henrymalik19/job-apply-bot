@@ -209,14 +209,14 @@ isOneToOne: false
                   ]
                 },"companies": {
                   Row: {
-                    "active": boolean,"ats": string,"board_token": string | null,"created_at": string,"id": string,"name": string,"updated_at": string
+                    "active": boolean,"apply_limit": number | null,"apply_limit_days": number | null,"ats": string,"board_token": string | null,"created_at": string,"id": string,"name": string,"other_names": (string)[],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"ats": string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name": string,"updated_at"?: string
+                    "active"?: boolean,"apply_limit"?: number | null,"apply_limit_days"?: number | null,"ats": string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name": string,"other_names"?: (string)[],"updated_at"?: string
                   }
                   Update: {
-                    "active"?: boolean,"ats"?: string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string
+                    "active"?: boolean,"apply_limit"?: number | null,"apply_limit_days"?: number | null,"ats"?: string,"board_token"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"other_names"?: (string)[],"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -703,14 +703,14 @@ isOneToOne: false
                   ]
                 },"user_companies": {
                   Row: {
-                    "company_id": string,"created_at": string,"updated_at": string,"user_id": string
+                    "company_id": string,"created_at": string,"pause_reason": string | null,"paused_until": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "company_id": string,"created_at"?: string,"updated_at"?: string,"user_id"?: string
+                    "company_id": string,"created_at"?: string,"pause_reason"?: string | null,"paused_until"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "company_id"?: string,"created_at"?: string,"updated_at"?: string,"user_id"?: string
+                    "company_id"?: string,"created_at"?: string,"pause_reason"?: string | null,"paused_until"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {

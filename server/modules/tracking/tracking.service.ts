@@ -22,6 +22,8 @@ import {
   fromAts,
   matchEmail,
   MATCH_THRESHOLD,
+  companyKey,
+  senderNames,
   type EmailKind,
   type TrackedApp,
 } from "./classify";
@@ -246,7 +248,11 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
     ]);
     counts.read = mails.length;
     const seen = await seenIds(db, userId, mails.map((m) => m.messageId));
-    const tracked: TrackedApp[] = apps.map((a) => ({ id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at }));
+    const otherNames = await listOtherNames(db, apps.map((a) => a.job.company_id));
+    const tracked: TrackedApp[] = apps.map((a) => ({
+      id: a.id, status: a.status, company: a.job.company_name, title: a.job.title, submittedAt: a.submitted_at,
+      otherNames: otherNames.get(a.job.company_id ?? "") ?? [],
+    }));
     const byId = new Map(tracked.map((a) => [a.id, a]));
 
     /**
@@ -490,7 +496,33 @@ export async function linkEmail(db: Db, userId: string, emailId: string, applica
       "keep confirmation email",
     );
   }
+  await rememberOtherNames(db, app.job.company_id, app.job.company_name, email.from_addr ?? "");
   return moveForEmail(db, app, said, { email_id: email.id, subject: (email.subject ?? "").slice(0, 200), linked_by: "user" }, await listTransitions(db));
+}
+
+/** Other names companies' email comes under, by company id (only companies that have any). */
+async function listOtherNames(db: Db, companyIds: (string | null)[]): Promise<Map<string, string[]>> {
+  const ids = [...new Set(companyIds.filter((id): id is string => !!id))];
+  if (ids.length === 0) return new Map();
+  const rows = unwrap(await db.from("companies").select("id, other_names").in("id", ids), "read company names");
+  return new Map(rows.filter((r) => r.other_names.length > 0).map((r) => [r.id, r.other_names]));
+}
+
+/**
+ * An email you linked by hand came under a name the company isn't known by (Oneapp's mail as Onepay): its
+ * sender's names are remembered for the company, so its next emails match on their own.
+ */
+async function rememberOtherNames(db: Db, companyId: string | null, company: string, from: string): Promise<void> {
+  if (!companyId) return;
+  const known = unwrap(await db.from("companies").select("other_names").eq("id", companyId).single(), "read company names").other_names;
+  const keys = new Set([company, ...known].map(companyKey));
+  const fresh = senderNames(from).filter((n) => {
+    const key = companyKey(n);
+    // A name that contains the company's ("Vanta Recruiting" for Vanta) adds nothing.
+    return key && ![...keys].some((k) => k && (key === k || ` ${key} `.includes(` ${k} `)));
+  });
+  if (fresh.length === 0) return;
+  check(await db.from("companies").update({ other_names: [...known, ...fresh] }).eq("id", companyId), "remember company names");
 }
 
 /** Marks an unmatched email as not about any application, so it leaves the list. */
@@ -541,7 +573,8 @@ async function reconsiderRecent(
     if (r.reason === DISMISSED) continue;
     const fromAddress = /<([^>]+)>/.exec(r.from_addr ?? "")?.[1] ?? r.from_addr ?? "";
     const mail = { fromAddress, fromName: "", subject: r.subject ?? "", text: r.snippet ?? "", receivedAt: new Date(r.received_at) };
-    const kind = classifyByRules(mail);
+    // An unmatched email the rules can't read keeps how it was sorted (by Claude, say): only its match is new.
+    const kind = classifyByRules(mail) ?? (!r.application_id && r.classification && r.classification in MOVES ? (r.classification as EmailKind) : null);
     // Only what the rules settle alone; a rejection or an interview is Claude's to confirm.
     if (!kind || !(kind in MOVES) || CONFIRM_KINDS.has(kind)) continue;
     let app: { id: string; status: string; company: string } | undefined;

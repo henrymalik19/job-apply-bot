@@ -1,7 +1,7 @@
 // Sorting job-inbox email by rules, and matching it to an application. The
 // wording follows common Greenhouse, Lever and Ashby mail.
 import { describe, expect, it } from "vitest";
-import { classifyByRules, companyKey, matchEmail, type TrackedApp } from "./classify";
+import { classifyByRules, companyKey, matchEmail, senderNames, type TrackedApp } from "./classify";
 
 const mail = (subject: string, text: string, fromAddress = "no-reply@us.greenhouse-mail.io", fromName = "") => ({ subject, text, fromAddress, fromName });
 
@@ -51,6 +51,23 @@ describe("matchEmail", () => {
   const app = (id: string, company: string, title: string, submittedAt = "2026-11-01T00:00:00Z"): TrackedApp => ({ id, status: "submitted", company, title, submittedAt });
   const at = new Date("2026-11-03T12:00:00Z");
 
+  it("matches a renamed company by the full job title of an application sent just before", () => {
+    const apps = [app("one", "Oneapp", "Software Engineer, Credit Card"), app("pin", "Pinterest", "Sr Software Engineer, EPD Ads")];
+    const onepay = { ...mail("Thanks for applying to Onepay", "We received your application for Software Engineer, Credit Card.", "no-reply@ashbyhq.com"), receivedAt: at };
+    expect(matchEmail(onepay, apps)).toMatchObject({ app: { id: "one" }, confidence: 0.85 });
+    // Sent weeks before: not enough.
+    expect(matchEmail(onepay, [app("one", "Oneapp", "Software Engineer, Credit Card", "2026-10-01T00:00:00Z")])).toMatchObject({ app: null });
+    // A short, common title isn't specific enough.
+    expect(matchEmail({ ...mail("Thanks for applying to Onepay", "Your application for Software Engineer.", "no-reply@ashbyhq.com"), receivedAt: at }, [app("one", "Oneapp", "Software Engineer")])).toMatchObject({ app: null });
+    // Two applications with that title: left to you.
+    expect(matchEmail(onepay, [...apps, app("two", "Acme", "Software Engineer, Credit Card")])).toMatchObject({ app: null });
+  });
+
+  it("matches by a company's other name", () => {
+    const apps = [{ ...app("one", "Oneapp", "Backend Engineer"), otherNames: ["Onepay"] }];
+    expect(matchEmail({ ...mail("Thanks for applying to Onepay", "...", "no-reply@ashbyhq.com"), receivedAt: at }, apps)).toMatchObject({ app: { id: "one" }, confidence: 0.9 });
+  });
+
   it("finds the application by the company named in the email", () => {
     const apps = [app("ld", "LaunchDarkly", "Backend Software Engineer, SDK"), app("pin", "Pinterest", "Sr Software Engineer, EPD Ads")];
     expect(matchEmail({ ...mail("Thank you for applying to LaunchDarkly", "..."), receivedAt: at }, apps)).toMatchObject({ app: { id: "ld" }, confidence: 0.9 });
@@ -72,5 +89,13 @@ describe("matchEmail", () => {
   it("reads company names without their suffix", () => {
     expect(companyKey("Scale AI, Inc.")).toBe("scale ai");
     expect(companyKey("Acme Technologies LLC")).toBe("acme");
+  });
+});
+
+describe("senderNames", () => {
+  it("gives the sender's name without hiring words, and its own domain", () => {
+    expect(senderNames("Onepay Hiring Team <jobs@onepay.com>")).toEqual(["Onepay", "onepay"]);
+    expect(senderNames("Talent at Onepay <no-reply@ashbyhq.com>")).toEqual(["Onepay"]);
+    expect(senderNames("no-reply@us.greenhouse-mail.io")).toEqual([]);
   });
 });

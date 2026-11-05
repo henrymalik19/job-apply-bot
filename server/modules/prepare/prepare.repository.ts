@@ -22,6 +22,7 @@ export type PrepareCandidate = {
     description_md: string | null;
     location: string | null;
     board_token: string;
+    company_id: string | null;
   };
 };
 
@@ -29,10 +30,10 @@ export type PrepareCandidate = {
  * A user's open jobs scored at or above `minScore`, best first, that have no
  * application yet (an application points back at the match it came from).
  */
-export async function listPrepareCandidates(db: Db, userId: string, minScore: number, limit: number): Promise<PrepareCandidate[]> {
+export async function listPrepareCandidates(db: Db, userId: string, minScore: number, limit: number, skipCompanies: ReadonlySet<string> = new Set()): Promise<PrepareCandidate[]> {
   const res = await db
     .from("matches")
-    .select("id, score, applications(id), jobs!inner(id, title, company_name, source, external_id, description_md, location, closed_at, companies!inner(board_token))")
+    .select("id, score, applications(id), jobs!inner(id, title, company_name, company_id, source, external_id, description_md, location, closed_at, companies!inner(board_token))")
     .eq("user_id", userId)
     .eq("status", "scored")
     .gte("score", minScore)
@@ -45,6 +46,8 @@ export async function listPrepareCandidates(db: Db, userId: string, minScore: nu
   const none = (a: unknown) => a == null || (Array.isArray(a) && a.length === 0);
   return (res.data ?? [])
     .filter((r) => none(r.applications))
+    // Companies you can't apply to right now (their limit on applications reached).
+    .filter((r) => !skipCompanies.has((r.jobs as unknown as { company_id: string | null }).company_id ?? ""))
     .slice(0, limit)
     .map((r) => {
       const { companies, ...rest } = r.jobs as unknown as JobEmbed;

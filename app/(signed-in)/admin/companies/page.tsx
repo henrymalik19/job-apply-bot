@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ownerContext } from "@/server/auth/require-owner";
 import { loadDiscoveryHealth } from "@/server/modules/runs/runs.service";
+import { listCompanyLimits, type CompanyLimit } from "@/server/modules/companies/apply-limits";
 import { ago } from "@/shared/format";
 import { paginate, parsePage } from "@/shared/paginate";
 import { BoardStatus, RunCounts } from "../../_components/board-status";
@@ -16,12 +17,25 @@ import { MovedBoard } from "../health/moved-board";
 /** A board fetch that failed because the board no longer exists (it may have moved to another ATS). */
 const boardGone = (error: string | null | undefined) => /\b404\b/.test(error ?? "");
 
+/** A company's limit on applications, and the date you can apply there again when you've reached it. */
+function LimitNote({ limit }: { limit: CompanyLimit | undefined }) {
+  if (!limit) return null;
+  const rule = limit.limit ? `Takes ${limit.limit} ${limit.limit === 1 ? "application" : "applications"} per ${limit.days} days` : "Has a limit on applications";
+  const until = limit.pausedUntil ? new Date(limit.pausedUntil).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
+  return (
+    <div className="mt-1 text-xs text-warning" title={limit.reason ?? undefined}>
+      {rule}
+      {until && <>; you can apply again on {until}</>}
+    </div>
+  );
+}
+
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 async function Companies({ searchParams }: { searchParams: SearchParams }) {
   const { db, owner } = await ownerContext();
   const now = new Date();
-  const [{ boards }, params] = await Promise.all([loadDiscoveryHealth(db, owner.id, now), searchParams]);
+  const [{ boards }, params, limits] = await Promise.all([loadDiscoveryHealth(db, owner.id, now), searchParams, listCompanyLimits(db, owner.id, now)]);
   const active = boards.filter((b) => b.active).length;
   const failing = boards.filter((b) => b.problem).length;
   // Failing boards first, then by name.
@@ -80,6 +94,7 @@ async function Companies({ searchParams }: { searchParams: SearchParams }) {
                     <TableCell className={cardsOnPhone.first}>
                       <div className="font-medium">{b.name}</div>
                       <div className="font-mono text-xs text-muted-foreground">{b.ats}:{b.board_token}</div>
+                      <LimitNote limit={limits.get(b.id)} />
                     </TableCell>
                     <TableCell data-label="Last check">
                       <BoardStatus board={b} now={now} />

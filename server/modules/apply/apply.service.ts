@@ -19,6 +19,7 @@ import {
 import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
 import { applicationHref, notify } from "@/server/modules/notifications/in-app";
+import { recordLimitReached } from "@/server/modules/companies/apply-limits";
 
 /** ATSs the runner can fill (by field name). */
 export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
@@ -177,6 +178,8 @@ const YOUR_STEPS_WAIT_MS = 60 * 60_000;
  * application limit"), or one already sent for this job.
  */
 const FINAL_REFUSAL = /application limit|limit(ing)? applications|maximum number of applications|already (applied|submitted)|no longer accepting applications/i;
+/** The part of {@link FINAL_REFUSAL} that's a limit on how many you can send there. */
+const LIMIT = /application limit|limit(ing)? applications|maximum number of applications/i;
 
 /** The company won't take this application: it's skipped with what they said (nothing to retry or finish by hand). */
 async function notTaken(deps: ApplyDeps, app: ApplyJob, said: string): Promise<Extract<ApplyOutcome, { result: "handed_back" }>> {
@@ -184,6 +187,14 @@ async function notTaken(deps: ApplyDeps, app: ApplyJob, said: string): Promise<E
   deps.log(`${app.id}: not taken: ${said}`);
   await setApplyStep(deps.db, app.id, null, reason);
   await transition(deps.db, app.id, "skipped", "worker:not_taken", { reason });
+  // A limit on applications: paused there until a slot frees up, and the others there not sent yet skipped.
+  if (LIMIT.test(said) && app.job_id) {
+    const limit = await recordLimitReached(deps.db, deps.userId, app.job_id, said, new Date()).catch((err) => {
+      deps.log(`${app.id}: couldn't record the limit: ${(err as Error).message}`);
+      return null;
+    });
+    if (limit) deps.log(`${app.id}: ${app.job.company_name} paused until ${limit.until.toISOString().slice(0, 10)}; skipped ${limit.skipped} more there`);
+  }
   await notify(deps.db, deps.userId, {
     kind: "runner_stuck", title: `Not sent: ${app.job.title} at ${app.job.company_name}`, body: reason,
     href: applicationHref(app.id), applicationId: app.id,

@@ -18,6 +18,7 @@ import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE
 import type { FieldAnswer } from "@/server/modules/apply/field-mapping";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import { APPLY_RUNS_BUCKET, listApplyRuns, listRunFilters, saveApplyRun } from "@/server/modules/apply/apply-runs";
+import { companiesAtLimit } from "@/server/modules/companies/apply-limits";
 import type {} from "./setup";
 import { testUser } from "./users";
 
@@ -224,12 +225,25 @@ describe("apply runner", () => {
 
   it("skips without submitting again when the company's application limit is reached", async () => {
     const id = await addApproved("limit");
+    const other = await addApproved("limit-other");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
     const { driver, submits } = fakeDriver({ refused: "You have reached the application limit. We are limiting applications to a total of 2 jobs over a span of 60 days." });
     const outcome = await applyOne(deps(driver), job);
     expect(outcome).toMatchObject({ result: "handed_back", closeTab: true, reason: expect.stringContaining("won't take this application") });
     expect(submits).toHaveLength(0);
     expect((await app(id)).status).toBe("skipped");
+
+    // The rule is saved on the company, you're paused there for its window, and the other one there waiting is skipped too.
+    const { data: company } = await db.from("companies").select("apply_limit, apply_limit_days").eq("id", companyId).single();
+    expect(company).toEqual({ apply_limit: 2, apply_limit_days: 60 });
+    const { data: follow } = await db.from("user_companies").select("paused_until, pause_reason").eq("user_id", userId).eq("company_id", companyId).single();
+    const days = (new Date(follow!.paused_until!).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(59);
+    expect(follow!.pause_reason).toMatch(/takes 2 applications per 60 days/);
+    expect((await app(other)).status).toBe("skipped");
+    expect((await companiesAtLimit(db, userId, new Date())).has(companyId)).toBe(true);
+    await db.from("user_companies").update({ paused_until: null, pause_reason: null }).eq("user_id", userId).eq("company_id", companyId);
+    await db.from("companies").update({ apply_limit: null, apply_limit_days: null }).eq("id", companyId);
   });
 
   it("hands back and closes the tab when nobody submits in time", async () => {

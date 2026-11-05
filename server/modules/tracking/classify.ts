@@ -81,13 +81,38 @@ export function buildClassifyPrompt(mail: MailText, company: string): { system: 
 }
 
 /** An application an email can be about. */
-export type TrackedApp = { id: string; status: string; company: string; title: string; submittedAt: string | null };
+export type TrackedApp = {
+  id: string; status: string; company: string; title: string; submittedAt: string | null;
+  /** Other names the company's email comes under (companies.other_names). */
+  otherNames?: string[];
+};
+
+// Words in a sender's name that aren't the company's ("Onepay Hiring Team", "Talent at Vanta").
+const SENDER_NOISE = /\b(hiring|recruiting|recruitment|recruiter|talent|acquisition|careers?|jobs?|team|people|hr|at|via|from|the|no ?reply|notifications?)\b/gi;
+// Domains that say nothing about the company: ATSs and mail providers.
+const SHARED_DOMAIN = /(greenhouse(-mail)?\.io|lever\.co|ashbyhq\.com|workday|myworkdayjobs|smartrecruiters|icims|jobvite|gmail|outlook|hotmail|yahoo|icloud|mail\.com)/i;
+
+/**
+ * The names an email's sender goes by, for remembering a company's other name when you link one of its
+ * emails by hand: its display name without "Hiring Team" and the like, and its domain (unless it's an ATS's
+ * or a mail provider's). "Onepay Hiring Team <jobs@onepay.com>" gives Onepay and onepay.
+ */
+export function senderNames(from: string): string[] {
+  const address = /<([^>]+)>/.exec(from)?.[1] ?? (from.includes("@") ? from.trim() : "");
+  const name = from.replace(/<[^>]*>/, "").replace(/["']/g, "").replace(SENDER_NOISE, " ").replace(/\s+/g, " ").trim();
+  const domain = address.split("@")[1] ?? "";
+  const root = !domain || SHARED_DOMAIN.test(domain) ? "" : (domain.split(".").slice(-2, -1)[0] ?? "");
+  return [...new Set([name, root].filter((n) => n.length >= 3 && !n.includes("@")))];
+}
 
 /** Which application an email is about, and how sure the match is (0 to 1). */
 export type EmailMatch = { app: TrackedApp | null; confidence: number; reason: string };
 
 /** Matches below this are left for you to link (Unmatched emails). */
 export const MATCH_THRESHOLD = 0.8;
+
+/** Days after applying an email naming just the job title (not the company) is matched to it. */
+const TITLE_MATCH_DAYS = 3;
 
 const SUFFIX = /\b(inc|llc|ltd|corp|corporation|co|company|technologies|technology|labs|group|holdings|plc|gmbh)\b\.?/g;
 // "&" and "and" are the same in a company name ("Hims & Hers", "Hims and Hers"), so "and" is dropped.
@@ -104,13 +129,26 @@ export function matchEmail(mail: MailText & { receivedAt: Date }, apps: TrackedA
   const haystack = ` ${words(`${mail.fromName} ${mail.subject} ${mail.text.slice(0, 4000)}`)} `;
   const domain = words(mail.fromAddress.split("@")[1] ?? "").replace(/ /g, "");
   const named = apps.filter((a) => {
-    const key = companyKey(a.company);
-    if (!key) return false;
     // Applied before the email arrived (an hour's slack for clocks); unknown counts.
     if (a.submittedAt && new Date(a.submittedAt).getTime() > mail.receivedAt.getTime() + 3600_000) return false;
-    return haystack.includes(` ${key} `) || (key.replace(/ /g, "").length >= 4 && domain.includes(key.replace(/ /g, "")));
+    return [a.company, ...(a.otherNames ?? [])].some((name) => {
+      const key = companyKey(name);
+      if (!key) return false;
+      return haystack.includes(` ${key} `) || (key.replace(/ /g, "").length >= 4 && domain.includes(key.replace(/ /g, "")));
+    });
   });
-  if (named.length === 0) return { app: null, confidence: 0, reason: "no company you applied to is named" };
+  if (named.length === 0) {
+    // A company that goes by another name now (Oneapp, now Onepay): the full job title of one application
+    // sent in the days before is enough, when it's specific (3+ words) and no other application has it.
+    const byTitle = apps.filter((a) => {
+      const title = words(a.title);
+      if (title.split(" ").length < 3 || !haystack.includes(` ${title} `) || !a.submittedAt) return false;
+      const age = mail.receivedAt.getTime() - new Date(a.submittedAt).getTime();
+      return age > -3600_000 && age < TITLE_MATCH_DAYS * 86_400_000;
+    });
+    if (byTitle.length === 1) return { app: byTitle[0], confidence: 0.85, reason: `names the job "${byTitle[0].title}", applied to just before` };
+    return { app: null, confidence: 0, reason: "no company you applied to is named" };
+  }
   if (named.length === 1) return { app: named[0], confidence: 0.9, reason: `names ${named[0].company}` };
 
   // Several applications at one company: the one whose title the email repeats.

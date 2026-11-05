@@ -71,12 +71,12 @@ export async function countByStatus(db: Db, userId: string): Promise<Record<AppS
 }
 
 /** The job fields application screens show. */
-const JOB_COLUMNS = "id, title, company_name, location, remote_type, salary_min, salary_max, salary_currency, posted_at, url, apply_url, closed_at, source";
+const JOB_COLUMNS = "id, title, company_name, company_id, location, remote_type, salary_min, salary_max, salary_currency, posted_at, url, apply_url, closed_at, source";
 
 /** A job as application screens show it. */
 export type ApplicationJob = Pick<
   Row<"jobs">,
-  "id" | "title" | "company_name" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency" | "posted_at" | "url" | "apply_url" | "closed_at" | "source"
+  "id" | "title" | "company_name" | "company_id" | "location" | "remote_type" | "salary_min" | "salary_max" | "salary_currency" | "posted_at" | "url" | "apply_url" | "closed_at" | "source"
 >;
 
 /** A question row of an application. */
