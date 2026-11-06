@@ -1,5 +1,5 @@
 // Searches LinkedIn for Easy Apply jobs in the runner's own Chrome, where you signed in to LinkedIn yourself.
-// The results list doesn't carry job ids, so each card is clicked (at a person's pace) and the job shown
+// Each result carries its job id, so known jobs are skipped; each new one is clicked (at a person's pace) and the job shown
 // beside it is read: its id from the address, its title and company, where it is, its pay and its description.
 // A security check or CAPTCHA stops the search; it's never worked around.
 import type { Page } from "playwright-core";
@@ -106,71 +106,84 @@ export async function searchLinkedIn(
   now = new Date(),
 ): Promise<{ jobs: LinkedInJob[]; blocked: "check" | "signed_out" | null }> {
   await page.goto(linkedinSearchUrl(search), { waitUntil: "domcontentloaded" });
-  const cards = page.locator('button[aria-label^="Dismiss "][aria-label$=" job"]');
-  await cards.first().waitFor({ timeout: 20_000 }).catch(() => undefined);
+  await page.locator(CARD).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
   const blocked = await linkedinBlocked(page);
   if (blocked) return { jobs: [], blocked };
 
   const jobs: LinkedInJob[] = [];
   let total = 0;
-  // Why results weren't kept, for the log: no job id, already known, or the job's details didn't show.
-  const skipped = { known: 0, noId: 0, unread: 0 };
+  // Why results weren't kept, for the log: already known, or the job's details didn't show.
+  const skipped = { known: 0, unread: 0 };
   // Page by page (25 results each) until enough new jobs, the last page, or MAX_PAGES.
   for (let pageNo = 1; pageNo <= MAX_PAGES && jobs.length < limit; pageNo++) {
     if (pageNo > 1) {
-      const next = page.getByRole("button", { name: /^(next|view next page)$/i }).first();
-      if (!(await next.isVisible().catch(() => false)) || (await next.isDisabled().catch(() => true))) break;
-      const firstBefore = await cards.first().getAttribute("aria-label").catch(() => null);
-      await pause(page, pace);
-      await next.click();
-      // The new page's results replace the old ones.
-      await page
-        .waitForFunction((prev) => document.querySelector('button[aria-label^="Dismiss "][aria-label$=" job"]')?.getAttribute("aria-label") !== prev, firstBefore, { timeout: 15_000 })
-        .catch(() => undefined);
+      const moved = await nextPage(pageNo);
+      if (!moved) break;
       const stopped = await linkedinBlocked(page);
       if (stopped) return { jobs, blocked: stopped };
     }
-    const onPage = await cards.count();
-    total += onPage;
-    if (onPage === 0) break;
-    const reached = await readPage(onPage);
+    const ids = await cardIds(page);
+    total += ids.length;
+    if (ids.length === 0) break;
+    const reached = await readPage(ids);
     if (reached) return { jobs, blocked: reached };
   }
-  log(`linkedin: ${total} results for "${search.keywords}" (past ${search.maxAgeHours} hours): ${jobs.length} new, ${skipped.known} already known, ${skipped.unread} whose details didn't load, ${skipped.noId} with no job id`);
+  log(`linkedin: ${total} results for "${search.keywords}" (past ${search.maxAgeHours} hours): ${jobs.length} new, ${skipped.known} already known, ${skipped.unread} whose details didn't load`);
   return { jobs, blocked: null };
 
-  /** Reads the cards on the page showing; a check or sign-out partway through stops it. */
-  async function readPage(onPage: number): Promise<"check" | "signed_out" | null> {
-    for (let i = 0; i < onPage && jobs.length < limit; i++) {
-      const dismiss = cards.nth(i);
-      // The card is the box around its Dismiss button; clicking its title shows the job beside the list.
-      const card = dismiss.locator("xpath=ancestor::*[.//text()[contains(., 'Easy Apply')]][1]");
-      const before = page.url();
-      const shown = /currentJobId=(\d+)/.exec(before)?.[1];
-      const titleBefore = await page.title();
-      await card.scrollIntoViewIfNeeded().catch(() => undefined);
-      await pause(page, pace);
-      await card.click({ position: { x: 120, y: 20 } }).catch(() => undefined);
-      await page.waitForFunction((prev) => location.href !== prev, before, { timeout: 8000 }).catch(() => undefined);
-      const id = /currentJobId=(\d+)/.exec(page.url())?.[1];
-      if (!id) {
-        skipped.noId++;
-        continue;
-      }
+  /** On to the next page of results: its Next button, or its address when the button isn't there. */
+  async function nextPage(pageNo: number): Promise<boolean> {
+    const before = (await cardIds(page))[0];
+    const next = page.getByRole("button", { name: /^(next|view next page)$/i }).first();
+    await pause(page, pace);
+    if ((await next.isVisible().catch(() => false)) && !(await next.isDisabled().catch(() => true))) {
+      await next.scrollIntoViewIfNeeded().catch(() => undefined);
+      await next.click().catch(() => undefined);
+    } else {
+      const url = new URL(linkedinSearchUrl(search));
+      url.searchParams.set("start", String((pageNo - 1) * 25));
+      await page.goto(url.toString(), { waitUntil: "domcontentloaded" });
+    }
+    // The new page's results replace the old ones; none (past the last page) ends the search.
+    return page
+      .waitForFunction(
+        ({ card, prev }) => {
+          const first = document.querySelector(card)?.getAttribute("componentkey");
+          return !!first && first !== `job-card-component-ref-${prev}`;
+        },
+        { card: CARD, prev: before },
+        { timeout: 15_000 },
+      )
+      .then(() => true, () => false);
+  }
+
+  /** Reads the new jobs on the page showing (known ones are skipped without a click); a check or sign-out stops it. */
+  async function readPage(ids: string[]): Promise<"check" | "signed_out" | null> {
+    for (const id of ids) {
+      if (jobs.length >= limit) break;
       if (seen.has(id) || jobs.some((j) => j.id === id)) {
         skipped.known++;
         continue;
       }
-      // The job's details load beside the list after the address changes: its own title in the page's title
-      // (unless it was the one showing already), its Easy Apply button and its description.
+      const shown = /currentJobId=(\d+)/.exec(page.url())?.[1];
+      const titleBefore = await page.title();
+      if (shown !== id) {
+        const card = page.locator(`[componentkey="job-card-component-ref-${id}"]`).first();
+        await card.scrollIntoViewIfNeeded().catch(() => undefined);
+        await pause(page, pace);
+        await card.click({ position: { x: 120, y: 20 } }).catch(() => undefined);
+      }
+      // This job's details, beside the list: its id in the address, its own title in the page's title (unless it
+      // was showing already), its Easy Apply button and its description.
       const ready = await page
         .waitForFunction(
-          ({ titleBefore, same }) =>
+          ({ id, titleBefore, same }) =>
+            new URLSearchParams(location.search).get("currentJobId") === id &&
             (same || document.title !== titleBefore) &&
             /\|\s*LinkedIn\s*$/.test(document.title) &&
             !!document.querySelector('[aria-label="Easy Apply to this job"]') &&
             [...document.querySelectorAll("h2")].some((h) => /about the job/i.test(h.textContent ?? "")),
-          { titleBefore, same: shown === id },
+          { id, titleBefore, same: shown === id },
           { timeout: 10_000 },
         )
         .then(() => true, () => false);
@@ -205,4 +218,13 @@ export async function searchLinkedIn(
     }
     return null;
   }
+}
+
+/** A result in the list: it carries its job id ("job-card-component-ref-4475594226"). */
+const CARD = '[componentkey^="job-card-component-ref-"]';
+
+/** The job ids of the results showing, in order (each card has the id on more than one element). */
+async function cardIds(page: Page): Promise<string[]> {
+  const keys = await page.locator(CARD).evaluateAll((all) => all.map((e) => e.getAttribute("componentkey") ?? ""));
+  return [...new Set(keys.map((k) => /(\d{5,})$/.exec(k)?.[1]).filter((id): id is string => !!id))];
 }
