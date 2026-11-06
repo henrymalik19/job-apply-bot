@@ -8,6 +8,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea";
 import { FormMessage, type FormMessageState } from "../../_components/form-message";
 import { saveMatchCriteriaAction } from "./actions";
+import { RolesInput } from "./roles-input";
 
 /** Current matching criteria, as the form shows them. */
 export type MatchCriteriaValues = {
@@ -43,7 +44,7 @@ export function MatchCriteriaForm({ values }: { values: MatchCriteriaValues }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="roles">Target roles</Label>
-          <Textarea id="roles" name="roles" rows={2} defaultValue={values.roles.join(", ")} placeholder="Staff Software Engineer, Senior Full Stack Engineer" />
+          <RolesInput defaultValue={values.roles} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="notes">Preferences for the scorer</Label>

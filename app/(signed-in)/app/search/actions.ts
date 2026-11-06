@@ -12,6 +12,7 @@ import {
   suggestTitleFilter,
   type TitleSuggestion,
 } from "@/server/modules/criteria/criteria.service";
+import { suggestJobTitles, type JobTitleSuggestion } from "@/server/modules/criteria/job-titles";
 import { pruneSavedJobs } from "@/server/modules/discovery/discovery.service";
 import type { FormMessageState } from "../../_components/form-message";
 
@@ -100,4 +101,10 @@ export async function addSuggestionsAction(_prev: FormMessageState, formData: Fo
   await addToTitleFilter(db, owner.id, keep, skip);
   refresh();
   return { ok: `Added ${keep.length + skip.length} phrase(s) to the title filter.` };
+}
+
+/** Job titles for the target-roles box, as you type. */
+export async function suggestRolesAction(typed: string): Promise<JobTitleSuggestion[]> {
+  const { db } = await ownerContext();
+  return suggestJobTitles(db, String(typed).slice(0, 100));
 }

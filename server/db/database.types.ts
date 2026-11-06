@@ -359,6 +359,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"job_titles": {
+                  Row: {
+                    "has_role": boolean,"key": string,"last_seen_at": string,"postings": number,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "has_role"?: boolean,"key": string,"last_seen_at"?: string,"postings"?: number,"title": string
+                  }
+                  Update: {
+                    "has_role"?: boolean,"key"?: string,"last_seen_at"?: string,"postings"?: number,"title"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"jobs": {
                   Row: {
                     "apply_url": string | null,"closed_at": string | null,"company_id": string | null,"company_name": string,"created_at": string,"dedup_key": string,"description_md": string | null,"external_id": string | null,"first_seen_at": string,"id": string,"last_seen_at": string,"location": string | null,"posted_at": string | null,"raw": Json | null,"remote_type": string | null,"salary_currency": string | null,"salary_max": number | null,"salary_min": number | null,"source": string,"title": string,"updated_at": string,"url": string
@@ -829,7 +843,10 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "insert_discovered_jobs":
+            "clean_job_title":
+{ Args: { "raw": string }; Returns: string
+                           },
+"insert_discovered_jobs":
 { Args: { "p_jobs": Json }; Returns: Json
                            },
 "is_member":
@@ -837,6 +854,9 @@ isOneToOne: false
                            },
 "is_owner":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"job_title_has_role":
+{ Args: { "t": string }; Returns: boolean
                            },
 "sync_board":
 { Args: { "p_company_id": string,"p_external_ids": (string)[],"p_source": string }; Returns: Json
