@@ -2,6 +2,8 @@ import { z } from "zod";
 
 /** Remote filter values (match `jobs.remote_type`), plus "any". */
 export const REMOTE_OPTIONS = ["any", "remote", "hybrid", "onsite", "unknown"] as const;
+/** Site filter values (match `jobs.source`), plus "any". */
+export const SITE_OPTIONS = ["any", "greenhouse", "ashby", "lever", "linkedin"] as const;
 /** Which jobs to show by open/closed state. */
 export const STATE_OPTIONS = ["open", "closed", "all"] as const;
 /** How recently a job was first found, in days ("any" = no limit). */
@@ -25,6 +27,7 @@ const filtersSchema = z.object({
     // PostgREST's `or()` syntax treats , ( ) as separators and % _ as wildcards.
     .transform((v) => (v ?? "").replace(/[,()%_*\\"]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100)),
   remote: oneOf(REMOTE_OPTIONS, "any"),
+  site: oneOf(SITE_OPTIONS, "any"),
   state: oneOf(STATE_OPTIONS, "open"),
   found: oneOf(FOUND_OPTIONS, "any"),
   posted: oneOf(POSTED_OPTIONS, "30"),

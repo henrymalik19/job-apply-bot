@@ -4,8 +4,10 @@ import { linkedinSearchUrl, parseJobHead, splitPageTitle } from "./linkedin-sear
 describe("LinkedIn search", () => {
   it("searches Easy Apply jobs posted recently, remote and where you are", () => {
     const url = new URL(linkedinSearchUrl({ keywords: "Senior Software Engineer", remoteOnly: true, location: "United States", maxAgeHours: 24 }));
-    expect(url.pathname).toBe("/jobs/search/");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ keywords: "Senior Software Engineer", f_AL: "true", f_TPR: "r86400", f_WT: "2", location: "United States" });
+    expect(url.pathname).toBe("/jobs/search-results/");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ keywords: "Senior Software Engineer remote", f_AL: "true", f_TPR: "r86400", geoId: "103644278" });
+    const city = new URL(linkedinSearchUrl({ keywords: "Remote Staff Engineer", remoteOnly: true, location: "Atlanta, GA", maxAgeHours: 24 }));
+    expect(Object.fromEntries(city.searchParams)).toMatchObject({ keywords: "Remote Staff Engineer", location: "Atlanta, GA" });
   });
 
   it("reads the title and company from the page title, even with | in the title", () => {

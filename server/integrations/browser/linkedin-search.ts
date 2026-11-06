@@ -9,12 +9,19 @@ import { HUMAN, pause, type Pace } from "./human";
 /** What to search for: your roles, where, and how recent. */
 export type LinkedInSearch = { keywords: string; remoteOnly: boolean; location: string | null; maxAgeHours: number };
 
-/** The search page for Easy Apply jobs matching `search`. */
+/** LinkedIn's id for the United States: its search takes a place by id, and a name only sometimes. */
+const UNITED_STATES = "103644278";
+
+/**
+ * The search page for Easy Apply jobs matching `search`. LinkedIn's results page drops its remote filter
+ * (f_WT), and its search reads the keywords as a request, so remote is asked for in them ("... remote").
+ */
 export function linkedinSearchUrl(search: LinkedInSearch): string {
-  const q = new URLSearchParams({ keywords: search.keywords, f_AL: "true", f_TPR: `r${Math.round(search.maxAgeHours * 3600)}` });
-  if (search.remoteOnly) q.set("f_WT", "2");
-  if (search.location) q.set("location", search.location);
-  return `https://www.linkedin.com/jobs/search/?${q}`;
+  const keywords = search.remoteOnly && !/\bremote\b/i.test(search.keywords) ? `${search.keywords} remote` : search.keywords;
+  const q = new URLSearchParams({ keywords, f_AL: "true", f_TPR: `r${Math.round(search.maxAgeHours * 3600)}` });
+  if (search.location && /^(us|usa|united states)$/i.test(search.location.trim())) q.set("geoId", UNITED_STATES);
+  else if (search.location) q.set("location", search.location);
+  return `https://www.linkedin.com/jobs/search-results/?${q}`;
 }
 
 /** "Title | Company | LinkedIn" (a title can hold "|" itself): the title and the company. */
@@ -64,6 +71,9 @@ export async function linkedinBlocked(page: Page): Promise<"check" | "signed_out
   const url = page.url();
   if (/\/checkpoint\/|captcha/i.test(url)) return "check";
   if (/\/(login|uas\/login|authwall|signup)/i.test(url)) return "signed_out";
+  // Signed out, LinkedIn shows its public jobs pages rather than the sign-in page: they offer "Sign in" and "Join now".
+  const offers = await page.locator("a:visible, button:visible").filter({ hasText: /^\s*(sign in|join now)\s*$/i }).count().catch(() => 0);
+  if (offers > 0) return "signed_out";
   return CHECK.test((await page.locator("body").innerText().catch(() => "")).slice(0, 4000)) ? "check" : null;
 }
 
@@ -91,6 +101,7 @@ export async function searchLinkedIn(
 
   const jobs: LinkedInJob[] = [];
   const total = await cards.count();
+  log(`linkedin: ${total} results for "${search.keywords}"`);
   for (let i = 0; i < total && jobs.length < limit; i++) {
     const dismiss = cards.nth(i);
     // The card is the box around its Dismiss button; clicking its title shows the job beside the list.

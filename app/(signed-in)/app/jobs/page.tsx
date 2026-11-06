@@ -11,6 +11,7 @@ import { filtersToParams, parseJobFilters, type JobFilters } from "@/server/modu
 import { browseJobs, type BrowsedJob } from "@/server/modules/matching/matching.service";
 import { listCompanyLimits } from "@/server/modules/companies/apply-limits";
 import { limitDate } from "../../_components/company-limit";
+import { SiteBadge } from "../../_components/site-badge";
 import { ago, formatSalary } from "@/shared/format";
 import { parsePage } from "@/shared/paginate";
 import { cardsOnPhone, Pager, scrollingTable } from "../../_components/data-table";
@@ -39,6 +40,13 @@ function Filters({ filters }: { filters: JobFilters }) {
         <NativeSelectOption value="hybrid">Hybrid</NativeSelectOption>
         <NativeSelectOption value="onsite">On-site</NativeSelectOption>
         <NativeSelectOption value="unknown">Not stated</NativeSelectOption>
+      </NativeSelect>
+      <NativeSelect name="site" defaultValue={filters.site} aria-label="Site">
+        <NativeSelectOption value="any">Any site</NativeSelectOption>
+        <NativeSelectOption value="greenhouse">Greenhouse</NativeSelectOption>
+        <NativeSelectOption value="ashby">Ashby</NativeSelectOption>
+        <NativeSelectOption value="lever">Lever</NativeSelectOption>
+        <NativeSelectOption value="linkedin">LinkedIn</NativeSelectOption>
       </NativeSelect>
       <NativeSelect name="posted" defaultValue={filters.posted} aria-label="Posted within">
         <NativeSelectOption value="7">Posted in last 7 days</NativeSelectOption>
@@ -112,7 +120,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
     <Card className={scrollingTable.card}>
       <CardHeader>
         <CardTitle>{page.total.toLocaleString()} jobs</CardTitle>
-        <CardDescription>Jobs discovered from your companies&apos; boards that passed the title filter.</CardDescription>
+        <CardDescription>Jobs discovered from your companies&apos; boards and the runner&apos;s LinkedIn searches that passed the title filter.</CardDescription>
       </CardHeader>
       <CardContent className={scrollingTable.content}>
         <div className="pb-4">
@@ -130,6 +138,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
                   <TableHead>Company</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Salary</TableHead>
+                  <TableHead>Site</TableHead>
                   <SortHead sort="posted" current={filters.sort} params={keep}>Posted</SortHead>
                   <SortHead sort="found" current={filters.sort} params={keep}>Found</SortHead>
                 </TableRow>
@@ -165,6 +174,7 @@ async function Jobs({ searchParams }: { searchParams: SearchParams }) {
                       )}
                     </TableCell>
                     <TableCell className="tabular-nums" data-label="Salary">{formatSalary(j.salary_min, j.salary_max, j.salary_currency) || "—"}</TableCell>
+                    <TableCell data-label="Site"><SiteBadge source={j.source} /></TableCell>
                     <TableCell className="text-muted-foreground" data-label="Posted">{j.posted_at ? ago(j.posted_at, now) : "—"}</TableCell>
                     <TableCell className="text-muted-foreground" data-label="Found">{ago(j.first_seen_at, now)}</TableCell>
                   </TableRow>

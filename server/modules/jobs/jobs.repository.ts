@@ -37,7 +37,10 @@ export function jobFilterClauses(filters: JobFilters, now: Date) {
   return {
     /** PostgREST `or()` text search, or null. */
     text: filters.q ? `title.ilike.%${filters.q}%,company_name.ilike.%${filters.q}%` : null,
-    eq: filters.remote !== "any" ? [["remote_type", filters.remote] as const] : [],
+    eq: [
+      ...(filters.remote !== "any" ? [["remote_type", filters.remote] as const] : []),
+      ...(filters.site !== "any" ? [["source", filters.site] as const] : []),
+    ],
     isNull: filters.state === "open" ? ["closed_at"] : [],
     notNull: filters.state === "closed" ? ["closed_at"] : [],
     // Jobs without a posting date are rare (every supported board sends one) and are left out by "posted".
