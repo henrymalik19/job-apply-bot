@@ -469,6 +469,30 @@ describe("apply runner", () => {
     expect(after.apply_note).toMatch(/discarded it unsent: 1 question to answer and 1 where LinkedIn had something else filled in/);
   });
 
+  it("on LinkedIn with the resume on LinkedIn chosen, fills without a resume of its own and uploads none", async () => {
+    const id = await addApproved("paged-onfile");
+    const { data: row } = await db.from("applications").select("job_id").eq("id", id).single();
+    await db.from("jobs").update({ source: "linkedin" }).eq("id", row!.job_id);
+    await db.from("resumes").delete().eq("application_id", id);
+    await db.from("user_settings").upsert({ user_id: userId, key: "linkedin_resume_on_file", value: true }, { onConflict: "user_id,key" });
+    const [job] = (await listReadyToApply(db, userId, ["linkedin"])).filter((a) => a.id === id);
+    const fake = fakeDriver();
+    const paged = pagedDriver(fake, [[{ key: "first_name", label: "First Name", kind: "text", options: [], value: [], required: true }]]);
+    const resumes: string[] = [];
+    const driver: FormDriver = { ...paged.driver, nextPage: async (resumePath) => (resumes.push(resumePath), paged.driver.nextPage!(resumePath)) };
+    let saved = 0;
+    try {
+      const out = await applyOne({ ...deps(driver), saveResume: async () => (saved++, "/tmp/resume.pdf") }, job);
+      expect(out).toMatchObject({ result: "submitted" });
+      expect(resumes).toEqual([""]);
+      expect(saved).toBe(0);
+    } finally {
+      await db.from("user_settings").delete().eq("user_id", userId).eq("key", "linkedin_resume_on_file");
+      await db.from("field_mappings").delete().eq("user_id", userId).in("field_name", ["first_name", "question_9"]);
+      await db.from("platforms").delete().eq("user_id", userId).eq("ats", "linkedin");
+    }
+  });
+
   it("puts your answer from the app over what LinkedIn had filled in", async () => {
     const id = await addApproved("paged-yours");
     await db.from("application_questions").insert({ application_id: id, bucket: "auto", question: "Years of Python", field_name: "q:years of python", field_type: "text", answer: "8", required: true, sort_order: 5, options: null, answer_value: null });

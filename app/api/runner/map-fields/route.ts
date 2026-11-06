@@ -13,10 +13,10 @@ const body = z.object({
   fields: z
     .array(
       z.object({
-        key: z.string().max(300),
-        label: z.string().max(1000),
+        key: z.string().max(2100),
+        label: z.string().max(2000),
         kind: z.enum(["text", "textarea", "select", "multiselect", "combobox", "agreement"]),
-        options: z.array(z.string().max(500)).max(500),
+        options: z.array(z.string().max(1000)).max(500),
       }),
     )
     .min(1)

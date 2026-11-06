@@ -23,39 +23,73 @@ const CHECK = /security (check|verification)|verify (it'?s you|you'?re (a )?huma
 /** A posting you've already applied to, or one no longer taking applications. */
 const CLOSED = /no longer accepting applications|applied \d+ \w+ ago|application submitted/i;
 
-// Runs in the page: the dialog's visible questions, with what each shows now and whether it's required.
-const SCAN = `(() => {
-  const d = document.querySelector('[data-testid="dialog-content"]') || document.querySelector('[role="dialog"]');
-  if (!d) return [];
+// Runs in the page (inside SCAN and FIND): a choice's own text, and the question a radio or checkbox answers.
+// LinkedIn groups choices in a radiogroup or fieldset, or (newer forms) only by a shared name, each choice
+// carrying its own text in aria-label: then the question is the first line of the box holding every choice
+// that isn't a choice's own text.
+const CHOICE_HELPERS = `
   const clean = (t) => (t || "").replace(/\\s+/g, " ").replace(/[*✱]\\s*$/, "").trim();
-  const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  const labelOf = (e) => {
-    if (e.type === "radio" || e.type === "checkbox") {
-      const g = e.closest('[role="radiogroup"], fieldset');
-      const by = g && g.getAttribute("aria-labelledby");
-      const l = by ? document.getElementById(by) : g && (g.querySelector("legend") || g.previousElementSibling);
-      return clean((l && l.textContent) || e.getAttribute("aria-label"));
-    }
-    const l = e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]');
-    return clean((l && l.textContent) || e.getAttribute("aria-label") || e.getAttribute("placeholder"));
-  };
   const optionOf = (e) => {
     const l = e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]');
     if (l && clean(l.textContent)) return clean(l.textContent);
+    if (clean(e.getAttribute("aria-label"))) return clean(e.getAttribute("aria-label"));
     let c = e;
     for (let i = 0; i < 4 && c.parentElement; i++) { c = c.parentElement; if (clean(c.innerText)) return clean(c.innerText); }
     return e.value;
   };
-  // Required: marked on the input, or a "*" after its question.
-  const required = (e) => {
-    if (e.required || e.getAttribute("aria-required") === "true") return true;
+  const peersOf = (e, d) => (e.name ? [...d.querySelectorAll('input[name="' + CSS.escape(e.name) + '"]')] : [e]);
+  const groupBox = (e, d) => {
     const g = e.closest('[role="radiogroup"], fieldset');
-    const by = g && g.getAttribute("aria-labelledby");
-    const l = (e.type === "radio" || e.type === "checkbox")
-      ? (by ? document.getElementById(by) : g && (g.querySelector("legend") || g.previousElementSibling))
-      : e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]');
-    return /[*✱]\\s*$/.test(((l && l.textContent) || "").trim());
+    if (g) return g;
+    const peers = peersOf(e, d);
+    if (peers.length < 2) return null;
+    let c = e.parentElement;
+    while (c && c !== d && !peers.every((p) => c.contains(p))) c = c.parentElement;
+    return c && c !== d ? c : null;
   };
+  // The question as written (with its "*" when required), or "" when there's none to find.
+  const questionOf = (e, d) => {
+    const g = groupBox(e, d);
+    if (!g) {
+      const l = e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]');
+      return ((l && l.textContent) || e.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim();
+    }
+    const by = g.getAttribute("aria-labelledby");
+    const named = by ? document.getElementById(by) : g.querySelector("legend");
+    if (named && clean(named.textContent)) return named.textContent.replace(/\\s+/g, " ").trim();
+    const choices = new Set(peersOf(e, d).map(optionOf));
+    const line = (g.innerText || "").split("\\n").map((t) => t.replace(/\\s+/g, " ").trim()).find((t) => clean(t) && !choices.has(clean(t)));
+    if (line) return line;
+    const before = g.previousElementSibling;
+    return ((before && before.textContent) || "").replace(/\\s+/g, " ").trim();
+  };
+`;
+
+/** Runs in the page: the radio or checkbox group (by name, else id) whose question is `label` (normalized). */
+const FIND = (label: string) => `(() => {
+  const d = document.querySelector('[data-testid="dialog-content"]') || document.querySelector('[role="dialog"]');
+  if (!d) return null;
+  ${CHOICE_HELPERS}
+  for (const e of d.querySelectorAll("input[type=radio], input[type=checkbox]")) {
+    if (clean(questionOf(e, d)).toLowerCase() === ${JSON.stringify(label)}) return { name: e.name || null, id: e.id || null, type: e.type };
+  }
+  return null;
+})()`;
+
+// Runs in the page: the dialog's visible questions, with what each shows now and whether it's required.
+const SCAN = `(() => {
+  const d = document.querySelector('[data-testid="dialog-content"]') || document.querySelector('[role="dialog"]');
+  if (!d) return [];
+  ${CHOICE_HELPERS}
+  const shown = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const asked = (e) => {
+    if (e.type === "radio" || e.type === "checkbox") return questionOf(e, d);
+    const l = e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]');
+    return ((l && l.textContent) || e.getAttribute("aria-label") || e.getAttribute("placeholder") || "").replace(/\\s+/g, " ").trim();
+  };
+  const labelOf = (e) => clean(asked(e));
+  // Required: marked on the input, or a "*" after its question.
+  const required = (e) => e.required || e.getAttribute("aria-required") === "true" || /[*✱]\\s*$/.test(asked(e));
   const groups = new Map();
   for (const e of d.querySelectorAll("input, select, textarea")) {
     const type = (e.getAttribute("type") || "").toLowerCase();
@@ -101,19 +135,10 @@ export function linkedinDriver(page: Page, pace: Pace = HUMAN): FormDriver {
   /** The visible field (or radio group) whose question is `label`. */
   async function field(key: string): Promise<{ kind: "radio" | "checkbox" | "select" | "text"; inputs: Locator } | null> {
     const label = key.replace(/^q:/, "");
-    const radios = dialog.locator("input[type=radio], input[type=checkbox]");
-    for (let i = 0; i < (await radios.count()); i++) {
-      const input = radios.nth(i);
-      const asks = await input.evaluate((e) => {
-        const g = e.closest('[role="radiogroup"], fieldset');
-        const by = g?.getAttribute("aria-labelledby");
-        const l = by ? document.getElementById(by) : g?.querySelector("legend") ?? g?.previousElementSibling;
-        return ((l?.textContent ?? "") || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").replace(/[*✱]\s*$/, "").trim();
-      });
-      if (norm(asks) !== label) continue;
-      const name = await input.getAttribute("name");
-      const type = (await input.getAttribute("type")) === "checkbox" ? "checkbox" : "radio";
-      return { kind: type, inputs: name ? dialog.locator(`input[name=${JSON.stringify(name)}]`) : input };
+    const choice = (await page.evaluate(FIND(label)).catch(() => null)) as { name: string | null; id: string | null; type: string } | null;
+    if (choice) {
+      const inputs = choice.name ? dialog.locator(`input[name=${JSON.stringify(choice.name)}]`) : dialog.locator(`[id=${JSON.stringify(choice.id ?? "")}]`);
+      return { kind: choice.type === "checkbox" ? "checkbox" : "radio", inputs };
     }
     const labels = dialog.locator("label");
     for (let i = 0; i < (await labels.count()); i++) {
@@ -133,6 +158,8 @@ export function linkedinDriver(page: Page, pace: Pace = HUMAN): FormDriver {
     return input.evaluate((e) => {
       const l = e.id ? document.querySelector(`label[for="${CSS.escape(e.id)}"]`) : null;
       if (l?.textContent?.trim()) return l.textContent.trim();
+      const own = e.getAttribute("aria-label")?.replace(/\s+/g, " ").trim();
+      if (own) return own;
       let c: HTMLElement | null = e as HTMLElement;
       for (let i = 0; i < 4 && c?.parentElement; i++) {
         c = c.parentElement;
@@ -144,6 +171,7 @@ export function linkedinDriver(page: Page, pace: Pace = HUMAN): FormDriver {
 
   /** Uploads the tailored resume on a page that asks for one, and picks it. */
   async function attachResume(resumePath: string): Promise<boolean> {
+    if (!resumePath) return false;
     const input = dialog.locator("input[type=file]").first();
     if ((await input.count()) === 0) return false;
     const name = resumePath.split(/[\\/]/).pop() ?? "";
@@ -161,6 +189,48 @@ export function linkedinDriver(page: Page, pace: Pace = HUMAN): FormDriver {
   async function pageErrors(): Promise<string[]> {
     const texts = await dialog.locator("[role=alert], .artdeco-inline-feedback--error").allTextContents().catch(() => []);
     return texts.map((t) => t.trim()).filter((t) => t && !/characters?$/i.test(t));
+  }
+
+  /** Fills one field; false when the field or the option isn't on the page. */
+  async function fillField(step: FillStep, resumePath: string): Promise<boolean> {
+    if (step.kind === "resume") return attachResume(resumePath);
+    if (step.kind === "decline") return false;
+    const found = await field(step.fieldName);
+    if (!found) return false;
+    await found.inputs.first().scrollIntoViewIfNeeded().catch(() => undefined);
+    await pause(page, pace);
+    if (found.kind === "radio" || found.kind === "checkbox") {
+      const wanted = step.kind === "select" ? step.value : step.kind === "check" ? null : [step.value];
+      for (let i = 0; i < (await found.inputs.count()); i++) {
+        const input = found.inputs.nth(i);
+        const text = await optionText(input);
+        if (wanted && !wanted.some((w) => norm(w) === norm(text))) continue;
+        await tick(input);
+        if (found.kind === "radio") return input.isChecked();
+      }
+      return (await found.inputs.evaluateAll((all) => all.some((e) => (e as HTMLInputElement).checked)));
+    }
+    const value = step.kind === "select" ? step.value[0] : step.kind === "check" ? null : step.value;
+    if (value == null) return false;
+    if (found.kind === "select") {
+      const picked = await found.inputs.selectOption({ label: value }).catch(() => []);
+      return picked.length > 0;
+    }
+    await typeInto(found.inputs, value, pace);
+    // A box that suggests as you type (city): the first suggestion, when one shows.
+    const suggestion = page.locator("[role=listbox] [role=option]").first();
+    if (await suggestion.waitFor({ timeout: 1500 }).then(() => true, () => false)) await suggestion.click();
+    return sameText(await found.inputs.inputValue(), value) || (await found.inputs.inputValue()).trim().length > 0;
+  }
+
+  /**
+   * Ticks a radio or checkbox. One the dialog has scrolled out of reach is clicked in the page, as a person's
+   * click on its label would; one already ticked is left (clicking a checkbox again would untick it).
+   */
+  async function tick(input: Locator): Promise<void> {
+    if (await input.isChecked().catch(() => false)) return;
+    await input.scrollIntoViewIfNeeded().catch(() => undefined);
+    await input.check({ force: true, timeout: 5000 }).catch(() => input.evaluate((e) => (e as HTMLInputElement).click()));
   }
 
   return {
@@ -191,40 +261,13 @@ export function linkedinDriver(page: Page, pace: Pace = HUMAN): FormDriver {
       return page.locator('[data-testid="dialog-content"]').first().waitFor({ state: "detached", timeout: 5000 }).then(() => true, () => false);
     },
 
-    async fill(step: FillStep, resumePath: string) {
-      if (step.kind === "resume") return attachResume(resumePath);
-      if (step.kind === "decline") return false;
-      const found = await field(step.fieldName);
-      if (!found) return false;
-      await found.inputs.first().scrollIntoViewIfNeeded().catch(() => undefined);
-      await pause(page, pace);
-      if (found.kind === "radio" || found.kind === "checkbox") {
-        const wanted = step.kind === "select" ? step.value : step.kind === "check" ? null : [step.value];
-        for (let i = 0; i < (await found.inputs.count()); i++) {
-          const input = found.inputs.nth(i);
-          const text = await optionText(input);
-          if (wanted && !wanted.some((w) => norm(w) === norm(text))) continue;
-          await input.check({ force: true });
-          if (found.kind === "radio") return input.isChecked();
-        }
-        return (await found.inputs.evaluateAll((all) => all.some((e) => (e as HTMLInputElement).checked)));
-      }
-      const value = step.kind === "select" ? step.value[0] : step.kind === "check" ? null : step.value;
-      if (value == null) return false;
-      if (found.kind === "select") {
-        const picked = await found.inputs.selectOption({ label: value }).catch(() => []);
-        return picked.length > 0;
-      }
-      await typeInto(found.inputs, value, pace);
-      // A box that suggests as you type (city): the first suggestion, when one shows.
-      const suggestion = page.locator("[role=listbox] [role=option]").first();
-      if (await suggestion.waitFor({ timeout: 1500 }).then(() => true, () => false)) await suggestion.click();
-      return sameText(await found.inputs.inputValue(), value) || (await found.inputs.inputValue()).trim().length > 0;
-    },
+    // A field that won't take a value (the page changed under it) is one it couldn't fill, not the end of the run.
+    fill: (step: FillStep, resumePath: string) => fillField(step, resumePath).catch(() => false),
 
     async nextPage(resumePath) {
-      // A resume page: your tailored resume, uploaded and picked, rather than whichever LinkedIn has.
-      if ((await dialog.locator("input[type=file]").count()) > 0 && /resume/i.test(await dialog.innerText())) await attachResume(resumePath);
+      // A resume page: your tailored resume, uploaded and picked, rather than whichever LinkedIn has; with none of
+      // ours ("" when you chose the resume on LinkedIn), LinkedIn's stays picked.
+      if (resumePath && (await dialog.locator("input[type=file]").count()) > 0 && /resume/i.test(await dialog.innerText())) await attachResume(resumePath);
       const review = button(/^review$/i);
       const next = button(/^(next|continue)$/i);
       const target = (await review.count()) > 0 ? review : next;

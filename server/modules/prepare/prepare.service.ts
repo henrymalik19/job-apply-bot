@@ -29,6 +29,7 @@ import {
 import { failInterruptedRuns, finishRun, startRun } from "@/server/modules/runs/runs.service";
 import { getUserSetting } from "@/server/modules/settings/settings.service";
 import { getApplicationResume, resumeOutdated, saveApplicationResume, tailorResume } from "@/server/modules/resumes/resumes.service";
+import { skipsTailoring, usesLinkedInResume } from "@/server/modules/apply/linkedin-resume";
 import type { PromptLesson } from "@/server/modules/matching/scoring-prompt";
 import { getMonthlySpend, recordUsage } from "@/server/modules/usage/usage.service";
 import { findAiRestriction, postingFlags, visibleText, type ApplicationFlag } from "./ai-rules";
@@ -577,6 +578,8 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       candidates = candidates.filter((c) => only.has(c.job.id));
     }
     counts.candidates = candidates.length;
+    // LinkedIn applications use the resume on LinkedIn when you chose that: nothing to tailor for them.
+    const linkedinOnFile = await usesLinkedInResume(db, userId);
 
     let made = 0;
     for (const candidate of candidates) {
@@ -608,7 +611,8 @@ export async function runPrepare(deps: PrepareDeps): Promise<{ runId: string; co
       made++;
       // The resume is made once you'd look at it: ready to review, or to apply yourself. One waiting on your
       // answers gets it when they're in (ensureResume), from your profile as it is then.
-      if (result.posting && (result.status === "queued" || result.status === "manual")) {
+      const onFile = linkedinOnFile && candidate.job.source === "linkedin";
+      if (result.posting && !onFile && (result.status === "queued" || result.status === "manual")) {
         try {
           const resume = await tailorResume({
             db, userId, call: deps.draftCall, data: ctx.profile, lessons: ctx.tailoringLessons, posting: result.posting,
@@ -940,6 +944,8 @@ export async function ensureResume(
   const { db, userId, now = new Date() } = deps;
   const app = await getApplication(db, userId, applicationId);
   if (!app) throw new ValidationError("That application is gone; reload the page.");
+  // A LinkedIn application uses the resume on LinkedIn when you chose that (made only when asked for).
+  if (!options.force && (await skipsTailoring(db, userId, app.job.source))) return null;
   const profile = options.preloaded?.profile ?? (await getProfile(db, userId));
   if (!options.force) {
     const [resume, changedAt] = await Promise.all([getApplicationResume(db, app.id), getUserSetting(db, userId, PROFILE_CHANGED_KEY)]);

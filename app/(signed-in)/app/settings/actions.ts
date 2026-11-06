@@ -5,6 +5,14 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { APPLY_ATS, setPlatformMode } from "@/server/modules/apply/apply.service";
 import { ValidationError } from "@/server/core/errors";
 import { setPublicHandle, setPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
+import { setLinkedInResume } from "@/server/modules/apply/linkedin-resume";
+
+/** Chooses the resume LinkedIn applications send (field `onFile` = "true": the one on LinkedIn; else tailored). */
+export async function setLinkedInResumeAction(formData: FormData) {
+  const { db, owner } = await ownerContext();
+  await setLinkedInResume(db, owner.id, formData.get("onFile") === "true");
+  refresh();
+}
 
 /** Switches an apply platform between supervised and auto (fields `ats`, `mode`). */
 export async function setPlatformModeAction(formData: FormData) {

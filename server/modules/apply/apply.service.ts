@@ -18,11 +18,14 @@ import {
 } from "./apply.repository";
 import { asPickerDate, buildFillPlan, changedFields, sameText, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
+import { usesLinkedInResume } from "./linkedin-resume";
 import { applicationHref, notify } from "@/server/modules/notifications/in-app";
 import { LIMIT_CAUSE, recordLimitReached } from "@/server/modules/companies/apply-limits";
 
 /** ATSs the runner can fill (by field name). */
 export const APPLY_ATS = ["greenhouse", "ashby", "lever", "linkedin"] as const;
+/** The most questions asked of Claude at once (the app's map-fields limit). */
+const MAP_BATCH = 40;
 /** The most pages a form in pages (LinkedIn Easy Apply) is followed through. */
 const MAX_PAGES = 12;
 
@@ -504,12 +507,15 @@ async function walkPages(deps: ApplyDeps, app: ApplyJob, steps: FillStep[], resu
       }
       if (q.value.length === 0 ? q.required : !CONTACT.test(q.label)) toAsk.push(q);
     }
-    const answers = toAsk.length && deps.mapFields
-      ? await deps.mapFields({ company: app.job.company_name, title: app.job.title, jobId: app.job_id, fields: toAsk.map(({ key, label, kind, options }) => ({ key, label, kind, options })) }).catch((err) => {
-          deps.log(`${app.id}: couldn't ask Claude about the form's questions: ${(err as Error).message}`);
-          return [] as FieldAnswer[];
-        })
-      : [];
+    // Asked in batches the app takes (a long page of questions is several asks).
+    const answers: FieldAnswer[] = [];
+    for (let at = 0; deps.mapFields && at < toAsk.length; at += MAP_BATCH) {
+      const fields = toAsk.slice(at, at + MAP_BATCH).map(({ key, label, kind, options }) => ({ key, label, kind, options }));
+      answers.push(...(await deps.mapFields({ company: app.job.company_name, title: app.job.title, jobId: app.job_id, fields }).catch((err) => {
+        deps.log(`${app.id}: couldn't ask Claude about the form's questions: ${(err as Error).message}`);
+        return [] as FieldAnswer[];
+      })));
+    }
     for (const q of toAsk) {
       const answer = answers.find((a) => a.key === q.key)?.value ?? [];
       if (q.value.length) {
@@ -579,7 +585,10 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   let steps = [...ordered.filter((s) => s.kind === "resume"), ...ordered.filter((s) => s.kind !== "resume")];
   let planSteps = plan.steps;
   if (plan.blockers.length) return handBack(deps, app, `Can't fill the form: ${plan.blockers.join("; ")}.`);
-  if (!app.resume?.pdf_path) return handBack(deps, app, "No resume PDF was prepared for this application.");
+  // On LinkedIn with "use the resume on LinkedIn" on, there's none to attach: LinkedIn's own stays picked
+  // (one you had made for this job anyway is sent).
+  const onFile = !app.resume?.pdf_path && app.job.source === "linkedin" && (await usesLinkedInResume(db, userId));
+  if (!onFile && !app.resume?.pdf_path) return handBack(deps, app, "No resume PDF was prepared for this application.");
 
   const platform = await getPlatform(db, userId, app.job.source);
   // A failure on a trusted platform puts it back under supervision.
@@ -590,7 +599,8 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
 
   await setApplyStep(db, app.id, "filling", `Filling the form for ${where}.`);
   log(`${app.id}: filling ${where}`);
-  const resumePath = await deps.saveResume(await downloadResume(db, app.resume.pdf_path), `${deps.fullName} Resume.pdf`);
+  // "" is no file of ours: the form keeps the resume it has.
+  const resumePath = !app.resume?.pdf_path ? "" : await deps.saveResume(await downloadResume(db, app.resume.pdf_path), `${deps.fullName} Resume.pdf`);
 
   if ((await driver.open(url)) === "no_form") return handBack(deps, app, "The posting has no application form (it may have closed).");
   // A date picker ("earliest start date") takes a date: "immediately available" is typed as today's date.
@@ -654,7 +664,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     applicationId: app.id,
     kind: "screenshot",
     png: await driver.screenshot(),
-    detail: { answers, skipped, ai_filled: extra.ai.map((e) => ({ label: e.label, value: e.value })), left_for_you: left, resume_sha256: app.resume.sha256 } as Json,
+    detail: { answers, skipped, ai_filled: extra.ai.map((e) => ({ label: e.label, value: e.value })), left_for_you: left, resume_sha256: app.resume?.sha256 ?? null, resume_on_linkedin: onFile } as Json,
   });
 
   if (platform.mode === "auto" && !yours && !hold) {

@@ -17,10 +17,10 @@ import type { QuestionToAsk } from "./apply.service";
 
 /** One question as the runner sends it. */
 export const questionToAskSchema = z.object({
-  key: z.string().min(1).max(300),
-  label: z.string().min(1).max(1000),
+  key: z.string().min(1).max(2100),
+  label: z.string().min(1).max(2000),
   kind: z.enum(["text", "textarea", "select", "multiselect", "combobox", "agreement"]),
-  options: z.array(z.string().max(500)).max(200),
+  options: z.array(z.string().max(1000)).max(200),
   required: z.boolean(),
   answer: z.array(z.string().max(5000)).max(50).optional(),
   conflict: z.object({ form: z.string().max(5000), yours: z.string().max(5000) }).optional(),

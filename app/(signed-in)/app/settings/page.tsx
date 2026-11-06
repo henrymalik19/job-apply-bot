@@ -8,7 +8,8 @@ import { ownerContext } from "@/server/auth/require-owner";
 import { loadPlatforms } from "@/server/modules/apply/apply.service";
 import { getPublicHandle, isPublicPageEnabled } from "@/server/modules/public-page/public-page.service";
 import { TONE_BADGE } from "../../_components/status";
-import { setPlatformModeAction, setPublicPageAction } from "./actions";
+import { setLinkedInResumeAction, setPlatformModeAction, setPublicPageAction } from "./actions";
+import { usesLinkedInResume } from "@/server/modules/apply/linkedin-resume";
 import { FormSkeleton } from "../../_components/skeletons";
 import { HandleForm } from "./handle-form";
 import { cardsOnPhone } from "@/app/(signed-in)/_components/data-table";
@@ -124,6 +125,34 @@ async function ApplyRunnerSetting() {
   );
 }
 
+/** Which resume LinkedIn applications send: one tailored to each job (default), or the one on LinkedIn. */
+async function LinkedInResumeSetting() {
+  const { db, owner } = await ownerContext();
+  const onFile = await usesLinkedInResume(db, owner.id);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          LinkedIn resume <Badge variant="outline">{onFile ? "The one on LinkedIn" : "Tailored to each job"}</Badge>
+        </CardTitle>
+        <CardDescription>
+          {onFile
+            ? "LinkedIn applications send the resume you keep on LinkedIn (its most recent), and aren't tailored: no wait and no Claude cost. You can still make a tailored one for a job on its page."
+            : "Each LinkedIn application gets a resume tailored to the job, uploaded on the form's resume page (LinkedIn keeps the ones you upload)."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form action={setLinkedInResumeAction}>
+          <input type="hidden" name="onFile" value={onFile ? "false" : "true"} />
+          <Button type="submit" size="sm" variant="outline">
+            {onFile ? "Tailor a resume for each job" : "Use the resume on LinkedIn"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Settings: account-level switches (public status page, apply runner trust). */
 export default function SettingsPage() {
   return (
@@ -132,6 +161,7 @@ export default function SettingsPage() {
       <Suspense fallback={<FormSkeleton cards={2} />}>
         <PublicPageSetting />
         <ApplyRunnerSetting />
+        <LinkedInResumeSetting />
       </Suspense>
     </main>
   );

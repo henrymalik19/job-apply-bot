@@ -1,4 +1,5 @@
 import { ArrowLeft, ChevronRight, ExternalLink, RefreshCw, TriangleAlert } from "lucide-react";
+import { skipsTailoring } from "@/server/modules/apply/linkedin-resume";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -221,7 +222,18 @@ function NextStep({ app, blockers, flags, skip, limit }: {
   );
 }
 
-function ResumeCard({ resume, url, stale, applicationId, status }: { resume: Resume | null; url: string | null; stale: boolean; applicationId: string; status: string }) {
+function ResumeCard({ resume, url, stale, applicationId, status, onLinkedIn = false }: { resume: Resume | null; url: string | null; stale: boolean; applicationId: string; status: string; onLinkedIn?: boolean }) {
+  if (onLinkedIn) {
+    return (
+      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+        <p>
+          Uses the resume on your LinkedIn profile (you chose that in <Link href="/app/settings" className="underline">Settings</Link>), so
+          none is tailored. Make one to send this job a tailored resume instead.
+        </p>
+        <RebuildResumeButton applicationId={applicationId} />
+      </div>
+    );
+  }
   // Made once every required question is answered, from your profile as it is then.
   if (status === "needs_input") {
     return <p className="text-sm text-muted-foreground">The resume is made once every required question is answered, from your profile as it is then.</p>;
@@ -387,6 +399,8 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
   // Only while it can still be sent: before submitting, and not while the runner is filling it.
   const sendable = ["queued", "manual"].includes(app.status) || (app.status === "approved" && !app.apply_step);
   const stale = !!resume && sendable && (await isResumeOutdated(db, owner.id, resume).catch(() => false));
+  // A LinkedIn application using the resume on LinkedIn (Settings) has none of its own.
+  const onLinkedIn = !resume && (await skipsTailoring(db, owner.id, app.job.source).catch(() => false));
   const now = new Date();
   const blockers = blockingQuestions(app);
   const flags = (app.flags as Flag[]) ?? [];
@@ -518,6 +532,7 @@ async function ApplicationDetail({ params, searchParams }: { params: Params; sea
             applicationId={app.id}
             status={app.status}
             stale={stale}
+            onLinkedIn={onLinkedIn}
           />
           {runs > 0 && (
             <Link href={`/admin/runs?application=${app.id}`} className="self-start text-xs text-muted-foreground hover:text-foreground hover:underline">
