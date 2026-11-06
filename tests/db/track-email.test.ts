@@ -188,6 +188,18 @@ describe("track_email", () => {
     expect(await linkEmail(db, userId, row!.id, apps.odd, "rejection")).toBe("rejected");
     expect((await listUnsortedEmails(db, userId, tracked)).map((e) => e.id)).not.toContain(row!.id);
     expect((await listApplicationEmails(db, userId, apps.odd)).map((e) => [e.id, e.kind])).toEqual([[row!.id, "rejection"]]);
+
+    // The next run files it out of the inbox, since linking in the app can't.
+    moved.length = 0;
+    const { counts } = await runTrackEmail(deps());
+    expect(counts.filed_late).toBe(1);
+    expect(moved).toEqual([`<${tag}-odd@mail.test> -> ${REJECTIONS_FOLDER}`]);
+    const { data: after } = await db.from("emails").select("archived_at").eq("id", row!.id).single();
+    expect(after!.archived_at).not.toBeNull();
+    // And isn't looked for again.
+    moved.length = 0;
+    expect((await runTrackEmail(deps())).counts.filed_late).toBe(0);
+    expect(moved).toEqual([]);
   });
 });
 

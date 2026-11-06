@@ -105,6 +105,8 @@ export type TrackCounts = {
   marked_read?: number;
   /** Recent emails the rules once read wrongly or couldn't place, corrected. */
   rechecked?: number;
+  /** Receipts and rejections tied to an application but left in the inbox, filed this run. */
+  filed_late?: number;
 };
 
 /**
@@ -285,6 +287,12 @@ export async function runTrackEmail(deps: TrackDeps): Promise<{ counts: TrackCou
       log(`track_email: recheck failed: ${err instanceof Error ? err.message : String(err)}`);
       return 0;
     });
+    // Receipts and rejections tied to an application but still in the inbox (linked by you in the app,
+    // which can't reach the inbox, or sorted before the folders existed): filed now.
+    counts.filed_late = await fileLeftover(db, userId, now(), config, moveMail, markMailRead).catch((err) => {
+      log(`track_email: filing left-over mail failed: ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
+    });
     let spent = budget.spent;
 
     for (const mail of mails) {
@@ -410,6 +418,49 @@ export async function listUnmatchedEmails(db: Db, userId: string, now = new Date
 }
 
 const DISMISSED = "not about an application (you said)";
+
+/** How far back left-over receipts and rejections are filed, and how many a run files. */
+const LEFTOVER_DAYS = 30;
+const LEFTOVER_PER_RUN = 25;
+
+/**
+ * Files receipts and rejections tied to an application that are still in the inbox: ones you linked in the
+ * app (which can't reach the inbox), and ones sorted before the folders existed. One no longer in the inbox
+ * (you moved or deleted it) is marked done too, so it isn't looked for again.
+ *
+ * @returns How many were moved into a folder.
+ */
+async function fileLeftover(
+  db: Db,
+  userId: string,
+  now: Date,
+  config: InboxConfig,
+  moveMail: typeof moveToFolder,
+  markMailRead: typeof markRead,
+): Promise<number> {
+  const rows = unwrap(
+    await db
+      .from("emails")
+      .select("id, message_id, classification")
+      .eq("user_id", userId)
+      .not("application_id", "is", null)
+      .is("archived_at", null)
+      .in("classification", Object.keys(FILE_IN))
+      .gte("received_at", new Date(now.getTime() - LEFTOVER_DAYS * 86_400_000).toISOString())
+      .order("received_at", { ascending: false })
+      .limit(LEFTOVER_PER_RUN),
+    "list left-over mail",
+  );
+  let filed = 0;
+  for (const r of rows) {
+    const folder = FILE_IN[r.classification as EmailKind]!;
+    // A failure to reach the inbox throws, and is tried again next run.
+    await markMailRead(config, r.message_id).catch(() => false);
+    if (await moveMail(config, r.message_id, folder)) filed++;
+    check(await db.from("emails").update({ archived_at: now.toISOString() }).eq("id", r.id), "file left-over email");
+  }
+  return filed;
+}
 const toView = (r: { id: string; received_at: string; from_addr: string | null; subject: string | null; snippet: string | null; classification: string | null; reason: string | null }): UnmatchedEmail => ({
   id: r.id,
   receivedAt: r.received_at,

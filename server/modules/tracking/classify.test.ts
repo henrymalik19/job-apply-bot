@@ -63,6 +63,17 @@ describe("matchEmail", () => {
     expect(matchEmail(onepay, [...apps, app("two", "Acme", "Software Engineer, Credit Card")])).toMatchObject({ app: null });
   });
 
+  it("tells two applications at one company apart by when you applied, when the email names no title", () => {
+    const receipt = { ...mail("Thanks for Applying to Scribe!", "Thanks so much for applying to Scribe!", "no-reply@ashbyhq.com"), receivedAt: new Date("2026-11-05T19:44:27Z") };
+    const earlier = app("fs", "Scribe", "Senior Full-Stack Engineer", "2026-11-05T14:42:04Z");
+    const backend = app("be", "Scribe", "Senior Backend Engineer", "2026-11-05T19:44:25Z");
+    expect(matchEmail(receipt, [earlier, backend])).toMatchObject({ app: { id: "be" }, confidence: 0.85 });
+    // Both sent minutes before: left to you.
+    expect(matchEmail(receipt, [{ ...earlier, submittedAt: "2026-11-05T19:40:00Z" }, backend]).confidence).toBeLessThan(0.8);
+    // Neither just before (an email days later): left to you.
+    expect(matchEmail({ ...receipt, receivedAt: new Date("2026-11-08T10:00:00Z") }, [earlier, backend]).confidence).toBeLessThan(0.8);
+  });
+
   it("matches by a company's other name", () => {
     const apps = [{ ...app("one", "Oneapp", "Backend Engineer"), otherNames: ["Onepay"] }];
     expect(matchEmail({ ...mail("Thanks for applying to Onepay", "...", "no-reply@ashbyhq.com"), receivedAt: at }, apps)).toMatchObject({ app: { id: "one" }, confidence: 0.9 });

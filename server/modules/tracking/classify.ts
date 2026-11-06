@@ -113,6 +113,10 @@ export const MATCH_THRESHOLD = 0.8;
 
 /** Days after applying an email naming just the job title (not the company) is matched to it. */
 const TITLE_MATCH_DAYS = 3;
+/** An email this soon after one application at a company (and no other there) is about that one. */
+const RECEIPT_WINDOW_MS = 15 * 60_000;
+/** Clocks differ a little: an email stamped this much before the submission still counts. */
+const RECEIPT_SLACK_MS = 2 * 60_000;
 
 const SUFFIX = /\b(inc|llc|ltd|corp|corporation|co|company|technologies|technology|labs|group|holdings|plc|gmbh)\b\.?/g;
 // "&" and "and" are the same in a company name ("Hims & Hers", "Hims and Hers"), so "and" is dropped.
@@ -161,5 +165,13 @@ export function matchEmail(mail: MailText & { receivedAt: Date }, apps: TrackedA
     .sort((x, y) => y.score - x.score);
   const [best, next] = scored;
   if (best.score >= 0.6 && best.score > next.score) return { app: best.a, confidence: 0.85, reason: `names ${best.a.company} and the title "${best.a.title}"` };
+  // No title (Scribe's receipt): one you applied to in the minutes before it arrived, while none of the
+  // others was, is the one it's about; a receipt comes within seconds of submitting.
+  const recent = named.filter((a) => {
+    if (!a.submittedAt) return false;
+    const age = mail.receivedAt.getTime() - new Date(a.submittedAt).getTime();
+    return age > -RECEIPT_SLACK_MS && age < RECEIPT_WINDOW_MS;
+  });
+  if (recent.length === 1) return { app: recent[0], confidence: 0.85, reason: `names ${recent[0].company}; came just after you applied for "${recent[0].title}"` };
   return { app: best.a, confidence: 0.5, reason: `names ${best.a.company}, but you applied there ${named.length} times` };
 }
