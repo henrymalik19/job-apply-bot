@@ -16,7 +16,7 @@ import {
   type ApplyJob,
   type Platform,
 } from "./apply.repository";
-import { buildFillPlan, changedFields, type FillStep } from "./fill-plan";
+import { asPickerDate, buildFillPlan, changedFields, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
 import { applicationHref, notify } from "@/server/modules/notifications/in-app";
 import { LIMIT_CAUSE, recordLimitReached } from "@/server/modules/companies/apply-limits";
@@ -43,6 +43,8 @@ export interface FormDriver {
   values(steps: FillStep[]): Promise<Record<string, string>>;
   /** Whether the form has this field at all (for the run log: "not on this form" vs couldn't fill). */
   has?(fieldName: string): Promise<boolean>;
+  /** Whether this field is a date picker: its answer is typed as a date (MM/DD/YYYY). */
+  isDate?(fieldName: string): Promise<boolean>;
   /**
    * The visible required fields still empty, other than `known` (the fields the runner filled):
    * sections it didn't prepare for. Each key is what `fill` takes as a field name.
@@ -257,6 +259,18 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
   return { timedOut: true as const };
 }
 
+/** Text answers to the form's date pickers, as the date to type; one that names no date is left as it is (and won't fill). */
+async function asDates(driver: FormDriver, steps: FillStep[], now: Date): Promise<Map<string, FillStep>> {
+  const out = new Map<string, FillStep>();
+  if (!driver.isDate) return out;
+  for (const step of steps) {
+    if (step.kind !== "text" || !(await driver.isDate(step.fieldName).catch(() => false))) continue;
+    const value = asPickerDate(step.value, now);
+    if (value && value !== step.value) out.set(step.fieldName, { ...step, value });
+  }
+  return out;
+}
+
 /**
  * Fills and submits one approved application. An unexpected error (the page
  * changed, Chrome crashed) hands it back too, so nothing is left half-done.
@@ -398,7 +412,8 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   // Extras go first (Country before the phone it formats) and aren't checked for your edits.
   // The resume goes first: some forms (Lever) read it and pre-fill other fields, which the rest then overwrite.
   const ordered = [...(deps.extraSteps ?? []).filter((s) => !known.has(s.fieldName)), ...plan.steps];
-  const steps = [...ordered.filter((s) => s.kind === "resume"), ...ordered.filter((s) => s.kind !== "resume")];
+  let steps = [...ordered.filter((s) => s.kind === "resume"), ...ordered.filter((s) => s.kind !== "resume")];
+  let planSteps = plan.steps;
   if (plan.blockers.length) return handBack(deps, app, `Can't fill the form: ${plan.blockers.join("; ")}.`);
   if (!app.resume?.pdf_path) return handBack(deps, app, "No resume PDF was prepared for this application.");
 
@@ -414,6 +429,14 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const resumePath = await deps.saveResume(await downloadResume(db, app.resume.pdf_path), `${deps.fullName} Resume.pdf`);
 
   if ((await driver.open(url)) === "no_form") return handBack(deps, app, "The posting has no application form (it may have closed).");
+  // A date picker ("earliest start date") takes a date: "immediately available" is typed as today's date.
+  const dated = await asDates(driver, steps, new Date());
+  if (dated.size) {
+    const swap = (x: FillStep) => dated.get(x.fieldName) ?? x;
+    steps = steps.map(swap);
+    planSteps = planSteps.map(swap);
+    for (const d of dated.values()) if (d.kind === "text") log(`${app.id}: "${d.label}" is a date picker; typed as ${d.value}`);
+  }
   const missed: string[] = [];
   // Optional questions it couldn't fill; extras are left out, since most forms lack some of them.
   const skipped: string[] = [];
@@ -439,7 +462,7 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   extra.learned.unshift(...recovered.learned);
   // A prepared field filled with another value is checked as that value, not the prepared one.
   const other = new Set([...recovered.ai, ...recovered.learned].map((e) => e.step.fieldName));
-  const prepared = plan.steps.filter((s) => !other.has(s.fieldName));
+  const prepared = planSteps.filter((s) => !other.has(s.fieldName));
   const list = (labels: string[]) => labels.map((m) => `"${m}"`).join(", ");
   const byAi = extra.ai.length ? ` Filled by AI from your profile, check them: ${list(extra.ai.map((e) => e.label))}.` : "";
   // Required fields it tried and couldn't fill (a box that wouldn't take the value) are left to you too,

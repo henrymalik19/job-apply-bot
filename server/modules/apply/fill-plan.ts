@@ -93,6 +93,43 @@ export function buildFillPlan(questions: PlanQuestion[]): FillPlan {
   return { steps, blockers, yours };
 }
 
+const NUMBERS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, eight: 8, ten: 10 };
+const pad = (n: number) => String(n).padStart(2, "0");
+/** A date as date pickers take it typed: MM/DD/YYYY. */
+export const pickerDate = (d: Date) => `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+
+/**
+ * An answer for a date picker ("earliest start date"), typed as MM/DD/YYYY: a date as it is, or when you
+ * could start counted from today ("immediately available" is today, "2 weeks' notice" two weeks out).
+ * A date already past counts as today. Null when it names no date.
+ */
+export function asPickerDate(answer: string, now: Date): string | null {
+  const s = answer.trim().toLowerCase();
+  if (!s) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const later = (d: Date) => pickerDate(d < today ? today : d);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return later(new Date(+iso[1], +iso[2] - 1, +iso[3]));
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if (us) return later(new Date(+us[3], +us[1] - 1, +us[2]));
+  if (/\b(immediate(ly)?|asap|right away|now|anytime|any time)\b/.test(s)) return pickerDate(today);
+  const period = /\b(\d+|an?|one|two|three|four|five|six|eight|ten)\s*(?:-\s*)?(day|week|month)s?\b/.exec(s);
+  if (period) {
+    const n = /^\d+$/.test(period[1]) ? +period[1] : NUMBERS[period[1]];
+    const d = new Date(today);
+    if (period[2] === "day") d.setDate(d.getDate() + n);
+    else if (period[2] === "week") d.setDate(d.getDate() + 7 * n);
+    else d.setMonth(d.getMonth() + n);
+    return pickerDate(d);
+  }
+  // "November 20, 2026" and the like.
+  if (/[a-z]{3,}\s+\d{1,2},?\s+\d{4}/.test(s)) {
+    const t = Date.parse(answer);
+    if (!Number.isNaN(t)) return later(new Date(t));
+  }
+  return null;
+}
+
 /**
  * Whether a text field shows what was typed. Phone-like values count when the
  * digits match, since forms reformat them ("7045550100" -> "(704) 555-0100").

@@ -98,6 +98,11 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
     return false;
   }
 
+  /** Whether a box holds a date picker. */
+  async function isDate(container: Locator): Promise<boolean> {
+    return (await container.locator(".react-datepicker-wrapper, input.ashby-application-form-input-date, input[type=date]").count()) > 0;
+  }
+
   /** Attaches a file and waits for its name to show in the box, retrying once the uploader is ready. */
   async function attach(container: Locator, filePath: string): Promise<boolean> {
     const name = filePath.split(/[\\/]/).pop() ?? "";
@@ -138,9 +143,18 @@ export function ashbyDriver(page: Page, formTimeoutMs = 15_000, pace: Pace = HUM
       if ((await container.locator("[role=combobox]").count()) > 0) return pick(container, step.value);
       const input = container.locator("input:not([type=radio]):not([type=checkbox]):not([type=file]), textarea").first();
       if ((await input.count()) === 0) return false;
+      if (await isDate(container)) {
+        // A date picker takes a date typed as MM/DD/YYYY, then Enter; anything else it drops.
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(step.value)) return false;
+        await typeInto(input, step.value, pace);
+        await input.press("Enter");
+        return (await input.inputValue()) === step.value;
+      }
       await typeInto(input, step.value, pace);
       return sameText(await input.inputValue(), step.value);
     },
+
+    isDate: (fieldName) => isDate(box(fieldName)),
 
     async has(fieldName) {
       return (await box(fieldName).count().catch(() => 0)) > 0;

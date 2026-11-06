@@ -62,6 +62,12 @@ describe.skipIf(!browser)("ashbyDriver", () => {
     expect(await driver.fill(step({ kind: "text", fieldName: "_systemfield_location", value: "Nowhere, Mars" }), resume)).toBe(false);
     expect(await driver.fill(step({ kind: "text", fieldName: "q-missing", value: "x" }), resume)).toBe(false);
     expect(await driver.has!("q-why")).toBe(true);
+    // A date picker takes a date, never words.
+    expect(await driver.isDate!("q-start")).toBe(true);
+    expect(await driver.isDate!("q-why")).toBe(false);
+    expect(await driver.fill(step({ kind: "text", fieldName: "q-start", value: "immediately available" }), resume)).toBe(false);
+    expect(await driver.fill(step({ kind: "text", fieldName: "q-start", value: "11/20/2026" }), resume)).toBe(true);
+    expect(await page.inputValue(".ashby-application-form-input-date")).toBe("11/20/2026");
     expect(await driver.has!("q-missing")).toBe(false);
   }, 30_000);
 

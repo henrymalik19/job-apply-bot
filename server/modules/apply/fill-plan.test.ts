@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFillPlan, changedFields, educationSteps, employmentSteps, greenhouseDegree, greenhouseExtras, samePlace, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
+import { asPickerDate, buildFillPlan, changedFields, educationSteps, employmentSteps, greenhouseDegree, greenhouseExtras, samePlace, sameText, type FillStep, type PlanQuestion } from "./fill-plan";
 
 const q = (over: Partial<PlanQuestion>): PlanQuestion => ({
   question: "Q",
@@ -186,5 +186,28 @@ describe("greenhouseExtras", () => {
     ];
     expect(changedFields(steps, { loc: "Atlanta, Georgia, United States", phone: "(704) 555-0100" })).toEqual([]);
     expect(changedFields(steps, { loc: "Atlanta, Texas, United States", phone: "(704) 555-0100" })).toEqual(["Location"]);
+  });
+});
+
+describe("asPickerDate", () => {
+  const now = new Date(2026, 10, 6, 15, 30);
+  it("turns when you could start into a date to type", () => {
+    expect(asPickerDate("immediately available", now)).toBe("11/06/2026");
+    expect(asPickerDate("ASAP", now)).toBe("11/06/2026");
+    expect(asPickerDate("2 weeks", now)).toBe("11/20/2026");
+    expect(asPickerDate("Two weeks notice", now)).toBe("11/20/2026");
+    expect(asPickerDate("30 days", now)).toBe("12/06/2026");
+    expect(asPickerDate("1 month", now)).toBe("12/06/2026");
+  });
+  it("keeps a date, moving one already past to today", () => {
+    expect(asPickerDate("2026-12-01", now)).toBe("12/01/2026");
+    expect(asPickerDate("1/5/2027", now)).toBe("01/05/2027");
+    expect(asPickerDate("December 1, 2026", now)).toBe("12/01/2026");
+    expect(asPickerDate("2026-01-01", now)).toBe("11/06/2026");
+  });
+  it("names no date for anything else", () => {
+    expect(asPickerDate("Yes", now)).toBeNull();
+    expect(asPickerDate("", now)).toBeNull();
+    expect(asPickerDate("Negotiable", now)).toBeNull();
   });
 });
