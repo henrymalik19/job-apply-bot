@@ -8,6 +8,8 @@
 // Chrome uses its own profile in data/apply-chrome, so sign-ins you make there stay.
 // Chrome opens when there's an application to fill and closes again once nothing
 // is left open for you (a submitted tab closes 10 seconds after the thank-you page).
+// Forms are filled one at a time, each in its own tab; a filled one waits there for you
+// while the next is filled, up to MAX_OPEN at once, so one you haven't got to blocks nothing.
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +34,8 @@ import { parseApplyEnv } from "@/shared/env";
 const DATA = path.resolve("data");
 const SESSION_FILE = path.join(DATA, "apply-session.json");
 const POLL_MS = 20_000;
+/** How many applications can be open at once: one filling, the rest filled and waiting for you. */
+const MAX_OPEN = 4;
 /** How long a submitted tab stays open, so the thank-you page can be seen. */
 const SUBMITTED_TAB_MS = 10_000;
 
@@ -218,40 +222,95 @@ async function main() {
   log(`apply runner started for ${name}; watching for approved ${APPLY_ATS.join(", ")} applications (Ctrl+C to stop)`);
   log(inbox ? `emailed security codes are read from ${inboxUser}` : "emailed security codes: you type them (no job inbox address or JOB_INBOX_PASSWORD)");
 
+  // One form is filled at a time: a turn ends once the form is filled and waiting for you.
+  let turns: Promise<void> = Promise.resolve();
+  const fillTurn = (): Promise<() => void> => {
+    let end!: () => void;
+    const ended = new Promise<void>((r) => (end = r));
+    const start = turns.then(() => end);
+    turns = turns.then(() => ended);
+    return start;
+  };
+  /** Applications open in a tab (filling, or filled and waiting for you), by id. */
+  const open = new Set<string>();
+  /** Those filled and waiting for you, with their tabs. */
+  const waiting = new Map<string, Page>();
+  /** The tab of a waiting form you're looking at, if any. */
+  const frontTab = async (): Promise<Page | null> => {
+    for (const p of waiting.values()) {
+      if (p.isClosed()) continue;
+      if (await p.evaluate(() => document.visibilityState === "visible").catch(() => false)) return p;
+    }
+    return null;
+  };
+
+  /** Fills one application in a new tab and waits there for it to be submitted (or handed back). */
+  const runOne = async (app: Awaited<ReturnType<typeof listReadyToApply>>[number], endTurn: () => void) => {
+    let page: Page | null = null;
+    try {
+      // A new tab comes to the front; the form you're on is put back in front, so it isn't taken away.
+      const looking = await frontTab();
+      page = await newTab();
+      if (looking) await looking.bringToFront().catch(() => undefined);
+      const tab = page;
+      // One driver per job site; Greenhouse forms also get the fields outside their question list.
+      const greenhouse = app.job.source === "greenhouse";
+      const driver = app.job.source === "ashby" ? ashbyDriver(tab) : app.job.source === "lever" ? leverDriver(tab) : greenhouseDriver(tab);
+      const record = await recordRun(path.join(DATA, "apply-debug"), app.id, tab, driver);
+      const both = (line: string) => {
+        log(line);
+        record.log(line);
+      };
+      // While another form waits for you, this one doesn't jump in front of it.
+      const others = () => [...waiting.keys()].some((id) => id !== app.id);
+      const recorded = { ...record.driver, focus: async () => (others() ? undefined : record.driver.focus()) };
+      const filled = () => {
+        waiting.set(app.id, tab);
+        endTurn();
+      };
+      let outcome = "error";
+      let closeTab = false;
+      try {
+        const result = await applyOne({ db, userId, driver: recorded, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, mapFields, alternatives, saveResume, fullName: name, log: both, filled, fillTurn }, app);
+        outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
+        // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
+        // ones stay open for you, except a form nobody submitted in time, reopened from the app.
+        if (result.result === "submitted") setTimeout(() => void tab.close().catch(() => undefined), SUBMITTED_TAB_MS);
+        else if (result.closeTab) closeTab = true;
+      } catch (err) {
+        both(`${app.id}: failed: ${(err as Error).message}`);
+      }
+      waiting.delete(app.id);
+      const dir = await record.finish(outcome);
+      log(`${app.id}: run record in ${path.relative(process.cwd(), dir)}`);
+      // Also to the app, so the application's page shows it (and anyone helping you can see it).
+      await uploadRun(dir, app, record.startedAt, outcome);
+      // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
+      if (closeTab) await tab.close().catch(() => undefined);
+    } catch (err) {
+      log(`${app.id}: failed: ${(err as Error).message}`);
+    } finally {
+      waiting.delete(app.id);
+      open.delete(app.id);
+      endTurn();
+    }
+  };
+
   while (!stopping) {
     try {
-      const ready = await listReadyToApply(db, userId, APPLY_ATS);
+      const ready = (await listReadyToApply(db, userId, APPLY_ATS)).filter((a) => !open.has(a.id));
       for (const app of ready) {
-        if (stopping) break;
-        const page = await newTab();
-        // One driver per job site; Greenhouse forms also get the fields outside their question list.
-        const greenhouse = app.job.source === "greenhouse";
-        const driver = app.job.source === "ashby" ? ashbyDriver(page) : app.job.source === "lever" ? leverDriver(page) : greenhouseDriver(page);
-        const record = await recordRun(path.join(DATA, "apply-debug"), app.id, page, driver);
-        const both = (line: string) => {
-          log(line);
-          record.log(line);
-        };
-        let outcome = "error";
-        let closeTab = false;
-        try {
-          const result = await applyOne({ db, userId, driver: record.driver, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, mapFields, alternatives, saveResume, fullName: name, log: both }, app);
-          outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
-          // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
-          // ones stay open for you, except a form nobody submitted in time, reopened from the app.
-          if (result.result === "submitted") setTimeout(() => void page.close().catch(() => undefined), SUBMITTED_TAB_MS);
-          else if (result.closeTab) closeTab = true;
-        } catch (err) {
-          both(`${app.id}: failed: ${(err as Error).message}`);
+        if (stopping || open.size >= MAX_OPEN) break;
+        // Waits for the form being filled to be filled; the ones waiting for you don't hold this up.
+        const endTurn = await fillTurn();
+        if (stopping) {
+          endTurn();
+          break;
         }
-        const dir = await record.finish(outcome);
-        log(`${app.id}: run record in ${path.relative(process.cwd(), dir)}`);
-        // Also to the app, so the application's page shows it (and anyone helping you can see it).
-        await uploadRun(dir, app, record.startedAt, outcome);
-        // Closed after the record is finished, so its last screenshot and the form's HTML are kept.
-        if (closeTab) await page.close().catch(() => undefined);
+        open.add(app.id);
+        void runOne(app, endTurn);
       }
-      if (ready.length === 0) await closeIfIdle();
+      if (ready.length === 0 && open.size === 0) await closeIfIdle();
     } catch (err) {
       log(`poll failed: ${(err as Error).message}`);
     }

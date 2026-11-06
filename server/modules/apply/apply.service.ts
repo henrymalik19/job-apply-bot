@@ -104,6 +104,16 @@ export type ApplyDeps = {
   sleep?: (ms: number) => Promise<void>;
   /** How long to wait before submitting again after the site refused a submission (default 2 minutes). */
   resubmitWaitMs?: number;
+  /**
+   * Called once the form is filled and waiting for you (or the run ended before that), so the runner
+   * can fill the next application in another tab meanwhile. Called at most once.
+   */
+  filled?: () => void;
+  /**
+   * Waits for a turn to fill the form again (after the site refused it) while another tab may be
+   * filling, and returns the call that ends the turn. Without it, it fills right away.
+   */
+  fillTurn?: () => Promise<() => void>;
 };
 
 /** How one run ended. */
@@ -254,12 +264,21 @@ async function waitForConfirmation(deps: ApplyDeps, steps: FillStep[], app: Appl
  * @returns Submitted (with the fields the user changed), or handed back with the reason.
  */
 export async function applyOne(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
+  let isFilled = false;
+  const filled = () => {
+    if (isFilled) return;
+    isFilled = true;
+    deps.filled?.();
+  };
   try {
-    return await run(deps, app);
+    return await run({ ...deps, filled }, app);
   } catch (err) {
     // The note keeps the first line; the terminal gets the whole trace to debug from.
     deps.log(`${app.id}: error: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     return handBack(deps, app, `The apply runner hit an error: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`);
+  } finally {
+    // Handed back or failed before it was filled: the next one can be filled.
+    filled();
   }
 }
 
@@ -450,6 +469,8 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
 
   const extraSteps = [...extra.learned, ...extra.ai].map((e) => e.step);
   const waitMs = yours || left.length ? YOUR_STEPS_WAIT_MS : undefined;
+  // Filled: the next application can be filled in another tab while this one waits.
+  deps.filled?.();
   let waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, waitMs);
   if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");
   const refusal = "refused" in waited ? waited.refused : null;
@@ -461,18 +482,24 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
     log(`${app.id}: the site refused the submission ("${first}"); filling it again to submit once more`);
     await setApplyStep(db, app.id, "submitting", `The site refused the submission ("${first}"). Submitting once more in a couple of minutes, as it suggests.`);
     await (deps.sleep ?? defaultSleep)(deps.resubmitWaitMs ?? RESUBMIT_WAIT_MS);
-    if ((await driver.open(url)) === "no_form") return fail("After refusing the submission, the posting has no application form any more.");
-    // The same answers again, with any text you changed in the form before submitting.
-    const shown = waited.last ?? {};
-    for (const step of [...steps.filter((x) => !other.has(x.fieldName)), ...extraSteps]) {
-      const typed = step.kind === "text" && shown[step.fieldName] ? { ...step, value: shown[step.fieldName] } : step;
-      if (!(await driver.fill(typed, resumePath)) && step.required) log(`${app.id}: couldn't fill "${step.label}" again`);
-    }
-    if (yours || left.length) {
-      await waitForYou(deps, app, `The site refused the first submission, so the form is filled again.${yours}${leftForYou} Do that in the Chrome window, then click Submit.`);
-      await driver.focus();
-    } else {
-      await driver.submit();
+    // Filled again in its turn, so it doesn't fill alongside another tab.
+    const endTurn = await (deps.fillTurn?.() ?? Promise.resolve(() => {}));
+    try {
+      if ((await driver.open(url)) === "no_form") return fail("After refusing the submission, the posting has no application form any more.");
+      // The same answers again, with any text you changed in the form before submitting.
+      const shown = waited.last ?? {};
+      for (const step of [...steps.filter((x) => !other.has(x.fieldName)), ...extraSteps]) {
+        const typed = step.kind === "text" && shown[step.fieldName] ? { ...step, value: shown[step.fieldName] } : step;
+        if (!(await driver.fill(typed, resumePath)) && step.required) log(`${app.id}: couldn't fill "${step.label}" again`);
+      }
+      if (yours || left.length) {
+        await waitForYou(deps, app, `The site refused the first submission, so the form is filled again.${yours}${leftForYou} Do that in the Chrome window, then click Submit.`);
+        await driver.focus();
+      } else {
+        await driver.submit();
+      }
+    } finally {
+      endTurn();
     }
     waited = await waitForConfirmation(deps, [...prepared, ...extraSteps], app, platform, waitMs);
     if ("closed" in waited) return fail("The Chrome tab was closed before submitting.");

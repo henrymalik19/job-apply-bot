@@ -246,6 +246,30 @@ describe("apply runner", () => {
     await db.from("companies").update({ apply_limit: null, apply_limit_days: null }).eq("id", companyId);
   });
 
+  it("says it's filled before waiting for you, so the next one can be filled in another tab", async () => {
+    const id = await addApproved("fillahead");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const seen: string[] = [];
+    const outcome = await applyOne({
+      ...deps(fakeDriver({ neverSubmitted: true }).driver),
+      waitMs: 0,
+      log: (line) => seen.push(line),
+      filled: () => seen.push("filled"),
+    }, job);
+    expect(outcome.result).toBe("handed_back");
+    // Once, after filling and before the wait ran out.
+    expect(seen.filter((l) => l === "filled")).toHaveLength(1);
+    expect(seen.indexOf("filled")).toBeLessThan(seen.findIndex((l) => l.includes("handed back")));
+  });
+
+  it("frees the turn to fill once when it hands back before filling", async () => {
+    const id = await addApproved("fillahead-blocked");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    let calls = 0;
+    await applyOne({ ...deps(fakeDriver({ challenge: true }).driver), filled: () => calls++ }, job);
+    expect(calls).toBe(1);
+  });
+
   it("hands back and closes the tab when nobody submits in time", async () => {
     const id = await addApproved("timeout");
     const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
