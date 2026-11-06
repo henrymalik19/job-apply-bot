@@ -236,17 +236,41 @@ async function main() {
   log(linkedinOn
     ? `LinkedIn Easy Apply is on: searched hourly, at most ${env.APPLY_LINKEDIN_PER_HOUR} an hour and ${env.APPLY_LINKEDIN_PER_DAY} a day`
     : "LinkedIn Easy Apply is off (APPLY_LINKEDIN=1 turns it on)");
-  /** Why LinkedIn work is stopped until the runner restarts (a security check, signed out), or null. */
+  /** Why LinkedIn work is stopped (a security check: until the runner restarts; signed out: until you sign in), or null. */
   let linkedinPaused: string | null = null;
+  /** LinkedIn's sign-in page, left open for you to sign in yourself; LinkedIn work goes on once you have. */
+  let signInTab: Page | null = null;
   let lastSearch = 0;
   /** A LinkedIn search running in its own tab: not one of the open applications, and nothing waits for it. */
   let searching: Promise<void> | null = null;
   /** Stops all LinkedIn work and tells you why: a check is yours to deal with, never the runner's. */
-  const pauseLinkedIn = async (why: string) => {
+  const pauseLinkedIn = async (why: string, signIn = false) => {
     if (linkedinPaused) return;
     linkedinPaused = why;
-    log(`linkedin: paused until the runner restarts: ${why}`);
-    await notify(db, userId, { kind: "runner_stuck", title: "LinkedIn paused", body: `${why} Sort it out in the runner's Chrome window, then restart the runner.`, href: "/app/applications" }).catch(() => undefined);
+    log(`linkedin: paused until ${signIn ? "you sign in" : "the runner restarts"}: ${why}`);
+    const next = signIn
+      ? "Sign in with your LinkedIn email and password in the runner's Chrome window (Google sign-in doesn't work there); LinkedIn work goes on once you have."
+      : "Sort it out in the runner's Chrome window, then restart the runner.";
+    await notify(db, userId, { kind: "runner_stuck", title: "LinkedIn paused", body: `${why} ${next}`, href: "/app/applications" }).catch(() => undefined);
+  };
+  /** Whether you've signed in on the sign-in tab: LinkedIn work goes on (searching right away). */
+  const checkSignIn = async () => {
+    if (!signInTab) return;
+    if (signInTab.isClosed()) {
+      // Closed without signing in: asked again in a while, with a new search.
+      signInTab = null;
+      linkedinPaused = null;
+      lastSearch = Date.now() - LINKEDIN_SEARCH_MS + 10 * 60_000;
+      return log("linkedin: the sign-in tab was closed; trying again in 10 minutes");
+    }
+    const url = signInTab.url();
+    // Still on the sign-in page, or a check while signing in (a code LinkedIn sent you): not yet.
+    if (!/linkedin\.com/i.test(url) || (await linkedinBlocked(signInTab).catch(() => "signed_out"))) return;
+    log("linkedin: signed in; LinkedIn work goes on");
+    await signInTab.close().catch(() => undefined);
+    signInTab = null;
+    linkedinPaused = null;
+    lastSearch = 0;
   };
   /** When LinkedIn forms were opened this run: going through one for its questions counts too. */
   const linkedinOpens: number[] = [];
@@ -297,8 +321,16 @@ async function main() {
         const skip = new Set([...seen, ...found.map((j) => j.id)]);
         const res = await searchLinkedIn(tab, { keywords, remoteOnly, location, maxAgeHours: 24 }, skip, LINKEDIN_PER_SEARCH - found.length, log);
         found.push(...res.jobs);
+        if (res.blocked === "signed_out") {
+          // Left open on the sign-in page for you; nothing is typed for you.
+          await tab.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded" }).catch(() => undefined);
+          await tab.bringToFront().catch(() => undefined);
+          signInTab = tab;
+          await pauseLinkedIn("The runner's Chrome isn't signed in to LinkedIn.", true);
+          break;
+        }
         if (res.blocked) {
-          await pauseLinkedIn(res.blocked === "check" ? "LinkedIn showed a security check while searching." : "The runner's Chrome isn't signed in to LinkedIn.");
+          await pauseLinkedIn("LinkedIn showed a security check while searching.");
           break;
         }
         if (found.length >= LINKEDIN_PER_SEARCH) break;
@@ -308,7 +340,7 @@ async function main() {
         log(`linkedin: saved ${saved.inserted} new job(s) (${saved.duplicates} already known); matching scores them on its next run`);
       } else log("linkedin: no new Easy Apply jobs");
     } finally {
-      await tab.close().catch(() => undefined);
+      if (tab !== signInTab) await tab.close().catch(() => undefined);
     }
   };
   /** Those filled and waiting for you, with their tabs. */
@@ -405,6 +437,7 @@ async function main() {
         }
         void runOne(app, endTurn);
       }
+      await checkSignIn();
       // Hourly, when nothing on LinkedIn is open: new Easy Apply jobs for matching to score. It runs alongside
       // the applications (other sites go on filling); its tab isn't one of the MAX_OPEN open ones.
       if (!searching && linkedinOn && !linkedinPaused && Date.now() - lastSearch > LINKEDIN_SEARCH_MS && ![...openSources.values()].includes("linkedin")) {
