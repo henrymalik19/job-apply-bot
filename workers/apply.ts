@@ -23,7 +23,7 @@ import { ashbyDriver } from "@/server/integrations/browser/ashby-driver";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { leverDriver } from "@/server/integrations/browser/lever-driver";
 import { linkedinDriver } from "@/server/integrations/browser/linkedin-driver";
-import { linkedinBlocked, searchLinkedIn } from "@/server/integrations/browser/linkedin-search";
+import { linkedinBlocked, searchLinkedIn, searchWindowHours } from "@/server/integrations/browser/linkedin-search";
 import { getJobFilter, getMatchCriteria } from "@/server/modules/criteria/criteria.service";
 import { notify } from "@/server/modules/notifications/in-app";
 import type { LinkedInJob } from "@/server/modules/discovery/linkedin-jobs";
@@ -41,10 +41,12 @@ const SESSION_FILE = path.join(DATA, "apply-session.json");
 const POLL_MS = 20_000;
 /** How many applications can be open at once: one filling, the rest filled and waiting for you. */
 const MAX_OPEN = 4;
-/** How often LinkedIn is searched for new Easy Apply jobs (when it's on). */
-const LINKEDIN_SEARCH_MS = 60 * 60_000;
-/** The most new LinkedIn jobs read per search. */
-const LINKEDIN_PER_SEARCH = 15;
+/** How often LinkedIn is searched for new Easy Apply jobs (when it's on): as often as discovery checks the boards. */
+const LINKEDIN_SEARCH_MS = 6 * 60 * 60_000;
+/** When LinkedIn was last searched, kept across restarts (delete it to search on the next start). */
+const LINKEDIN_SEARCH_FILE = path.join(DATA, "linkedin-search.json");
+/** The most new LinkedIn jobs read per role in a search (each of your first 3 target roles is searched). */
+const LINKEDIN_PER_ROLE = 15;
 /** How long a submitted tab stays open, so the thank-you page can be seen. */
 const SUBMITTED_TAB_MS = 10_000;
 
@@ -212,7 +214,8 @@ async function main() {
   const stop = async () => {
     if (stopping) process.exit(130);
     stopping = true;
-    log("stopping: moving the open application to Runner stuck");
+    // (Any an earlier run left mid-way are moved too, quietly: the count below says what moved.)
+    log(open.size ? `stopping: moving ${open.size === 1 ? "the open application" : `the ${open.size} open applications`} to Runner stuck` : "stopping");
     const moved = await handBackUnfinished(db, userId).catch((err) => {
       log(`couldn't hand back: ${(err as Error).message}`);
       return 0;
@@ -234,13 +237,16 @@ async function main() {
   log(inbox ? `emailed security codes are read from ${inboxUser}` : "emailed security codes: you type them (no job inbox address or JOB_INBOX_PASSWORD)");
   const linkedinOn = env.APPLY_LINKEDIN === "1";
   log(linkedinOn
-    ? `LinkedIn Easy Apply is on: searched hourly, at most ${env.APPLY_LINKEDIN_PER_HOUR} an hour and ${env.APPLY_LINKEDIN_PER_DAY} a day`
+    ? `LinkedIn Easy Apply is on: searched every 6 hours, at most ${env.APPLY_LINKEDIN_PER_HOUR} an hour and ${env.APPLY_LINKEDIN_PER_DAY} a day`
     : "LinkedIn Easy Apply is off (APPLY_LINKEDIN=1 turns it on)");
   /** Why LinkedIn work is stopped (a security check: until the runner restarts; signed out: until you sign in), or null. */
   let linkedinPaused: string | null = null;
   /** LinkedIn's sign-in page, left open for you to sign in yourself; LinkedIn work goes on once you have. */
   let signInTab: Page | null = null;
-  let lastSearch = 0;
+  let lastSearch = await readFile(LINKEDIN_SEARCH_FILE, "utf8")
+    .then((t) => Date.parse((JSON.parse(t) as { lastSearch?: string }).lastSearch ?? "") || 0)
+    .catch(() => 0);
+  if (linkedinOn && lastSearch) log(`linkedin: last searched ${new Date(lastSearch).toLocaleString()}; next search in about ${Math.max(0, Math.round((lastSearch + LINKEDIN_SEARCH_MS - Date.now()) / 60_000))} minutes`);
   /** A LinkedIn search running in its own tab: not one of the open applications, and nothing waits for it. */
   let searching: Promise<void> | null = null;
   /** Stops all LinkedIn work and tells you why: a check is yours to deal with, never the runner's. */
@@ -306,7 +312,8 @@ async function main() {
     return (await linkedinSentSince(new Date(now - 86_400_000))) < env.APPLY_LINKEDIN_PER_DAY;
   };
   /** Searches LinkedIn for new Easy Apply jobs matching your roles and filters, and saves them. */
-  const searchForJobs = async () => {
+  const searchForJobs = async (previous: number) => {
+    const maxAgeHours = searchWindowHours(previous || null, Date.now());
     const [criteria, filter] = await Promise.all([getMatchCriteria(db, userId), getJobFilter(db, userId)]);
     if (criteria.roles.length === 0) return log("linkedin: no target roles in your criteria to search for");
     const { data: known } = await db.from("jobs").select("external_id").eq("source", "linkedin");
@@ -319,7 +326,7 @@ async function main() {
       const found: LinkedInJob[] = [];
       for (const keywords of criteria.roles.slice(0, 3)) {
         const skip = new Set([...seen, ...found.map((j) => j.id)]);
-        const res = await searchLinkedIn(tab, { keywords, remoteOnly, location, maxAgeHours: 24 }, skip, LINKEDIN_PER_SEARCH - found.length, log);
+        const res = await searchLinkedIn(tab, { keywords, remoteOnly, location, maxAgeHours }, skip, LINKEDIN_PER_ROLE, log);
         found.push(...res.jobs);
         if (res.blocked === "signed_out") {
           // Left open on the sign-in page for you; nothing is typed for you.
@@ -333,7 +340,6 @@ async function main() {
           await pauseLinkedIn("LinkedIn showed a security check while searching.");
           break;
         }
-        if (found.length >= LINKEDIN_PER_SEARCH) break;
       }
       if (found.length) {
         const saved = await askApp<{ inserted: number; duplicates: number }>("/api/runner/linkedin-jobs", { jobs: found });
@@ -438,11 +444,13 @@ async function main() {
         void runOne(app, endTurn);
       }
       await checkSignIn();
-      // Hourly, when nothing on LinkedIn is open: new Easy Apply jobs for matching to score. It runs alongside
-      // the applications (other sites go on filling); its tab isn't one of the MAX_OPEN open ones.
+      // Every 6 hours, when nothing on LinkedIn is open: new Easy Apply jobs for matching to score. It runs
+      // alongside the applications (other sites go on filling); its tab isn't one of the MAX_OPEN open ones.
       if (!searching && linkedinOn && !linkedinPaused && Date.now() - lastSearch > LINKEDIN_SEARCH_MS && ![...openSources.values()].includes("linkedin")) {
+        const previous = lastSearch;
         lastSearch = Date.now();
-        searching = searchForJobs()
+        await writeFile(LINKEDIN_SEARCH_FILE, JSON.stringify({ lastSearch: new Date(lastSearch).toISOString() })).catch(() => undefined);
+        searching = searchForJobs(previous)
           .catch((err) => log(`linkedin: search failed: ${(err as Error).message}`))
           .finally(() => (searching = null));
       }
