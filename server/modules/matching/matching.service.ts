@@ -276,3 +276,44 @@ export async function loadMatchingHealth(db: Db, userId: string, now: Date) {
   ]);
   return { lastRun, summary, spend, capReached: spend.spent >= spend.cap };
 }
+
+/**
+ * Re-checks jobs already scored against your current hard filters (after you change your criteria): one they
+ * now rule out (a company you excluded, a staffing agency, a dealbreaker) is filtered, with the reason. Jobs you
+ * have an application for are left as they are; skip those yourself. Nothing is un-filtered, and no LLM is called.
+ *
+ * @returns How many were ruled out.
+ */
+export async function refilterScoredMatches(db: Db, userId: string): Promise<number> {
+  const criteria = await getMatchCriteria(db, userId);
+  const { data: apps, error: appsError } = await db.from("applications").select("job_id").eq("user_id", userId);
+  if (appsError) throw new Error(`list applications: ${appsError.message}`);
+  const applied = new Set((apps ?? []).map((a) => a.job_id));
+  const out: { jobId: string; reason: string }[] = [];
+  for (let from = 0; ; from += 500) {
+    const { data, error } = await db
+      .from("matches")
+      .select("job_id, jobs!inner(title, company_name, description_md, salary_min, salary_max)")
+      .eq("user_id", userId)
+      .eq("status", "scored")
+      .order("id")
+      .range(from, from + 499);
+    if (error) throw new Error(`list scored matches: ${error.message}`);
+    for (const m of data ?? []) {
+      if (applied.has(m.job_id)) continue;
+      const reason = hardFilter(m.jobs as unknown as Parameters<typeof hardFilter>[0], criteria);
+      if (reason) out.push({ jobId: m.job_id, reason });
+    }
+    if ((data ?? []).length < 500) break;
+  }
+  for (const { jobId, reason } of out) {
+    const { error } = await db
+      .from("matches")
+      .update({ status: "filtered", hard_filter_passed: false, hard_filter_reason: reason })
+      .eq("user_id", userId)
+      .eq("job_id", jobId)
+      .eq("status", "scored");
+    if (error) throw new Error(`rule out match: ${error.message}`);
+  }
+  return out.length;
+}

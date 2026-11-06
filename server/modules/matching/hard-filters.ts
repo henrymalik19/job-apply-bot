@@ -2,6 +2,7 @@
 // Each returns a reason when the job fails, or null when it passes.
 import type { MatchCriteria, Seniority } from "@/server/modules/criteria/match-criteria";
 import { normalize } from "@/shared/text";
+import { staffingAgency } from "./staffing-agencies";
 
 /** The job fields the hard filters read. */
 export type MatchableJob = {
@@ -64,6 +65,13 @@ export function companyFilter(job: MatchableJob, criteria: MatchCriteria): strin
   return hit ? `excluded company: ${hit}` : null;
 }
 
+/** Fails for a staffing agency, recruiter or job aggregator posting someone else's job (when skipping them). */
+export function agencyFilter(job: MatchableJob, criteria: MatchCriteria): string | null {
+  if (!criteria.skip_staffing_agencies) return null;
+  const agency = staffingAgency(job.company_name);
+  return agency ? `staffing agency: ${agency}` : null;
+}
+
 /**
  * Runs every hard filter in order and returns the first failure's reason, or
  * null when the job passes them all (and should be scored).
@@ -71,6 +79,7 @@ export function companyFilter(job: MatchableJob, criteria: MatchCriteria): strin
 export function hardFilter(job: MatchableJob, criteria: MatchCriteria): string | null {
   return (
     companyFilter(job, criteria) ??
+    agencyFilter(job, criteria) ??
     seniorityFilter(job, criteria) ??
     salaryFilter(job, criteria) ??
     dealbreakerFilter(job, criteria)

@@ -119,6 +119,7 @@ async function SearchCriteria() {
               relocate: criteria.willing_to_relocate,
               dealbreakers: criteria.dealbreakers,
               excludedCompanies: criteria.excluded_companies,
+              skipAgencies: criteria.skip_staffing_agencies,
               threshold: criteria.threshold,
               notes: criteria.notes,
             }}

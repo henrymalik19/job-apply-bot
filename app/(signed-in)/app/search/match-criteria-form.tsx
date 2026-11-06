@@ -19,6 +19,7 @@ export type MatchCriteriaValues = {
   relocate: boolean | null;
   dealbreakers: string[];
   excludedCompanies: string[];
+  skipAgencies: boolean;
   threshold: number;
   notes: string;
 };
@@ -72,6 +73,13 @@ export function MatchCriteriaForm({ values }: { values: MatchCriteriaValues }) {
         <div className="flex flex-col gap-2">
           <Label htmlFor="excludedCompanies">Never match these companies</Label>
           <Textarea id="excludedCompanies" name="excludedCompanies" rows={2} defaultValue={values.excludedCompanies.join(", ")} placeholder="Your current employer" />
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="skipAgencies" defaultChecked={values.skipAgencies} className={`${checkbox} mt-0.5`} />
+            <span>
+              Skip staffing agencies, recruiters and job aggregators
+              <span className="block text-xs text-muted-foreground">Jobgether, CyberCoders, Robert Half and others that post other companies&apos; jobs, common on LinkedIn.</span>
+            </span>
+          </label>
         </div>
       </div>
 

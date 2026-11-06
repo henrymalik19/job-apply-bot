@@ -441,14 +441,14 @@ isOneToOne: false
                   ]
                 },"match_criteria": {
                   Row: {
-                    "created_at": string,"dealbreakers": (string)[],"excluded_companies": (string)[],"notes": string,"roles": (string)[],"salary_max": number | null,"salary_min": number | null,"seniority": (string)[],"threshold": number,"updated_at": string,"user_id": string,"willing_to_relocate": boolean | null
+                    "created_at": string,"dealbreakers": (string)[],"excluded_companies": (string)[],"notes": string,"roles": (string)[],"salary_max": number | null,"salary_min": number | null,"seniority": (string)[],"skip_staffing_agencies": boolean,"threshold": number,"updated_at": string,"user_id": string,"willing_to_relocate": boolean | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"dealbreakers"?: (string)[],"excluded_companies"?: (string)[],"notes"?: string,"roles"?: (string)[],"salary_max"?: number | null,"salary_min"?: number | null,"seniority"?: (string)[],"threshold"?: number,"updated_at"?: string,"user_id"?: string,"willing_to_relocate"?: boolean | null
+                    "created_at"?: string,"dealbreakers"?: (string)[],"excluded_companies"?: (string)[],"notes"?: string,"roles"?: (string)[],"salary_max"?: number | null,"salary_min"?: number | null,"seniority"?: (string)[],"skip_staffing_agencies"?: boolean,"threshold"?: number,"updated_at"?: string,"user_id"?: string,"willing_to_relocate"?: boolean | null
                   }
                   Update: {
-                    "created_at"?: string,"dealbreakers"?: (string)[],"excluded_companies"?: (string)[],"notes"?: string,"roles"?: (string)[],"salary_max"?: number | null,"salary_min"?: number | null,"seniority"?: (string)[],"threshold"?: number,"updated_at"?: string,"user_id"?: string,"willing_to_relocate"?: boolean | null
+                    "created_at"?: string,"dealbreakers"?: (string)[],"excluded_companies"?: (string)[],"notes"?: string,"roles"?: (string)[],"salary_max"?: number | null,"salary_min"?: number | null,"seniority"?: (string)[],"skip_staffing_agencies"?: boolean,"threshold"?: number,"updated_at"?: string,"user_id"?: string,"willing_to_relocate"?: boolean | null
                   }
                   Relationships: [
                     {

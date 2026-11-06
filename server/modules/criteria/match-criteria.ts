@@ -22,6 +22,8 @@ export const matchCriteriaSchema = z.object({
   dealbreakers: z.array(z.string()).default([]),
   /** Companies never to match (e.g. the current employer). */
   excluded_companies: z.array(z.string()).default([]),
+  /** Rule out jobs posted by staffing agencies, recruiters and job aggregators rather than the employer. */
+  skip_staffing_agencies: z.boolean().default(true),
   /** Score at or above which a job moves on to prepare (M5). */
   threshold: z.number().int().min(0).max(100).default(75),
   /** Free-text preferences for the scorer ("product-focused teams, no on-call heavy roles"). */

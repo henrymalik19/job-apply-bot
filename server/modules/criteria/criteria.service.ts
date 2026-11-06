@@ -100,6 +100,8 @@ export type MatchCriteriaInput = {
   notes: string;
   /** "yes", "no" or "" (not set). */
   relocate: string;
+  /** Rule out staffing agencies, recruiters and job aggregators (on unless turned off). */
+  skipAgencies?: boolean;
 };
 
 const money = (v: string) => {
@@ -122,6 +124,7 @@ export async function saveMatchCriteria(db: Db, userId: string, input: MatchCrit
     salary_max: money(input.salaryMax),
     dealbreakers: parseKeywords(input.dealbreakers),
     excluded_companies: parseKeywords(input.excludedCompanies),
+    skip_staffing_agencies: input.skipAgencies ?? true,
     threshold: Math.min(100, Math.max(0, Math.trunc(Number(input.threshold) || 0))),
     notes: input.notes.trim().slice(0, 2000),
     willing_to_relocate: input.relocate === "yes" ? true : input.relocate === "no" ? false : null,

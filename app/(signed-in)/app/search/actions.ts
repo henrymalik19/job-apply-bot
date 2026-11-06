@@ -14,6 +14,7 @@ import {
 } from "@/server/modules/criteria/criteria.service";
 import { suggestJobTitles, type JobTitleSuggestion } from "@/server/modules/criteria/job-titles";
 import { pruneSavedJobs } from "@/server/modules/discovery/discovery.service";
+import { refilterScoredMatches } from "@/server/modules/matching/matching.service";
 import type { FormMessageState } from "../../_components/form-message";
 
 /** Title-filter form action. */
@@ -62,6 +63,7 @@ export async function saveMatchCriteriaAction(_prev: FormMessageState, formData:
     relocate: field("relocate"),
     dealbreakers: field("dealbreakers"),
     excludedCompanies: field("excludedCompanies"),
+    skipAgencies: formData.get("skipAgencies") === "on",
     threshold: field("threshold"),
     notes: field("notes"),
     });
@@ -69,8 +71,11 @@ export async function saveMatchCriteriaAction(_prev: FormMessageState, formData:
     if (err instanceof ValidationError) return { error: err.message };
     throw err;
   }
+  // Jobs already scored that these criteria rule out (an excluded company, a staffing agency) drop out now.
+  const ruledOut = await refilterScoredMatches(db, owner.id);
   refresh();
-  return { ok: saved.changed ? "Saved. New jobs are matched against these criteria." : "No changes to save." };
+  const dropped = ruledOut ? ` ${ruledOut} already-scored ${ruledOut === 1 ? "job is" : "jobs are"} now ruled out.` : "";
+  return { ok: (saved.changed ? "Saved. New jobs are matched against these criteria." : "No changes to save.") + dropped };
 }
 
 /** State of the title-suggestions panel. */

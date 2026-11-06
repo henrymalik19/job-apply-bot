@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchCriteriaSchema } from "@/server/modules/criteria/match-criteria";
 import {
+  agencyFilter,
   companyFilter,
   dealbreakerFilter,
   hardFilter,
@@ -76,6 +77,26 @@ describe("companyFilter", () => {
     const c = criteria({ excluded_companies: ["Second Nature"] });
     expect(companyFilter(job({ company_name: "second-nature" }), c)).toBe("excluded company: Second Nature");
     expect(companyFilter(job({ company_name: "Secondary" }), c)).toBeNull();
+  });
+});
+
+describe("agencyFilter", () => {
+  it("rules out staffing agencies, recruiters and job aggregators, known or named for it", () => {
+    const c = criteria();
+    for (const company of ["Jobgether", "CyberCoders", "Robert Half", "Mindlance", "People In AI", "Prestige Staffing", "Recruiting from Scratch", "Blue Signal Search", "Staffing Lab LLC", "Acme Recruitment"]) {
+      expect(agencyFilter(job({ company_name: company }), c)).toBe(`staffing agency: ${company}`);
+    }
+  });
+
+  it("keeps employers, including ones with a search product", () => {
+    const c = criteria();
+    for (const company of ["Coinbase", "Muck Rack", "Elastic", "Algolia Search Engine Co", "Tebra", "Recruit Holdings Engineering"]) {
+      expect(agencyFilter(job({ company_name: company }), c)).toBeNull();
+    }
+  });
+
+  it("keeps them all when turned off", () => {
+    expect(agencyFilter(job({ company_name: "Jobgether" }), criteria({ skip_staffing_agencies: false }))).toBeNull();
   });
 });
 
