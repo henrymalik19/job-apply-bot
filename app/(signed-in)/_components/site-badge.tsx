@@ -8,6 +8,7 @@ const SITE: Record<string, { label: string; className: string }> = {
   greenhouse: { label: "Greenhouse", className: "bg-[#008561]/12 text-[#006147] dark:bg-[#4cb398]/20 dark:text-[#90d1c2]" },
   ashby: { label: "Ashby", className: "bg-[#483fad]/12 text-[#483fad] dark:bg-[#8b84e0]/20 dark:text-[#c4bff5]" },
   lever: { label: "Lever", className: "bg-[#2a7a72]/12 text-[#2a7a72] dark:bg-[#5fb8ae]/20 dark:text-[#9fd8d1]" },
+  linkedin: { label: "LinkedIn", className: "bg-[#0a66c2]/12 text-[#0a66c2] dark:bg-[#4d9be6]/20 dark:text-[#a9cdf2]" },
   email: { label: "Email alert", className: TONE_BADGE.muted },
 };
 

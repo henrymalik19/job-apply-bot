@@ -305,6 +305,12 @@ export async function prepareJob(
   // Work-authorization questions are about the posting's country; US unless its location names exactly one other.
   const countries = resolvePlace(job.location ?? "").countries;
   const ctx: RunContext = { ...runCtx, country: countries.size === 1 ? [...countries][0] : "US", company: job.company_name };
+  // LinkedIn Easy Apply shows its questions only inside the form: the runner answers them as it fills
+  // (from your profile and saved answers, then Claude), so the application is ready to review with its resume.
+  if (job.source === "linkedin") {
+    const posting = { title: job.title, company_name: job.company_name, text: job.description_md ?? "" };
+    return { status: "queued", flags: [], questions: [], posting };
+  }
   const fetchForm = deps.fetchForm ?? ((ats, token, id) => fetchApplicationForm(ats, token, id));
   const form = await fetchForm(job.source, job.board_token, job.external_id);
   if (!form) {

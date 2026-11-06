@@ -16,13 +16,15 @@ import {
   type ApplyJob,
   type Platform,
 } from "./apply.repository";
-import { asPickerDate, buildFillPlan, changedFields, type FillStep } from "./fill-plan";
+import { asPickerDate, buildFillPlan, changedFields, sameText, type FillStep } from "./fill-plan";
 import { listFieldMappings, recordFieldOutcome, type FieldAnswer, type FieldMapping } from "./field-mapping";
 import { applicationHref, notify } from "@/server/modules/notifications/in-app";
 import { LIMIT_CAUSE, recordLimitReached } from "@/server/modules/companies/apply-limits";
 
 /** ATSs the runner can fill (by field name). */
-export const APPLY_ATS = ["greenhouse", "ashby", "lever"] as const;
+export const APPLY_ATS = ["greenhouse", "ashby", "lever", "linkedin"] as const;
+/** The most pages a form in pages (LinkedIn Easy Apply) is followed through. */
+const MAX_PAGES = 12;
 
 /** A required field left empty after the prepared answers: what it asks and how it's answered. */
 export type OpenField = {
@@ -31,6 +33,24 @@ export type OpenField = {
   /** "agreement" is a lone checkbox (always yours); "combobox" a type-and-pick box. */
   kind: "text" | "textarea" | "select" | "multiselect" | "combobox" | "agreement";
   options: string[];
+};
+
+/** A question on the page of a form in pages showing now: what it shows (empty when nothing), and whether it's required. */
+export type PageQuestion = OpenField & { value: string[]; required: boolean };
+
+/**
+ * A question from a form in pages, asked in the app: one the runner had no answer for (it went past it with a
+ * stand-in and discarded the form), one the site had filled in differently from your profile (`conflict`), or
+ * one Claude answered from your profile while going through (`answer`, for you to check).
+ */
+export type QuestionToAsk = {
+  key: string;
+  label: string;
+  kind: OpenField["kind"];
+  options: string[];
+  required: boolean;
+  answer?: string[];
+  conflict?: { form: string; yours: string };
 };
 
 /** What the runner needs from a browser tab with an application form open. */
@@ -50,6 +70,15 @@ export interface FormDriver {
    * sections it didn't prepare for. Each key is what `fill` takes as a field name.
    */
   openFields?(known: string[]): Promise<OpenField[]>;
+  /**
+   * A form in pages: uploads the resume where a page asks for it and goes on to the next page. "review" once
+   * the last page (with the submit button) shows; "stuck" when it won't move on (a field still needs an answer).
+   */
+  nextPage?(resumePath: string): Promise<"next" | "review" | "stuck">;
+  /** A form in pages: every question on the page showing now, filled in or not. */
+  pageQuestions?(): Promise<PageQuestion[]>;
+  /** Closes the form without sending it, keeping nothing; false when it wouldn't close. */
+  discard?(): Promise<boolean>;
   /** A CAPTCHA or bot check is showing and needs a person. */
   challenge(): Promise<boolean>;
   /** The form asks for a code it emailed to the applicant before it accepts the submit. */
@@ -116,13 +145,21 @@ export type ApplyDeps = {
    * filling, and returns the call that ends the turn. Without it, it fills right away.
    */
   fillTurn?: () => Promise<() => void>;
+  /**
+   * Saves a form's questions to the application, to answer in the app (Needs you, or Double-check when
+   * they're all answered), and returns the status it's in now. Without it a form with questions it couldn't
+   * answer is handed back.
+   */
+  askInApp?: (applicationId: string, questions: QuestionToAsk[]) => Promise<string>;
 };
 
 /** How one run ended. */
 export type ApplyOutcome =
   | { result: "submitted"; changed: string[] }
   /** closeTab: nobody is using the tab any more (the wait timed out); otherwise it stays open to finish by hand. */
-  | { result: "handed_back"; reason: string; closeTab?: boolean };
+  | { result: "handed_back"; reason: string; closeTab?: boolean }
+  /** A form in pages had questions for you: discarded unsent, and asked in the app. */
+  | { result: "needs_answers"; questions: number };
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -136,6 +173,7 @@ export function formUrl(job: ApplyJob["job"]): string | null {
   if (job.source === "lever" && job.board_token) {
     return `https://jobs.lever.co/${encodeURIComponent(job.board_token)}/${encodeURIComponent(job.external_id)}/apply`;
   }
+  if (job.source === "linkedin") return `https://www.linkedin.com/jobs/view/${encodeURIComponent(job.external_id)}/`;
   if (job.source === "ashby" && job.board_token) {
     return `https://jobs.ashbyhq.com/${encodeURIComponent(job.board_token)}/${encodeURIComponent(job.external_id)}/application`;
   }
@@ -300,7 +338,8 @@ export async function applyOne(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOut
 type ExtraFill = { step: FillStep; label: string; value: string[] };
 
 /** What learned values are kept under for a job: its board, else the company's name. */
-const mappingCompany = (app: ApplyJob) => app.job.board_token ?? app.job.company_name;
+// LinkedIn asks the same questions everywhere ("How many years of TypeScript?"): learned once for all of them.
+const mappingCompany = (app: ApplyJob) => (app.job.source === "linkedin" ? "linkedin" : (app.job.board_token ?? app.job.company_name));
 
 /** Kinds whose value is typed or searched for, so another wording of it can be tried. */
 const RETRYABLE = new Set<FillStep["kind"]>(["text", "location", "closest"]);
@@ -401,6 +440,131 @@ async function fillOpenFields(deps: ApplyDeps, app: ApplyJob, filled: FillStep[]
   return out;
 }
 
+/** Contact details LinkedIn fills in from your account: kept as they are. */
+const CONTACT = /\b(e-?mail|phone|mobile|country code|first name|last name|full name)\b/i;
+const lower = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+/** Whether what a field shows is this answer. */
+const sameAnswer = (shown: string[], answer: string[]) =>
+  shown.length === answer.length && shown.every((v, i) => lower(v) === lower(answer[i]) || sameText(v, answer[i]));
+/** A step's answer as a list, for comparing with what the page shows; null for a resume or a decline. */
+const stepAnswer = (step: FillStep): string[] | null =>
+  step.kind === "select" ? step.value : "value" in step && typeof step.value === "string" ? [step.value] : null;
+
+/**
+ * Something to get past a question it has no answer for, so the pages after it can be seen: the first option,
+ * or a short placeholder. Only ever on a form that's then discarded, never sent.
+ */
+export function standIn(q: Pick<PageQuestion, "kind" | "options">): string[] | null {
+  if (q.kind === "agreement") return null;
+  if (q.kind === "select" || q.kind === "multiselect") return q.options.length ? [q.options[0]] : null;
+  if (q.kind === "textarea") return ["N/A"];
+  if (q.kind === "combobox") return ["New York"];
+  return ["1"];
+}
+
+const asked = (q: PageQuestion): QuestionToAsk => ({ key: q.key, label: q.label, kind: q.kind, options: q.options, required: q.required });
+
+/**
+ * Goes through a form in pages (LinkedIn Easy Apply) to its review page. On each page every question gets
+ * your answer from the app over anything the site filled in, else a learned one, else Claude's from your
+ * profile. One the site filled in (from an application before) is kept unless your profile says otherwise,
+ * which is asked in the app. A required question with no answer gets a stand-in so the next pages can be
+ * seen, and is asked in the app: the form is then discarded, never sent.
+ */
+async function walkPages(deps: ApplyDeps, app: ApplyJob, steps: FillStep[], resumePath: string, mappings: Map<string, FieldMapping>) {
+  const { driver } = deps;
+  const out = {
+    ai: [] as ExtraFill[], learned: [] as ExtraFill[], left: [] as string[], mappings, company: mappingCompany(app),
+    missed: [] as string[], ask: [] as QuestionToAsk[], answered: [] as QuestionToAsk[], reached: false,
+  };
+  const plan = new Map(steps.filter((x) => x.kind !== "resume").map((x) => [x.fieldName, x]));
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const shown = await driver.pageQuestions!();
+    const toAsk: PageQuestion[] = [];
+    for (const q of shown) {
+      const mine = plan.get(q.key);
+      if (mine) {
+        // Your answer from the app goes in, over anything the site had filled in.
+        const answer = stepAnswer(mine);
+        if (answer && sameAnswer(q.value, answer)) continue;
+        if (!(await driver.fill(mine, resumePath)) && q.required) out.missed.push(mine.label);
+        continue;
+      }
+      const learned = mappings.get(q.key);
+      if (learned?.learned && learned.value.length && q.kind !== "agreement") {
+        if (sameAnswer(q.value, learned.value)) continue;
+        const step = stepFor(q, learned.value, q.label);
+        if (await driver.fill(step, resumePath)) out.learned.push({ step, label: q.label, value: learned.value });
+        else if (q.required) out.left.push(q.label);
+        continue;
+      }
+      if (q.kind === "agreement") {
+        if (q.required && q.value.length === 0) out.left.push(q.label);
+        continue;
+      }
+      if (q.value.length === 0 ? q.required : !CONTACT.test(q.label)) toAsk.push(q);
+    }
+    const answers = toAsk.length && deps.mapFields
+      ? await deps.mapFields({ company: app.job.company_name, title: app.job.title, jobId: app.job_id, fields: toAsk.map(({ key, label, kind, options }) => ({ key, label, kind, options })) }).catch((err) => {
+          deps.log(`${app.id}: couldn't ask Claude about the form's questions: ${(err as Error).message}`);
+          return [] as FieldAnswer[];
+        })
+      : [];
+    for (const q of toAsk) {
+      const answer = answers.find((a) => a.key === q.key)?.value ?? [];
+      if (q.value.length) {
+        // Filled in by the site from an application before: kept, unless your profile says otherwise.
+        if (answer.length && !sameAnswer(q.value, answer)) {
+          out.ask.push({ ...asked(q), conflict: { form: q.value.join(", "), yours: answer.join(", ") } });
+          deps.log(`${app.id}: "${q.label}" shows "${q.value.join(", ")}"; your profile says "${answer.join(", ")}"`);
+        }
+        continue;
+      }
+      if (answer.length) {
+        // Marked in the run log, so the checklist shows what Claude filled.
+        const step = stepFor(q, answer, `${q.label} (filled by AI)`);
+        if (await driver.fill(step, resumePath)) {
+          out.ai.push({ step, label: q.label, value: answer });
+          out.answered.push({ ...asked(q), answer });
+          deps.log(`${app.id}: filled "${q.label}" by AI with ${answer.join(", ")}`);
+          continue;
+        }
+      }
+      // No answer: asked in the app, with a stand-in meanwhile to see the pages after it.
+      out.ask.push(asked(q));
+      const stand = standIn(q);
+      const took = stand ? await driver.fill(stepFor(q, stand, q.label), resumePath) : false;
+      deps.log(`${app.id}: no answer for "${q.label}"; ${took ? "a stand-in to go on, asked in the app" : "asked in the app"}`);
+    }
+    const moved = await driver.nextPage!(resumePath);
+    if (moved === "review") return { ...out, reached: true };
+    if (moved === "stuck") return out;
+  }
+  return out;
+}
+
+/**
+ * A form in pages with questions for you: discarded unsent, and the questions (with Claude's answers from
+ * going through, to check) asked in the app. Handed back when it can't be closed, or there's no app to ask in.
+ */
+async function askInApp(deps: ApplyDeps, app: ApplyJob, walk: Awaited<ReturnType<typeof walkPages>>): Promise<ApplyOutcome> {
+  const labels = walk.ask.map((q) => `"${q.label}"`).join(", ");
+  const closed = await deps.driver.discard!().catch(() => false);
+  if (!closed) return handBack(deps, app, `The form has placeholder answers in it for questions it couldn't answer (${labels}). Close it with Discard in the Chrome window; don't submit it.`);
+  if (!deps.askInApp) return handBack(deps, app, `The form asks questions it couldn't answer: ${labels}. It was discarded, nothing was sent.`);
+  const status = await deps.askInApp(app.id, [...walk.ask, ...walk.answered]);
+  const conflicts = walk.ask.filter((q) => q.conflict).length;
+  const open = walk.ask.length - conflicts;
+  const what = [open ? `${open} ${open === 1 ? "question" : "questions"} to answer` : "", conflicts ? `${conflicts} where LinkedIn had something else filled in` : ""].filter(Boolean).join(" and ");
+  await setApplyStep(deps.db, app.id, null, `Went through the form and discarded it unsent: ${what}. Answer in the app, approve it again, and the runner fills it.`);
+  await notify(deps.db, deps.userId, {
+    kind: "prepared", title: `Questions from the form: ${app.job.title} at ${app.job.company_name}`, body: `${what[0].toUpperCase()}${what.slice(1)}.`,
+    href: applicationHref(app.id), applicationId: app.id,
+  });
+  deps.log(`${app.id}: discarded unsent; ${what}, asked in the app (now ${status})`);
+  return { result: "needs_answers", questions: walk.ask.length };
+}
+
 async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const { db, userId, driver, log } = deps;
   const where = `${app.job.title} at ${app.job.company_name}`;
@@ -443,7 +607,9 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   const mappings = await listFieldMappings(db, userId, app.job.source, mappingCompany(app)).catch(() => new Map<string, FieldMapping>());
   // Prepared fields filled with another value than prepared (learned, or by AI): checked and learned like extras.
   const recovered = { ai: [] as ExtraFill[], learned: [] as ExtraFill[] };
-  for (const step of steps) {
+  // A form in pages is filled page by page as it's gone through (below).
+  const paged = !!(driver.nextPage && driver.pageQuestions);
+  for (const step of paged ? [] : steps) {
     const filled = await fillStep(deps, app, step, resumePath, mappings);
     if (filled === true) continue;
     if (filled) {
@@ -457,7 +623,16 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
   // Steps only you can do (an assessment, a file to attach): everything else is filled, then it waits for you.
   const yours = plan.yours.length ? ` ${plan.yours.map((m) => `"${m}"`).join(", ")} ${plan.yours.length === 1 ? "is" : "are"} yours to do.` : "";
   // Required fields still empty (a section it didn't prepare for): learned, filled by AI, or left to you.
-  const extra = await fillOpenFields(deps, app, steps, resumePath, mappings);
+  // A form in pages (LinkedIn Easy Apply) is gone through to its review page; questions for you there send
+  // it to the app instead, unsent. A page it can't get past otherwise is where it stops for you.
+  let extra: Awaited<ReturnType<typeof fillOpenFields>>;
+  if (paged) {
+    const walk = await walkPages(deps, app, steps, resumePath, mappings);
+    if (walk.ask.length) return askInApp(deps, app, walk);
+    missed.push(...walk.missed);
+    if (!walk.reached) walk.left.push("a page of the form it couldn't get past");
+    extra = walk;
+  } else extra = await fillOpenFields(deps, app, steps, resumePath, mappings);
   extra.ai.unshift(...recovered.ai);
   extra.learned.unshift(...recovered.learned);
   // A prepared field filled with another value is checked as that value, not the prepared one.
@@ -540,6 +715,18 @@ async function run(deps: ApplyDeps, app: ApplyJob): Promise<ApplyOutcome> {
       { fieldName: e.step.fieldName, label: e.label, filled: e.value, final: waited.last[e.step.fieldName] },
       extra.mappings.get(e.step.fieldName),
     ).catch((err) => log(`${app.id}: couldn't record what was learned for "${e.label}": ${(err as Error).message}`));
+  }
+  // On LinkedIn your answers from the app are kept for every form that asks (as you left them in Chrome).
+  if (paged) {
+    for (const step of prepared) {
+      const value = stepAnswer(step);
+      if (!value) continue;
+      await recordFieldOutcome(
+        db, userId, { ats: app.job.source, company: extra.company },
+        { fieldName: step.fieldName, label: step.label, filled: value, final: waited.last[step.fieldName] },
+        { fieldName: step.fieldName, label: step.label, value, learned: true, confirmations: 0, source: "you" },
+      ).catch((err) => log(`${app.id}: couldn't record your answer to "${step.label}": ${(err as Error).message}`));
+    }
   }
   await addEvidence(db, {
     userId,

@@ -26,6 +26,11 @@ const applySchema = serverSchema.pick({ SUPABASE_URL: true, SUPABASE_ANON_KEY: t
   APPLY_IMAP_USER: z.preprocess(blank, z.string().min(1).optional()),
   // The web app, which answers required fields the runner finds empty (Claude runs there, not here).
   APPLY_APP_URL: z.preprocess(blank, z.string().url().default("https://jobrx.ai")),
+  // LinkedIn Easy Apply: off unless set to 1 (it searches and applies with your own LinkedIn sign-in).
+  APPLY_LINKEDIN: z.preprocess(blank, z.enum(["0", "1"]).default("0")),
+  // At most this many LinkedIn applications an hour, and a day.
+  APPLY_LINKEDIN_PER_HOUR: z.preprocess(blank, z.coerce.number().int().min(1).max(20).default(4)),
+  APPLY_LINKEDIN_PER_DAY: z.preprocess(blank, z.coerce.number().int().min(1).max(100).default(20)),
 });
 
 /** Environment the local apply runner needs. */

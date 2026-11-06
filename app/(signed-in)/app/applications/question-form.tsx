@@ -24,6 +24,8 @@ function sourceLabel(q: ApplicationQuestion): string | null {
     case "drafted": return "drafted by AI";
     case "rule": return "declined (voluntary)";
     case "user": return "your answer";
+    // LinkedIn had another answer filled in: yours is used unless you pick LinkedIn's (the reason shows both).
+    case "linkedin": return "LinkedIn differs";
     default: return null;
   }
 }
@@ -103,7 +105,7 @@ export function QuestionForm(props: { q: ApplicationQuestion; showBucket?: boole
           </span>
         )}
       </div>
-      {q.reason && ((q.bucket !== "auto" && q.bucket !== "drafted") || source === "picked by AI") && <p className="text-sm text-muted-foreground">{q.reason}</p>}
+      {q.reason && ((q.bucket !== "auto" && q.bucket !== "drafted") || source === "picked by AI" || q.answer_source === "linkedin") && <p className="text-sm text-muted-foreground">{q.reason}</p>}
       {!editable ? (
         <p className="text-sm">{q.answer ?? <span className="text-muted-foreground">Nothing to fill in here.</span>}</p>
       ) : (

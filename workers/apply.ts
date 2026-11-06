@@ -22,6 +22,11 @@ import type { Db } from "@/server/db/types";
 import { ashbyDriver } from "@/server/integrations/browser/ashby-driver";
 import { greenhouseDriver } from "@/server/integrations/browser/greenhouse-driver";
 import { leverDriver } from "@/server/integrations/browser/lever-driver";
+import { linkedinDriver } from "@/server/integrations/browser/linkedin-driver";
+import { linkedinBlocked, searchLinkedIn } from "@/server/integrations/browser/linkedin-search";
+import { getJobFilter, getMatchCriteria } from "@/server/modules/criteria/criteria.service";
+import { notify } from "@/server/modules/notifications/in-app";
+import type { LinkedInJob } from "@/server/modules/discovery/linkedin-jobs";
 import { recordRun } from "@/server/integrations/browser/run-recorder";
 import { codeInbox } from "@/server/integrations/email/code-inbox";
 import { listReadyToApply } from "@/server/modules/apply/apply.repository";
@@ -36,6 +41,10 @@ const SESSION_FILE = path.join(DATA, "apply-session.json");
 const POLL_MS = 20_000;
 /** How many applications can be open at once: one filling, the rest filled and waiting for you. */
 const MAX_OPEN = 4;
+/** How often LinkedIn is searched for new Easy Apply jobs (when it's on). */
+const LINKEDIN_SEARCH_MS = 60 * 60_000;
+/** The most new LinkedIn jobs read per search. */
+const LINKEDIN_PER_SEARCH = 15;
 /** How long a submitted tab stays open, so the thank-you page can be seen. */
 const SUBMITTED_TAB_MS = 10_000;
 
@@ -160,6 +169,8 @@ async function main() {
     (await askApp<{ answers: Awaited<ReturnType<NonNullable<ApplyDeps["mapFields"]>>> }>("/api/runner/map-fields", input)).answers;
   const alternatives: NonNullable<ApplyDeps["alternatives"]> = async (input) =>
     (await askApp<{ alternatives: string[] }>("/api/runner/alternatives", input)).alternatives;
+  const askInApp: NonNullable<ApplyDeps["askInApp"]> = async (applicationId, questions) =>
+    (await askApp<{ status: string }>("/api/runner/form-questions", { applicationId, questions })).status;
   const uploadRun = (dir: string, app: { id: string; job: { title: string; company_name: string } }, startedAt: Date, outcome: string) =>
     uploadRunWith(db, { userId, userName: name }, dir, app, startedAt, outcome);
   const stale = await handBackUnfinished(db, userId);
@@ -221,6 +232,30 @@ async function main() {
     : null;
   log(`apply runner started for ${name}; watching for approved ${APPLY_ATS.join(", ")} applications (Ctrl+C to stop)`);
   log(inbox ? `emailed security codes are read from ${inboxUser}` : "emailed security codes: you type them (no job inbox address or JOB_INBOX_PASSWORD)");
+  const linkedinOn = env.APPLY_LINKEDIN === "1";
+  log(linkedinOn
+    ? `LinkedIn Easy Apply is on: searched hourly, at most ${env.APPLY_LINKEDIN_PER_HOUR} an hour and ${env.APPLY_LINKEDIN_PER_DAY} a day`
+    : "LinkedIn Easy Apply is off (APPLY_LINKEDIN=1 turns it on)");
+  /** Why LinkedIn work is stopped until the runner restarts (a security check, signed out), or null. */
+  let linkedinPaused: string | null = null;
+  let lastSearch = 0;
+  /** A LinkedIn search running in its own tab: not one of the open applications, and nothing waits for it. */
+  let searching: Promise<void> | null = null;
+  /** Stops all LinkedIn work and tells you why: a check is yours to deal with, never the runner's. */
+  const pauseLinkedIn = async (why: string) => {
+    if (linkedinPaused) return;
+    linkedinPaused = why;
+    log(`linkedin: paused until the runner restarts: ${why}`);
+    await notify(db, userId, { kind: "runner_stuck", title: "LinkedIn paused", body: `${why} Sort it out in the runner's Chrome window, then restart the runner.`, href: "/app/applications" }).catch(() => undefined);
+  };
+  /** When LinkedIn forms were opened this run: going through one for its questions counts too. */
+  const linkedinOpens: number[] = [];
+  /** LinkedIn applications submitted since a moment (for the hourly and daily caps). */
+  const linkedinSentSince = async (since: Date): Promise<number> => {
+    const { count } = await db.from("applications").select("id, jobs!inner(source)", { count: "exact", head: true })
+      .eq("user_id", userId).eq("jobs.source", "linkedin").gte("submitted_at", since.toISOString());
+    return count ?? 0;
+  };
 
   // One form is filled at a time: a turn ends once the form is filled and waiting for you.
   let turns: Promise<void> = Promise.resolve();
@@ -233,6 +268,49 @@ async function main() {
   };
   /** Applications open in a tab (filling, or filled and waiting for you), by id. */
   const open = new Set<string>();
+  /** Each open application's site. */
+  const openSources = new Map<string, string>();
+  /** Whether another LinkedIn application may start now: on, not paused, none open, and under the caps. */
+  const linkedinMayStart = async (): Promise<boolean> => {
+    // Not while searching: one thing on LinkedIn at a time, as a person would.
+    if (!linkedinOn || linkedinPaused || searching) return false;
+    if ([...openSources.values()].includes("linkedin")) return false;
+    const now = Date.now();
+    if ((await linkedinSentSince(new Date(now - 3_600_000))) >= env.APPLY_LINKEDIN_PER_HOUR) return false;
+    // Forms opened, sent or not: at most twice the hourly cap, so collecting questions stays at a person's pace.
+    if (linkedinOpens.filter((t) => t > now - 3_600_000).length >= 2 * env.APPLY_LINKEDIN_PER_HOUR) return false;
+    return (await linkedinSentSince(new Date(now - 86_400_000))) < env.APPLY_LINKEDIN_PER_DAY;
+  };
+  /** Searches LinkedIn for new Easy Apply jobs matching your roles and filters, and saves them. */
+  const searchForJobs = async () => {
+    const [criteria, filter] = await Promise.all([getMatchCriteria(db, userId), getJobFilter(db, userId)]);
+    if (criteria.roles.length === 0) return log("linkedin: no target roles in your criteria to search for");
+    const { data: known } = await db.from("jobs").select("external_id").eq("source", "linkedin");
+    const seen = new Set((known ?? []).map((r) => r.external_id).filter((id): id is string => !!id));
+    const remoteOnly = filter.work_types.length === 1 && filter.work_types[0] === "remote";
+    const only = filter.locations.length === 1 ? filter.locations[0] : null;
+    const location = only && /^(us|usa|united states)$/i.test(only) ? "United States" : only;
+    const tab = await (await chrome()).newPage();
+    try {
+      const found: LinkedInJob[] = [];
+      for (const keywords of criteria.roles.slice(0, 3)) {
+        const skip = new Set([...seen, ...found.map((j) => j.id)]);
+        const res = await searchLinkedIn(tab, { keywords, remoteOnly, location, maxAgeHours: 24 }, skip, LINKEDIN_PER_SEARCH - found.length, log);
+        found.push(...res.jobs);
+        if (res.blocked) {
+          await pauseLinkedIn(res.blocked === "check" ? "LinkedIn showed a security check while searching." : "The runner's Chrome isn't signed in to LinkedIn.");
+          break;
+        }
+        if (found.length >= LINKEDIN_PER_SEARCH) break;
+      }
+      if (found.length) {
+        const saved = await askApp<{ inserted: number; duplicates: number }>("/api/runner/linkedin-jobs", { jobs: found });
+        log(`linkedin: saved ${saved.inserted} new job(s) (${saved.duplicates} already known); matching scores them on its next run`);
+      } else log("linkedin: no new Easy Apply jobs");
+    } finally {
+      await tab.close().catch(() => undefined);
+    }
+  };
   /** Those filled and waiting for you, with their tabs. */
   const waiting = new Map<string, Page>();
   /** The tab of a waiting form you're looking at, if any. */
@@ -255,7 +333,10 @@ async function main() {
       const tab = page;
       // One driver per job site; Greenhouse forms also get the fields outside their question list.
       const greenhouse = app.job.source === "greenhouse";
-      const driver = app.job.source === "ashby" ? ashbyDriver(tab) : app.job.source === "lever" ? leverDriver(tab) : greenhouseDriver(tab);
+      const driver = app.job.source === "ashby" ? ashbyDriver(tab)
+        : app.job.source === "lever" ? leverDriver(tab)
+        : app.job.source === "linkedin" ? linkedinDriver(tab)
+        : greenhouseDriver(tab);
       const record = await recordRun(path.join(DATA, "apply-debug"), app.id, tab, driver);
       const both = (line: string) => {
         log(line);
@@ -271,12 +352,16 @@ async function main() {
       let outcome = "error";
       let closeTab = false;
       try {
-        const result = await applyOne({ db, userId, driver: recorded, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, mapFields, alternatives, saveResume, fullName: name, log: both, filled, fillTurn }, app);
-        outcome = result.result === "submitted" ? "submitted" : `handed back: ${result.reason}`;
+        const result = await applyOne({ db, userId, driver: recorded, extraSteps: greenhouse ? greenhouseExtras(home, school, role) : [], readEmailCode: inbox?.waitForCode, mapFields, alternatives, askInApp, saveResume, fullName: name, log: both, filled, fillTurn }, app);
+        outcome = result.result === "submitted" ? "submitted" : result.result === "needs_answers" ? `questions for you: ${result.questions}` : `handed back: ${result.reason}`;
         // Submitted tabs are finished with (after a moment to see the thank-you page); handed-back
         // ones stay open for you, except a form nobody submitted in time, reopened from the app.
         if (result.result === "submitted") setTimeout(() => void tab.close().catch(() => undefined), SUBMITTED_TAB_MS);
-        else if (result.closeTab) closeTab = true;
+        else if (result.result === "needs_answers" || result.closeTab) closeTab = true;
+        // A security check on LinkedIn stops all LinkedIn work until you've dealt with it.
+        if (app.job.source === "linkedin" && result.result === "handed_back" && (await linkedinBlocked(tab).catch(() => null))) {
+          await pauseLinkedIn("LinkedIn showed a security check while applying.");
+        }
       } catch (err) {
         both(`${app.id}: failed: ${(err as Error).message}`);
       }
@@ -292,15 +377,20 @@ async function main() {
     } finally {
       waiting.delete(app.id);
       open.delete(app.id);
+      openSources.delete(app.id);
       endTurn();
     }
   };
 
   while (!stopping) {
     try {
-      const ready = (await listReadyToApply(db, userId, APPLY_ATS)).filter((a) => !open.has(a.id));
+      // LinkedIn applications wait while LinkedIn is off, paused, one is open, or a cap is reached.
+      const linkedinOk = await linkedinMayStart();
+      const ready = (await listReadyToApply(db, userId, APPLY_ATS)).filter((a) => !open.has(a.id) && (a.job.source !== "linkedin" || linkedinOk));
+      let linkedinStarted = false;
       for (const app of ready) {
         if (stopping || open.size >= MAX_OPEN) break;
+        if (app.job.source === "linkedin" && linkedinStarted) continue;
         // Waits for the form being filled to be filled; the ones waiting for you don't hold this up.
         const endTurn = await fillTurn();
         if (stopping) {
@@ -308,14 +398,28 @@ async function main() {
           break;
         }
         open.add(app.id);
+        openSources.set(app.id, app.job.source);
+        if (app.job.source === "linkedin") {
+          linkedinStarted = true;
+          linkedinOpens.push(Date.now());
+        }
         void runOne(app, endTurn);
       }
-      if (ready.length === 0 && open.size === 0) await closeIfIdle();
+      // Hourly, when nothing on LinkedIn is open: new Easy Apply jobs for matching to score. It runs alongside
+      // the applications (other sites go on filling); its tab isn't one of the MAX_OPEN open ones.
+      if (!searching && linkedinOn && !linkedinPaused && Date.now() - lastSearch > LINKEDIN_SEARCH_MS && ![...openSources.values()].includes("linkedin")) {
+        lastSearch = Date.now();
+        searching = searchForJobs()
+          .catch((err) => log(`linkedin: search failed: ${(err as Error).message}`))
+          .finally(() => (searching = null));
+      }
+      if (ready.length === 0 && open.size === 0 && !searching) await closeIfIdle();
     } catch (err) {
       log(`poll failed: ${(err as Error).message}`);
     }
     for (let waited = 0; waited < POLL_MS && !stopping; waited += 500) await new Promise((r) => setTimeout(r, 500));
   }
+  await searching;
   await rm(files, { recursive: true, force: true });
   // Set inside chrome(), which TypeScript can't follow from here.
   await (browser as BrowserContext | null)?.close().catch(() => undefined);

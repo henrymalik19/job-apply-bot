@@ -14,7 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Db } from "@/server/db/types";
 import { IllegalTransitionError, listUserMoves, moveApplication } from "@/server/modules/applications/applications.service";
 import { listReadyToApply, setApplyStep } from "@/server/modules/apply/apply.repository";
-import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver, type OpenField } from "@/server/modules/apply/apply.service";
+import { applyOne, handBackUnfinished, retryApply, setPlatformMode, STOPPED_NOTE, type FormDriver, type OpenField, type PageQuestion, type QuestionToAsk } from "@/server/modules/apply/apply.service";
 import type { FieldAnswer } from "@/server/modules/apply/field-mapping";
 import type { FillStep } from "@/server/modules/apply/fill-plan";
 import { APPLY_RUNS_BUCKET, listApplyRuns, listRunFilters, saveApplyRun } from "@/server/modules/apply/apply-runs";
@@ -98,6 +98,34 @@ function fakeDriver(opts: { edits?: Record<string, string>; challenge?: boolean;
   };
   return { driver, filled, submits };
 }
+
+/** A form in pages over the fake browser: each page's questions show what's been filled in; Next goes on to review. */
+function pagedDriver(fake: ReturnType<typeof fakeDriver>, pages: PageQuestion[][]) {
+  let at = 0;
+  const moves: string[] = [];
+  const state = { discarded: false };
+  const driver: FormDriver = {
+    ...fake.driver,
+    pageQuestions: async () => (pages[at] ?? []).map((q) => (q.key in fake.filled ? { ...q, value: fake.filled[q.key].split(", ") } : q)),
+    nextPage: async () => {
+      at++;
+      const where = at < pages.length ? "next" : "review";
+      moves.push(where);
+      return where;
+    },
+    discard: async () => (state.discarded = true),
+  };
+  return {
+    driver, moves,
+    get discarded() {
+      return state.discarded;
+    },
+  };
+}
+
+/** Claude's answers from your profile, by field. */
+const answers = (by: Record<string, string[]>) => async (input: { fields: OpenField[] }): Promise<FieldAnswer[]> =>
+  input.fields.filter((f) => by[f.key]).map((f) => ({ key: f.key, value: by[f.key], category: "fact", reason: "from your profile" }));
 
 const deps = (driver: FormDriver) => ({
   db,
@@ -367,6 +395,103 @@ describe("apply runner", () => {
     expect(run.shots.map((s) => s.name)).toEqual(["01-opened.png"]);
     const { data } = await db.from("apply_runs").select("folder").eq("application_id", id).single();
     await db.storage.from(APPLY_RUNS_BUCKET).remove([`${data!.folder}/run.log`, `${data!.folder}/01-opened.png`]);
+  });
+
+  it("goes through a form in pages (LinkedIn), answering each page's questions, and waits at review", async () => {
+    const id = await addApproved("paged");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const fake = fakeDriver();
+    // Page 1 asks your name (answered in the app); page 2 asks one question; then the review page.
+    const paged = pagedDriver(fake, [
+      [{ key: "first_name", label: "First Name", kind: "text", options: [], value: [], required: true }],
+      [{ key: "q:years of typescript", label: "Years of TypeScript", kind: "text", options: [], value: [], required: true }],
+    ]);
+    const before = await streak();
+    try {
+      expect(await applyOne({ ...deps(paged.driver), mapFields: answers({ "q:years of typescript": ["8"] }) }, job)).toMatchObject({ result: "submitted" });
+      expect(paged.moves).toEqual(["next", "review"]);
+      expect(fake.filled).toMatchObject({ first_name: "Ada", "q:years of typescript": "8" });
+      expect(paged.discarded).toBe(false);
+    } finally {
+      // Left as the other tests expect: nothing learned, the streak as it was.
+      await db.from("field_mappings").delete().eq("user_id", userId).in("field_name", ["q:years of typescript", "first_name", "question_9"]);
+      await db.from("platforms").update({ clean_streak: before?.clean_streak ?? 0, mode: before?.mode ?? "supervised" }).eq("user_id", userId).eq("ats", "greenhouse");
+    }
+  });
+
+  it("stops on a page it can't get past and leaves the rest to you", async () => {
+    const id = await addApproved("paged-stuck");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const fake = fakeDriver();
+    const driver: FormDriver = { ...fake.driver, pageQuestions: async () => [], nextPage: async () => "stuck" };
+    const before = await streak();
+    await applyOne(deps(driver), job);
+    await db.from("platforms").update({ clean_streak: before?.clean_streak ?? 0, mode: before?.mode ?? "supervised" }).eq("user_id", userId).eq("ats", "greenhouse");
+    await db.from("field_mappings").delete().eq("user_id", userId).in("field_name", ["first_name", "question_9"]);
+    const { data } = await db.from("application_events").select("detail").eq("application_id", id).eq("to_status", "submitted").single();
+    expect(data).not.toBeNull();
+    const { data: evidence } = await db.from("application_evidence_items").select("detail").eq("application_id", id).eq("kind", "screenshot").single();
+    expect((evidence!.detail as { left_for_you: string[] }).left_for_you).toEqual(["a page of the form it couldn't get past"]);
+  });
+
+  it("goes past a question it can't answer with a stand-in, discards the form unsent and asks in the app", async () => {
+    const id = await addApproved("paged-ask");
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const fake = fakeDriver();
+    const paged = pagedDriver(fake, [
+      [{ key: "q:clearance", label: "Do you hold a clearance?", kind: "select", options: ["Yes", "No"], value: [], required: true }],
+      [
+        { key: "q:years of go", label: "Years of Go", kind: "text", options: [], value: [], required: true },
+        // Filled in by LinkedIn from an application before, and your profile says otherwise.
+        { key: "q:years of python", label: "Years of Python", kind: "text", options: [], value: ["3"], required: true },
+        { key: "phone", label: "Mobile phone number", kind: "text", options: [], value: ["7045550100"], required: true },
+      ],
+    ]);
+    const asked: QuestionToAsk[][] = [];
+    const askInApp = async (_id: string, questions: QuestionToAsk[]) => {
+      asked.push(questions);
+      return "needs_input";
+    };
+    const mapFields = answers({ "q:years of go": ["5"], "q:years of python": ["8"] });
+    expect(await applyOne({ ...deps(paged.driver), mapFields, askInApp }, job)).toEqual({ result: "needs_answers", questions: 2 });
+    // It saw every page (the clearance got a stand-in), never submitted, and closed the form with Discard.
+    expect(paged.moves).toEqual(["next", "review"]);
+    expect(fake.filled["q:clearance"]).toBe("Yes");
+    expect(fake.submits).toHaveLength(0);
+    expect(paged.discarded).toBe(true);
+    expect(asked[0]).toEqual([
+      { key: "q:clearance", label: "Do you hold a clearance?", kind: "select", options: ["Yes", "No"], required: true },
+      { key: "q:years of python", label: "Years of Python", kind: "text", options: [], required: true, conflict: { form: "3", yours: "8" } },
+      { key: "q:years of go", label: "Years of Go", kind: "text", options: [], required: true, answer: ["5"] },
+    ]);
+    const after = await app(id);
+    expect(after.status).toBe("approved");
+    expect(after.apply_note).toMatch(/discarded it unsent: 1 question to answer and 1 where LinkedIn had something else filled in/);
+  });
+
+  it("puts your answer from the app over what LinkedIn had filled in", async () => {
+    const id = await addApproved("paged-yours");
+    await db.from("application_questions").insert({ application_id: id, bucket: "auto", question: "Years of Python", field_name: "q:years of python", field_type: "text", answer: "8", required: true, sort_order: 5, options: null, answer_value: null });
+    const [job] = (await listReadyToApply(db, userId, ["greenhouse"])).filter((a) => a.id === id);
+    const fake = fakeDriver();
+    const paged = pagedDriver(fake, [[{ key: "q:years of python", label: "Years of Python", kind: "text", options: [], value: ["3"], required: true }]]);
+    let askedClaude = false;
+    const mapFields = async () => {
+      askedClaude = true;
+      return [];
+    };
+    const before = await streak();
+    try {
+      expect(await applyOne({ ...deps(paged.driver), mapFields, askInApp: async () => "x" }, job)).toMatchObject({ result: "submitted" });
+      expect(fake.filled["q:years of python"]).toBe("8");
+      expect(askedClaude).toBe(false);
+      // Kept for every LinkedIn form that asks it (here, under this job's board).
+      const { data } = await db.from("field_mappings").select("value, learned, source").eq("user_id", userId).eq("field_name", "q:years of python").single();
+      expect(data).toEqual({ value: ["8"], learned: true, source: "you" });
+    } finally {
+      await db.from("field_mappings").delete().eq("user_id", userId).in("field_name", ["q:years of python", "first_name", "question_9"]);
+      await db.from("platforms").update({ clean_streak: before?.clean_streak ?? 0, mode: before?.mode ?? "supervised" }).eq("user_id", userId).eq("ats", "greenhouse");
+    }
   });
 
   it("fills a field it didn't prepare for by AI and waits for you even in auto mode, until it's learned", async () => {
